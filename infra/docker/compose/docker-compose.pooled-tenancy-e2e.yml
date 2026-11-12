@@ -290,9 +290,11 @@ services:
     image: nginx:1.27-alpine
     environment:
       # The stock Nginx entrypoint substitutes variables in the shared site
-      # template. Use the production defaults for the optional CSP sources
+      # template. Use the production defaults for upstream transport and CSP
       # when this qualification path serves the already-built frontend.
       RUNTIME_API_CONNECT_SRC: ""
+      API_UPSTREAM_SCHEME: http
+      API_UPSTREAM_TLS_CONFIG: ""
       TURNSTILE_SCRIPT_SRC: ""
       TURNSTILE_FRAME_SRC: "'none'"
     volumes:

@@ -1,3 +1,5 @@
+{{- $upstream := .Values.frontend.upstream | default dict -}}
+{{- $tls := $upstream.tls | default dict -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,7 +38,18 @@ spec:
             - { name: http, containerPort: 8080, protocol: TCP }
           env:
             - name: API_UPSTREAM
-              value: {{ printf "%s-api:%v" (include "enterpriseglue-host.fullname" .) .Values.backend.service.port | quote }}
+              value: {{ default (printf "%s-api:%v" (include "enterpriseglue-host.fullname" .) .Values.backend.service.port) $upstream.address | quote }}
+            - { name: API_UPSTREAM_SCHEME, value: {{ default "http" $upstream.scheme | quote }} }
+            {{- if $tls.serverName }}
+            - { name: API_UPSTREAM_TLS_SERVER_NAME, value: {{ $tls.serverName | quote }} }
+            {{- end }}
+            {{- if $tls.caSecretName }}
+            - { name: API_UPSTREAM_TLS_CA_FILE, value: /run/secrets/enterpriseglue-upstream/ca/ca.crt }
+            {{- end }}
+            {{- if $tls.clientSecretName }}
+            - { name: API_UPSTREAM_TLS_CLIENT_CERT_FILE, value: /run/secrets/enterpriseglue-upstream/client/tls.crt }
+            - { name: API_UPSTREAM_TLS_CLIENT_KEY_FILE, value: /run/secrets/enterpriseglue-upstream/client/tls.key }
+            {{- end }}
             - { name: EG_FRONTEND_RUNTIME_API_BASE_URL, value: "" }
             - { name: EG_FRONTEND_RUNTIME_CONFIG_REQUIRED, value: "true" }
             {{- if .Values.cloudEmailSignupProtection.enabled }}
@@ -47,20 +60,49 @@ spec:
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           startupProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /_enterpriseglue/frontend-health, port: http }
             failureThreshold: 30
             periodSeconds: 5
           readinessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet:
+              path: /health
+              port: http
+              {{- if $upstream.readinessHost }}
+              httpHeaders:
+                - { name: Host, value: {{ $upstream.readinessHost | quote }} }
+              {{- end }}
             periodSeconds: 10
           livenessProbe:
-            httpGet: { path: /health, port: http }
+            httpGet: { path: /_enterpriseglue/frontend-health, port: http }
             periodSeconds: 15
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
             - { name: nginx-cache, mountPath: /var/cache/nginx }
             - { name: nginx-run, mountPath: /var/run }
+            {{- if $tls.caSecretName }}
+            - { name: upstream-ca, mountPath: /run/secrets/enterpriseglue-upstream/ca, readOnly: true }
+            {{- end }}
+            {{- if $tls.clientSecretName }}
+            - { name: upstream-client, mountPath: /run/secrets/enterpriseglue-upstream/client, readOnly: true }
+            {{- end }}
       volumes:
         - { name: tmp, emptyDir: {} }
         - { name: nginx-cache, emptyDir: {} }
         - { name: nginx-run, emptyDir: {} }
+        {{- if $tls.caSecretName }}
+        - name: upstream-ca
+          secret:
+            secretName: {{ $tls.caSecretName | quote }}
+            defaultMode: 0440
+            items:
+              - { key: ca.crt, path: ca.crt }
+        {{- end }}
+        {{- if $tls.clientSecretName }}
+        - name: upstream-client
+          secret:
+            secretName: {{ $tls.clientSecretName | quote }}
+            defaultMode: 0440
+            items:
+              - { key: tls.crt, path: tls.crt }
+              - { key: tls.key, path: tls.key }
+        {{- end }}

@@ -1,0 +1,29 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "frontend-upstream-tls",
+  "type": "feature",
+  "scope": "frontend-deployment",
+  "breaking": false,
+  "audiences": ["operators", "security"],
+  "summary": "Adds verified HTTPS and optional client certificate authentication to the frontend NGINX connection to a deployment-provided backend gateway.",
+  "userImpact": ["Operators can secure same-origin API traffic between the bundled frontend proxy and their backend gateway."],
+  "upgrade": {
+    "required": false,
+    "instructions": ["Use a compatible frontend image and deployment manifests. The default upstream scheme is HTTP."]
+  },
+  "configuration": ["Set API_UPSTREAM_SCHEME=https, point API_UPSTREAM at the TLS endpoint, and configure optional trust and client certificate file paths."],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["HTTPS verifies the upstream certificate chain and hostname. mTLS uses deployment-mounted client credentials and requires upstream enforcement."],
+  "documentation": ["The deployment configuration reference covers upstream routing, certificate rotation, health probes, and Compose, Helm, and OpenShift setup."],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "EnterpriseGlue",
+    "pages": ["frontend-upstream-tls"]
+  },
+  "knownLimitations": ["The deployment provides the TLS termination endpoint and owns the final hop to the HTTP backend."],
+  "rollback": ["Restore the previous upstream address and network access before rolling the frontend workloads. Clear TLS-only settings when restoring HTTP."],
+  "validation": ["Exercise HTTP, verified HTTPS, mTLS, certificate rejection, and independent frontend liveness in the container proxy. Render supported deployment manifests."],
+  "packages": []
+}

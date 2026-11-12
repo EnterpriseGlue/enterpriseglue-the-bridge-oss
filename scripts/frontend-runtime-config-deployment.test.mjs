@@ -119,6 +119,27 @@ test('every supported container deployment passes runtime frontend configuration
   assert.match(pooledQualification, /^\s+TURNSTILE_FRAME_SRC: "'none'"$/m);
 });
 
+test('Compose passes frontend upstream transport and the pooled proxy fixture keeps HTTP defaults', () => {
+  for (const file of ['docker-compose.yml', 'docker-compose.prod.yml', 'docker-compose.selfhost.yml']) {
+    const compose = read(`infra/docker/compose/${file}`);
+    assert.ok(compose.includes('API_UPSTREAM_SCHEME: ${API_UPSTREAM_SCHEME:-http}'), file);
+    for (const key of ['CA_FILE', 'SERVER_NAME', 'CLIENT_CERT_FILE', 'CLIENT_KEY_FILE']) {
+      const name = `API_UPSTREAM_TLS_${key}`;
+      assert.ok(compose.includes(`${name}: \${${name}:-}`), `${file} must pass ${name}`);
+    }
+  }
+
+  const pooled = read('infra/docker/compose/docker-compose.pooled-tenancy-e2e.yml');
+  assert.match(pooled, /^\s+API_UPSTREAM_SCHEME: http$/m);
+  assert.match(pooled, /^\s+API_UPSTREAM_TLS_CONFIG: ""$/m);
+
+  const nginx = read('frontend/nginx.conf');
+  assert.equal(nginx.match(/proxy_pass /g)?.length, nginx.match(/proxy_pass \$\{API_UPSTREAM_SCHEME\}:\/\/\$\{API_UPSTREAM\};/g)?.length);
+  const openshift = read('infra/kubernetes/openshift/kustomize/base/app/frontend-deployment.yaml');
+  assert.match(openshift, /readinessProbe:\s+httpGet:\s+path: \/health\n/);
+  assert.match(openshift, /livenessProbe:\s+httpGet:\s+path: \/_enterpriseglue\/frontend-health\n/);
+});
+
 test('operator examples and the configuration matrix expose both runtime controls', () => {
   const examples = [
     'docker.default.env.example',

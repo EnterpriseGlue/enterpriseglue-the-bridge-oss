@@ -583,6 +583,160 @@ attributes appropriate for credentialed cross-origin requests. Prefer
 same-origin `API_UPSTREAM` unless a browser-visible separate API origin is
 required.
 
+### Frontend NGINX upstream TLS
+
+The containerized frontend defaults to HTTP for its upstream API connection.
+To use HTTPS, point the frontend at a deployment-owned TLS gateway or sidecar
+in front of the stock HTTP backend. The gateway presents its server
+certificate and, for mTLS, requires and verifies the frontend's client
+certificate. The deployment controls network access to the final HTTP hop.
+The browser-facing frontend endpoint keeps its own TLS configuration.
+
+Set these values on the **frontend container** at startup.
+
+| Setting | Behavior |
+| --- | --- |
+| `API_UPSTREAM` | Gateway hostname or IP address with an optional port. Use brackets for IPv6. The default is `backend:8787` in the image. |
+| `API_UPSTREAM_SCHEME` | `http` (default) or `https`. HTTPS enables TLS 1.2 and 1.3 with certificate chain and hostname verification. A failed handshake returns a gateway error. |
+| `API_UPSTREAM_TLS_CA_FILE` | Optional absolute path to a PEM CA bundle. A supplied bundle replaces the image's system CA bundle for this connection. |
+| `API_UPSTREAM_TLS_SERVER_NAME` | Optional DNS name for SNI and certificate verification. Defaults to the upstream hostname. Set this to the certificate's DNS name when routing by an address with a different name. |
+| `API_UPSTREAM_TLS_CLIENT_CERT_FILE` | Absolute path to the PEM client certificate, followed by any intermediates needed by the gateway. Set this with the client key for mTLS. |
+| `API_UPSTREAM_TLS_CLIENT_KEY_FILE` | Absolute path to the matching unencrypted PEM private key. |
+
+Use letters, digits, dots, underscores, hyphens and slashes in file paths.
+Mount credentials read-only and grant the non-root NGINX process read
+access through the container UID or its group. The private key belongs in
+the secret mount. TLS options are accepted only with `https`.
+
+NGINX sends the public request host in the upstream HTTP `Host` header.
+Configure the gateway to accept that host even when the TLS name differs.
+For same-origin API traffic, leave `API_BASE_URL` at build time and
+`EG_FRONTEND_RUNTIME_API_BASE_URL` at container startup empty. A configured
+absolute browser API URL can send calls directly to another origin.
+
+#### Docker Compose
+
+Add the following settings to the deployment's Compose environment file.
+This example uses a private CA and mTLS. For server-only TLS, omit the two
+client credential settings. For a gateway trusted by the image's system
+CA bundle, also omit the CA file setting.
+
+```dotenv
+API_UPSTREAM=api-gateway.internal:8443
+API_UPSTREAM_SCHEME=https
+API_UPSTREAM_TLS_SERVER_NAME=api.internal.example
+API_UPSTREAM_TLS_CA_FILE=/run/secrets/enterpriseglue-upstream/ca.crt
+API_UPSTREAM_TLS_CLIENT_CERT_FILE=/run/secrets/enterpriseglue-upstream/tls.crt
+API_UPSTREAM_TLS_CLIENT_KEY_FILE=/run/secrets/enterpriseglue-upstream/tls.key
+EG_FRONTEND_UPSTREAM_TLS_DIR=/srv/enterpriseglue/frontend-upstream-tls
+```
+
+Use a Compose override alongside the normal deployment files when mounting
+the PEM files. The directory on the Docker host must be readable by the
+frontend container's runtime identity.
+
+```yaml
+services:
+  frontend:
+    volumes:
+      - type: bind
+        source: ${EG_FRONTEND_UPSTREAM_TLS_DIR:?Set the upstream TLS directory}
+        target: /run/secrets/enterpriseglue-upstream
+        read_only: true
+        bind:
+          create_host_path: false
+```
+
+#### Helm
+
+Set these values on the OSS host chart. Create the named Secrets in the
+release namespace. The CA Secret supplies `ca.crt` and the client Secret
+supplies `tls.crt` and `tls.key`. Omit either Secret name when it is unnecessary.
+Set `readinessHost` when the gateway routes the proxied health check by
+HTTP host.
+
+```yaml
+frontend:
+  upstream:
+    address: api-gateway.internal:8443
+    scheme: https
+    readinessHost: app.example.com
+    tls:
+      serverName: api.internal.example
+      caSecretName: frontend-upstream-ca
+      clientSecretName: frontend-upstream-client
+```
+
+If the chart's default network policies are enabled, allow only the
+gateway's network identity to reach the API pods with a deployment-owned
+NetworkPolicy. Once the TLS route is ready and any old frontend replicas have
+drained, set `networkPolicy.allowDirectFrontendToApi: false` to remove the
+chart's direct frontend-to-API allowance.
+
+#### OpenShift Kustomize
+
+Add the following strategic merge patch under `patches` in the deployment
+overlay. Create `frontend-upstream-tls` in the frontend namespace with
+the PEM files named below. Check that the pod's security context grants
+its runtime identity group-read access to the Secret. For server-only TLS,
+omit the two client settings and their Secret items.
+
+```yaml
+patches:
+  - patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: enterpriseglue-frontend
+      spec:
+        template:
+          spec:
+            containers:
+              - name: frontend
+                env:
+                  - name: API_UPSTREAM
+                    valueFrom: null
+                    value: api-gateway.internal:8443
+                  - { name: API_UPSTREAM_SCHEME, value: https }
+                  - { name: API_UPSTREAM_TLS_SERVER_NAME, value: api.internal.example }
+                  - { name: API_UPSTREAM_TLS_CA_FILE, value: /run/secrets/enterpriseglue-upstream/ca.crt }
+                  - { name: API_UPSTREAM_TLS_CLIENT_CERT_FILE, value: /run/secrets/enterpriseglue-upstream/tls.crt }
+                  - { name: API_UPSTREAM_TLS_CLIENT_KEY_FILE, value: /run/secrets/enterpriseglue-upstream/tls.key }
+                readinessProbe:
+                  httpGet:
+                    httpHeaders:
+                      - { name: Host, value: app.example.com }
+                volumeMounts:
+                  - { name: upstream-tls, mountPath: /run/secrets/enterpriseglue-upstream, readOnly: true }
+            volumes:
+              - name: upstream-tls
+                secret:
+                  secretName: frontend-upstream-tls
+                  defaultMode: 0440
+                  items:
+                    - { key: ca.crt, path: ca.crt }
+                    - { key: tls.crt, path: tls.crt }
+                    - { key: tls.key, path: tls.key }
+```
+
+#### Operations
+
+The Kubernetes manifests use the local
+`/_enterpriseglue/frontend-health` endpoint for liveness and the proxied
+`/health` endpoint for readiness. Confirm both endpoints and test sign-in,
+redirects, and session cookies through the public frontend address. If
+mTLS is required for backend access, keep the stock HTTP port private to
+the gateway and restrict alternate routes to it.
+
+For renewal, coordinate the gateway and frontend trust bundles. During
+a CA change, overlap trust for the old and new issuers until both sides
+have switched. Update the mounted files and recreate or roll the frontend
+containers so NGINX loads them. Check proxied readiness before removing the
+old credentials or trust roots.
+
+To roll back, restore the previous upstream address and network access
+before rolling the frontend. Clear the TLS options when restoring HTTP.
+
 ### Feature Flags
 The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as:
 - `VITE_FEATURE_VOYAGER`

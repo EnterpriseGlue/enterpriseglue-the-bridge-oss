@@ -91,7 +91,10 @@
         } }
       }]
     },
-    "frontend": { "$ref": "#/$defs/workload" },
+    "frontend": {
+      "allOf": [{ "$ref": "#/$defs/workload" }],
+      "properties": { "upstream": { "$ref": "#/$defs/frontendUpstream" } }
+    },
     "backend": { "$ref": "#/$defs/workload" },
     "workers": {
       "allOf": [{ "$ref": "#/$defs/workload" }],
@@ -245,7 +248,10 @@
       }
     },
     "ingress": { "type": "object" },
-    "networkPolicy": { "type": "object" },
+    "networkPolicy": {
+      "type": "object",
+      "properties": { "allowDirectFrontendToApi": { "type": "boolean" } }
+    },
     "podDisruptionBudget": { "type": "object" },
     "topologySpread": { "type": "object" },
     "nodeSelector": { "type": "object" },
@@ -276,6 +282,49 @@
         "maxReplicas": { "type": "integer", "minimum": 1 },
         "targetCPUUtilizationPercentage": { "type": "integer", "minimum": 1, "maximum": 100 }
       }
+    },
+    "frontendUpstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["address", "scheme", "readinessHost", "tls"],
+      "properties": {
+        "address": { "type": "string", "pattern": "^(|([A-Za-z0-9._-]+|\\[[0-9A-Fa-f:.]+\\])(:[0-9]{1,5})?)$" },
+        "scheme": { "enum": ["http", "https"] },
+        "readinessHost": { "$ref": "#/$defs/optionalDnsName" },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["serverName", "caSecretName", "clientSecretName"],
+          "properties": {
+            "serverName": { "$ref": "#/$defs/optionalDnsName" },
+            "caSecretName": { "$ref": "#/$defs/optionalSecretName" },
+            "clientSecretName": { "$ref": "#/$defs/optionalSecretName" }
+          }
+        }
+      },
+      "if": { "properties": { "scheme": { "const": "https" } } },
+      "then": { "properties": { "address": { "minLength": 1 } } },
+      "else": {
+        "properties": {
+          "tls": {
+            "properties": {
+              "serverName": { "const": "" },
+              "caSecretName": { "const": "" },
+              "clientSecretName": { "const": "" }
+            }
+          }
+        }
+      }
+    },
+    "optionalDnsName": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^(|[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?)$"
+    },
+    "optionalSecretName": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^(|[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*)$"
     },
     "workload": {
       "type": "object",

@@ -52,6 +52,57 @@ function documents(rendered) {
   return rendered.split(/^---\s*$/m).filter((document) => document.trim())
 }
 
+test('frontend HTTPS projects only the configured secrets and keeps the health probes distinct', async (t) => {
+  const defaults = await render(t)
+  assert.equal(defaults.status, 0, defaults.stderr)
+  assert.match(defaults.stdout, /name: API_UPSTREAM_SCHEME, value: "http"/)
+  assert.match(defaults.stdout, /name: enterpriseglue-enterpriseglue-host-api-from-frontend/)
+  assert.doesNotMatch(defaults.stdout, /name: upstream-(?:ca|client)/)
+
+  const upstream = {
+    address: 'gateway.example.test:8443',
+    scheme: 'https',
+    readinessHost: 'app.example.test',
+    tls: { serverName: 'api.example.test', caSecretName: 'gateway-ca', clientSecretName: 'frontend-client' },
+  }
+  const result = await render(t, { frontend: { upstream }, networkPolicy: { allowDirectFrontendToApi: false } })
+  assert.equal(result.status, 0, result.stderr)
+  const rendered = documents(result.stdout)
+  const frontend = rendered.find(document => document.includes('# Source: enterpriseglue-host/templates/frontend-deployment.yaml'))
+  assert.match(frontend, /name: API_UPSTREAM\s+value: "gateway\.example\.test:8443"/)
+  assert.match(frontend, /name: API_UPSTREAM_SCHEME, value: "https"/)
+  assert.match(frontend, /name: API_UPSTREAM_TLS_SERVER_NAME, value: "api\.example\.test"/)
+  assert.match(frontend, /name: API_UPSTREAM_TLS_CA_FILE, value: \/run\/secrets\/enterpriseglue-upstream\/ca\/ca\.crt/)
+  assert.match(frontend, /name: API_UPSTREAM_TLS_CLIENT_CERT_FILE, value: \/run\/secrets\/enterpriseglue-upstream\/client\/tls\.crt/)
+  assert.match(frontend, /name: API_UPSTREAM_TLS_CLIENT_KEY_FILE, value: \/run\/secrets\/enterpriseglue-upstream\/client\/tls\.key/)
+  assert.match(frontend, /readinessProbe:\s+httpGet:\s+path: \/health\s+port: http\s+httpHeaders:\s+- \{ name: Host, value: "app\.example\.test" \}/)
+  for (const probe of ['startupProbe', 'livenessProbe']) {
+    assert.ok(frontend.includes(`${probe}:\n            httpGet: { path: /_enterpriseglue/frontend-health, port: http }`))
+  }
+  for (const volume of ['upstream-ca', 'upstream-client']) {
+    assert.match(frontend, new RegExp(`name: ${volume}, mountPath: [^,]+, readOnly: true`))
+  }
+  assert.match(frontend, /secretName: "gateway-ca"\s+defaultMode: 0440\s+items:\s+- \{ key: ca\.crt, path: ca\.crt \}/)
+  assert.match(frontend, /secretName: "frontend-client"\s+defaultMode: 0440\s+items:\s+- \{ key: tls\.crt, path: tls\.crt \}\s+- \{ key: tls\.key, path: tls\.key \}/)
+  for (const document of rendered.filter(document => document !== frontend)) {
+    assert.doesNotMatch(document, /gateway-ca|frontend-client/)
+  }
+  assert.doesNotMatch(result.stdout, /-api-from-frontend/)
+  assert.match(result.stdout, /-default-deny-ingress/)
+})
+
+test('frontend chart rejects HTTPS without a gateway address and TLS settings with HTTP', async (t) => {
+  for (const upstream of [
+    { scheme: 'https' },
+    { scheme: 'http', tls: { clientSecretName: 'frontend-client' } },
+    { scheme: 'https', address: 'https://gateway.example.test:8443' },
+  ]) {
+    const result = await render(t, { frontend: { upstream } })
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /frontend[./]upstream/)
+  }
+})
+
 test('email signup protection enables both workloads and binds the secret only to the split API', async (t) => {
   const defaults = await render(t)
   assert.equal(defaults.status, 0, defaults.stderr)
