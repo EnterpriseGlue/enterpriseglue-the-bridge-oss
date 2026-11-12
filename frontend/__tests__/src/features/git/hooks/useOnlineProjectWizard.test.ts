@@ -120,6 +120,22 @@ describe('useOnlineProjectWizard', () => {
     return { ...rendered, onClose };
   };
 
+  it('opens with Git selected from workspace setup only when Git project creation is allowed', () => {
+    const onClose = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ initialGitConnection }) => useOnlineProjectWizard({ open: true, initialGitConnection, onClose }),
+      { initialProps: { initialGitConnection: true }, wrapper: createWrapper() },
+    );
+
+    expect(result.current.connectToGit).toBe(true);
+    rerender({ initialGitConnection: false });
+    expect(result.current.connectToGit).toBe(false);
+
+    setAuthPermissions({ platform: [], projects: [], engines: [] });
+    rerender({ initialGitConnection: true });
+    expect(result.current.connectToGit).toBe(false);
+  });
+
   it('acknowledges one local creation and navigates after its own permission refresh advances the browser revision', async () => {
     vi.mocked(apiClient.post).mockResolvedValue(receipt);
     authState.refreshPermissions.mockImplementation(async () => { advanceBrowserSessionRevision(); return { ...authState.permissions, userId: 'user-1', tenantId: null, projects: [{ resourceId: receipt.id, permissions: ['project:view'] }] }; });

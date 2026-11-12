@@ -47,6 +47,7 @@ interface UseOnlineProjectWizardProps {
   onClose: () => void
   existingProjectId?: string
   existingProjectName?: string
+  initialGitConnection?: boolean
 }
 
 export function useOnlineProjectWizard({
@@ -54,6 +55,7 @@ export function useOnlineProjectWizard({
   onClose,
   existingProjectId,
   existingProjectName,
+  initialGitConnection,
 }: UseOnlineProjectWizardProps) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -67,6 +69,7 @@ export function useOnlineProjectWizard({
   const localCreateDecision = evaluateActionSnapshot(permissions, 'project.projects.create', { type: 'platform', id: null })
   const gitCreateDecision = evaluateActionSnapshot(permissions, 'project.create.git.create', { type: 'platform', id: null })
   const gitInspectDecision = evaluateActionSnapshot(permissions, 'project.create.git.inspect', { type: 'platform', id: null })
+  const startsWithGit = Boolean(existingProjectId || (initialGitConnection && gitCreateDecision.allowed))
 
   const [existingRepo, setExistingRepo] = React.useState<Repository | null>(null)
   const isEditConnectedProject = isExistingProject && !!existingRepo
@@ -92,7 +95,7 @@ export function useOnlineProjectWizard({
   const [projectName, setProjectName] = React.useState(existingProjectName || '')
   const [importFromEngine, setImportFromEngine] = React.useState(false)
   const [selectedImportEngineId, setSelectedImportEngineId] = React.useState('')
-  const [connectToGit, setConnectToGit] = React.useState<boolean>(!!existingProjectId)
+  const [connectToGit, setConnectToGit] = React.useState(startsWithGit)
   const [repoMode, setRepoMode] = React.useState<'new' | 'existing' | null>(null)
   const [providerId, setProviderId] = React.useState('')
   const [namespace, setNamespace] = React.useState('')
@@ -160,10 +163,10 @@ export function useOnlineProjectWizard({
   }, [providerId, isEditConnectedProject, credentialAuthority, open])
   React.useEffect(() => { if (!isEditConnectedProject) setNamespace('') }, [providerId, isEditConnectedProject, formActor, open])
 
-  // Default connect toggle based on context
+  // Keep the initial Git choice when opening from workspace setup.
   React.useEffect(() => {
-    setConnectToGit(!!existingProjectId)
-  }, [existingProjectId])
+    setConnectToGit(startsWithGit)
+  }, [existingProjectId, startsWithGit])
 
   // If we are opening the modal for an existing project, load the current repo connection (if any)
   React.useEffect(() => {
@@ -509,7 +512,7 @@ export function useOnlineProjectWizard({
     setProjectName(existingProjectName || '')
     setImportFromEngine(false)
     setSelectedImportEngineId('')
-    setConnectToGit(!!existingProjectId)
+    setConnectToGit(startsWithGit)
     setRepoMode(null)
     setProviderId('')
     setNamespace('')
@@ -528,7 +531,7 @@ export function useOnlineProjectWizard({
     setConnectionError(null)
     setFieldErrors({})
     setGeneralError(null)
-  }, [existingProjectId, existingProjectName])
+  }, [existingProjectName, startsWithGit])
 
   const handleClose = () => {
     creationLife.current++; creationActive.current = null; setCreationBusy(null)

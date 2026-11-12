@@ -187,7 +187,11 @@ test.describe('Login experience screenshot gallery', () => {
 
     await page.goto('/signup');
     await expect(page.getByRole('heading', { name: 'Create your Cloud account' })).toBeVisible();
-    await expect(page.getByText('No signup method configured')).toBeVisible();
+    const emailOption = page.getByRole('link', { name: 'Continue with email' });
+    await expect(emailOption).toBeVisible();
+    await expect(emailOption).toHaveAttribute('href', '/signup/email');
+    await expect(emailOption).toHaveAccessibleDescription('We’ll send you a one-time sign-in link. You can add a passkey after signing in.');
+    await expect(page.getByText('No signup method configured')).toBeHidden();
     expect(anonymousBootstrapRequests).toEqual([]);
     expect(pluginInventoryRequests).toEqual(['/api/plugins/v1/frontend']);
     await diagnostics.expectClean('anonymous signup bootstrap');

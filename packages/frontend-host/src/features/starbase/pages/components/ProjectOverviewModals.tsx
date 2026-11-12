@@ -16,6 +16,7 @@ interface ProjectOverviewModalsProps {
   onCancelDisconnectProject: () => void
   onConfirmDisconnectProject: () => void
   createOnlineModalOpen: boolean
+  initialGitConnection?: boolean
   onCloseCreateOnlineModal: () => void
   existingProjectId?: string
   existingProjectName?: string
@@ -49,6 +50,7 @@ export function ProjectOverviewModals({
   onCancelDisconnectProject,
   onConfirmDisconnectProject,
   createOnlineModalOpen,
+  initialGitConnection,
   onCloseCreateOnlineModal,
   existingProjectId,
   existingProjectName,
@@ -108,6 +110,7 @@ export function ProjectOverviewModals({
 
       <CreateOnlineProjectModal
         open={createOnlineModalOpen}
+        initialGitConnection={initialGitConnection}
         onClose={onCloseCreateOnlineModal}
         existingProjectId={existingProjectId}
         existingProjectName={existingProjectName}

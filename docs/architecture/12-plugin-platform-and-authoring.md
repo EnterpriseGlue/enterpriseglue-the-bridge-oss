@@ -292,6 +292,13 @@ incident actions, process-instance detail actions, and plugin-owned tenant route
 Native plugins cannot replace host features or components. The legacy override seam is reserved
 for the existing transitional loader and is rejected for ordinary plugin ownership.
 
+The managed Cloud system module can provide the `dashboard-getting-started`
+override for a workspace that needs a project or a connected engine. The host
+supplies the current tenant slug, setup state, and permission decisions for
+project creation, Git connection and tenant settings. Its `openCreateProject`
+callback opens the existing Starbase project dialog. The dialog and API enforce
+their normal permission checks.
+
 ```mermaid
 sequenceDiagram
   participant Browser
