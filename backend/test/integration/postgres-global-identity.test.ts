@@ -15,7 +15,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import request from 'supertest';
 import { installBrowserRequestProtection } from '@enterpriseglue/backend-host/middleware/browser-request-protection.js';
-import { XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
+import { XSRF_COOKIE_NAME, XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
 import { MockOidcProvider } from '../identity-mocks/index.js';
 
 // Only connection selection is injected. Repositories, transactions, TypeORM
@@ -25,6 +25,12 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({getDataSource:async 
   if (!database.current) throw new Error('Fixture is not initialized');
   return database.current;
 }}));
+// Tenant OIDC uses an explicit Undici dispatcher. Keep the real connection
+// scope and lease checks while routing its external requests to the signed fixture.
+vi.mock('undici', async (importOriginal) => ({
+  ...await importOriginal<typeof import('undici')>(),
+  fetch: (input: URL | string, init?: RequestInit) => globalThis.fetch(input, init),
+}));
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { PostgresAdapter } from '@enterpriseglue/shared/db/adapters/PostgresAdapter.js';
 import { installPostgresContextBoundary, assertPostgresContextBoundary } from '@enterpriseglue/shared/infrastructure/persistence/subscribers/TenantRlsSubscriber.js';
@@ -49,6 +55,8 @@ import { mockCloudPasskeyCredential } from '../../__tests__/fixtures/cloudPasske
 import { CloudPasskey } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskey.js';
 import tenantRoutes from '@enterpriseglue/backend-host/modules/tenancy/routes/tenants.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
+import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { parseSignedOidcState } from '@enterpriseglue/backend-host/modules/auth/routes/sso-state.js';
 import { runConfigBundleBootstrap } from '@enterpriseglue/backend-host/services/configBundleBootstrap.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
@@ -561,6 +569,78 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect(sessions).not.toHaveLength(0);expect(sessions.every(row=>row.identityProviderId===providerId)).toBe(true);
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
   });
+
+  it('enforces company SSO for existing tenant sessions, refresh and switching, with a platform recovery path', async () => {
+    const { browser: existing, callback } = await signIn('sso-only-owner', 'sso-only-owner@example.test');
+    expect(callback.status, callback.body.error).toBe(302);
+    const user = await runtime.getRepository(User).findOneByOrFail({ email: 'sso-only-owner@example.test' });
+    const tenant = await tenantService.create({ name: 'SSO-only tenant', slug: 'sso-only-tenant', ownerUserId: user.id });
+    const tenantContext = { tenantId: tenant.id, tenantSlug: tenant.slug };
+    const policy = { localPasswordMode: 'disabled' as const, providerSelectionMode: 'chooser' as const };
+    await expect(runWithTenantDatabaseContext(tenantContext, () => tenantLoginPolicyService.upsert(tenant.id, policy, user.id)))
+      .rejects.toThrow('Enable a company sign-in provider');
+    const switchTenant = (browser: typeof existing) => browserPost(browser, '/api/auth/switch-tenant', { tenantSlug: tenant.slug });
+    expect((await switchTenant(existing)).status).toBe(200);
+    const companyCallbackPath = `/api/t/${tenant.slug}/auth/identity/callback`;
+    const company = await runWithTenantDatabaseContext(tenantContext, () => identityProviderService.upsert({
+      tenantId: tenant.id, key: 'identity.oidc.company-fixture', displayName: 'Company', protocol: 'oidc', isEnabled: true,
+      authenticationMode: 'direct', configuration: { ...protocol.configuration(), callbackUrl: `http://localhost:5173${companyCallbackPath}` },
+    }));
+    const finishCompanySignIn = async (browser: typeof existing, start: request.Response) => {
+      expect(start.status, start.body.error).toBe(302);
+      const state = new URL(start.headers.location).searchParams.get('state');
+      const parsed = state && parseSignedOidcState(state);
+      if (!state || !parsed) throw new Error('Company sign-in did not issue signed state');
+      protocol.setTokenClaims({ sub: 'company-owner', email: user.email, email_verified: true, nonce: parsed.nonce });
+      return browser.get(companyCallbackPath).query({ state, code: 'verified-company-code' });
+    };
+    const returnTo = `/t/${tenant.slug}/`;
+    const linked = await finishCompanySignIn(existing,
+      await existing.get(`/api/auth/me/identity-providers/${company.id}/link`).query({ returnTo }));
+    expect(linked.status, linked.body.error).toBe(302);
+    const links = await existing.get('/api/auth/me/identity-providers').expect(200);
+    expect(links.body.providers).toContainEqual(expect.objectContaining({ id: company.id, linked: true }));
+    const policyCsrf = await existing.get('/api/csrf-token').expect(200);
+    const updated = await existing.put(`/api/t/${tenant.slug}/tenant/login-policy`)
+      .set(XSRF_HEADER_NAME, policyCsrf.body.csrfToken)
+      .send(policy);
+    expect(updated.status, updated.body.error).toBe(200);
+    expect((await existing.get('/tenant-only-probe')).status).toBe(403);
+    expect((await existing.post('/api/auth/refresh').send({})).status).toBe(403);
+    const { browser: cloud } = await signIn('sso-only-owner', 'sso-only-owner@example.test');
+    expect((await cloud.get('/cloud-probe')).status).toBe(200);
+    expect((await switchTenant(cloud)).status).toBe(403);
+
+    const companyBrowser = request.agent(server);
+    const signedIn = await finishCompanySignIn(companyBrowser,
+      await companyBrowser.get(`/api/t/${tenant.slug}/auth/providers/${company.id}/start`).query({ returnTo }));
+    expect(signedIn.status, signedIn.body.error).toBe(302);
+    expect((await companyBrowser.get('/cloud-probe').expect(200)).body).toMatchObject({ userId: user.id, tenantId: tenant.id });
+    expect(await runtime.getRepository(User).countBy({ email: user.email })).toBe(1);
+    expect((await companyBrowser.get('/tenant-only-probe')).status).toBe(200);
+    expect((await companyBrowser.post('/api/auth/refresh').send({})).status).toBe(200);
+
+    const recoveryPath = `/api/t/${tenant.slug}/tenant/login-policy/recover`;
+    const deniedRecovery = await browserPost(companyBrowser, recoveryPath);
+    expect(deniedRecovery.status).toBe(403);
+    expect(deniedRecovery.body.error).not.toBe('Invalid CSRF token');
+    const operator = await userService.createPendingUser({ email: 'sso-recovery@example.test', platformRole: 'admin', createdByUserId: 'fixture-operator' });
+    await runtime.getRepository(User).update({ id: operator.id }, { isEmailVerified: true });
+    const recovery = await authSessionService.issue(operator, { administratorRecovery: true, authenticationMethod: 'recovery' });
+    const operatorCookie = `accessToken=${recovery.accessToken}`;
+    const recoveryCsrf = await request(server).get('/api/csrf-token').set('Cookie', operatorCookie).expect(200);
+    const recoveryCookies = recoveryCsrf.get('Set-Cookie') as unknown as string[];
+    const csrfCookie = recoveryCookies.find((cookie) => cookie.startsWith(`${XSRF_COOKIE_NAME}=`))?.split(';', 1)[0];
+    if (!csrfCookie) throw new Error('Recovery session did not issue a CSRF cookie');
+    const restored = await request(server).post(recoveryPath)
+      .set('Cookie', `${operatorCookie}; ${csrfCookie}`)
+      .set(XSRF_HEADER_NAME, recoveryCsrf.body.csrfToken)
+      .send({});
+    expect(restored.status, restored.body.error).toBe(200);
+    expect(restored.body).toMatchObject({ localPasswordMode: 'auto', providerSelectionMode: 'chooser' });
+    expect((await switchTenant(cloud)).status).toBe(200);
+  }, 30_000);
+
   it('renews an email-link session and binds optional passkey enrollment to that exact session under RLS', async () => {
     vi.mocked(sendVerificationEmail).mockResolvedValue({ success: true });
     vi.mocked(generateRegistrationOptions).mockResolvedValue({ challenge: 'local-fixture-challenge' } as never);

@@ -13,6 +13,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { RefreshAccessTokenResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { getActivePlatformAdministratorUserIds, isCloudEmailLinkAccount } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
@@ -127,7 +128,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
       expiresAt: MoreThan(Date.now()),
       tenantId: tenantId || IsNull(),
     },
-    select: ['tokenHash', 'tenantId', 'deviceInfo'],
+    select: ['tokenHash', 'tenantId', 'deviceInfo', 'identityProviderId', 'providerSubjectId'],
   });
 
   // Check if any of the stored token hashes match the provided token
@@ -135,6 +136,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
   for (const row of tokenResult) {
     const isMatch = await bcrypt.compare(refreshToken, row.tokenHash);
     if (isMatch && persistedSessionClass(row.deviceInfo) === (payload.sessionClass || null)) {
+      if (tenantId && tenantSlug) await tenantLoginPolicyService.requireCompanySso({ tenantId, tenantSlug }, payload, row, dataSource);
       isValidToken = true;
       break;
     }

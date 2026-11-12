@@ -12,6 +12,7 @@ import { updateBpmnEngineRequestContext } from '@enterpriseglue/shared/services/
 import { permissionService, PlatformPermissions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 import { getActivePlatformAdministratorUserIds, isCloudEmailLinkAccount } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
 import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
@@ -153,7 +154,7 @@ function continueWithTenantContext(req: Request, next: NextFunction): void {
   runWithTenantDatabaseContext(req.tenant, () => next());
 }
 
-async function requireCurrentBrowserSession(payload: UserJwtPayload, dataSource: DataSource): Promise<void> {
+async function requireCurrentBrowserSession(payload: UserJwtPayload, dataSource: DataSource): Promise<RefreshToken | undefined> {
   // A pooled upgrade must not leave renewable legacy credentials outside the
   // exact-session revocation boundary. Single-tenant compatibility is retained.
   if (!payload.sessionId) {
@@ -168,6 +169,7 @@ async function requireCurrentBrowserSession(payload: UserJwtPayload, dataSource:
   if (persistedSessionClass(session) !== (payload.sessionClass || null)) {
     throw Errors.unauthorized('Session has been revoked');
   }
+  return session;
 }
 
 async function authenticateBrowserSession(
@@ -205,7 +207,7 @@ async function authenticateBrowserSession(
     !hasCloudAccountAuthentication(payload) || !await isCloudEmailLinkAccount(user, dataSource))) {
     throw Errors.unauthorized('Sign in again using an eligible account method');
   }
-  await requireCurrentBrowserSession(payload, dataSource);
+  const session = await requireCurrentBrowserSession(payload, dataSource);
   if (payload.recovery === 'platform_administrator'
     && !(await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId)) {
     throw Errors.unauthorized('Session has been revoked');
@@ -242,6 +244,7 @@ async function authenticateBrowserSession(
   if (!cloudAccountSession) {
     await runEnterprisePostAuthResolver(req, { tokenPayload: payload, user });
     await establishNativeSessionTenant(req, payload);
+    if (req.tenant) await tenantLoginPolicyService.requireCompanySso(req.tenant, payload, session, dataSource);
   }
 
   continueWithTenantContext(req, next);
@@ -394,7 +397,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       if (user && recoveryIsCurrent && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
         if (payload.authenticationMethod === 'email_link' && (!managedCloudAccountSessionsEnabled() ||
           !hasCloudAccountAuthentication(payload) || !await isCloudEmailLinkAccount(user, dataSource))) return next();
-        await requireCurrentBrowserSession(payload, dataSource);
+        const session = await requireCurrentBrowserSession(payload, dataSource);
         req.user = { ...payload, email: user.email };
         // Optional authentication must establish the same tenant-aware request
         // context as required authentication. If the enterprise resolver cannot
@@ -403,6 +406,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
         try {
           await runEnterprisePostAuthResolver(req, { tokenPayload: payload, user });
           await establishNativeSessionTenant(req, payload);
+          if (req.tenant) await tenantLoginPolicyService.requireCompanySso(req.tenant, payload, session, dataSource);
         } catch {
           delete req.user;
           return next();

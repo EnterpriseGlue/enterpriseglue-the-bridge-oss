@@ -530,6 +530,20 @@ router.put('/api/t/:tenantSlug/tenant/login-policy', ...tenantScope, requireActi
   )));
 }));
 
+router.post('/api/t/:tenantSlug/tenant/login-policy/recover', ...tenantScope,
+  requireAction('platform.tenants.manage', { resourceResolver: 'platform.self' }), asyncHandler(async (req, res) => {
+    if (!config.tenancyCloudRequired) throw Errors.notFound('Company SSO recovery');
+    if (req.user!.recovery !== 'platform_administrator') throw Errors.forbidden('Use platform administrator recovery to reset the sign-in policy');
+    const tenantId = req.tenant!.tenantId;
+    const previous = await tenantLoginPolicyService.get(tenantId);
+    const policy = await tenantLoginPolicyService.upsert(tenantId, {
+      localPasswordMode: 'auto', providerSelectionMode: previous?.providerSelectionMode ?? 'chooser',
+    }, req.user!.userId);
+    await logAudit({ tenantId, userId: req.user!.userId, action: 'identity.tenant.login_policy.recover',
+      resourceType: 'tenant', resourceId: tenantId, details: { previousLocalPasswordMode: previous?.localPasswordMode ?? null } });
+    res.json(TenantLoginPolicySchema.parse(policy));
+  }));
+
 router.get('/api/t/:tenantSlug/tenant/domains', ...tenantScope, requireAction('tenant.settings.manage'), asyncHandler(async (req, res) => {
   res.json(z.array(TenantDomainSchema).parse(await tenantService.listDomains(req.tenant!.tenantId)));
 }));

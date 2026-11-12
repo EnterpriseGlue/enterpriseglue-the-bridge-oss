@@ -3247,7 +3247,14 @@ registry.registerPath({
   method: 'put', path: '/api/t/{tenantSlug}/tenant/login-policy',
   ...authzExtension('tenant.settings.manage', 'PUT', '/api/t/{tenantSlug}/tenant/login-policy'),
   request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
-  responses: { 200: { description: 'Tenant login policy updated', content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
+  responses: { 200: { description: 'Tenant login policy updated', content: { 'application/json': { schema: TenantLoginPolicySchema } } },
+    409: { description: 'Company SSO-only policy requires an enabled direct tenant provider' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/tenant/login-policy/recover',
+  ...authzExtension('platform.tenants.manage', 'POST', '/api/t/{tenantSlug}/tenant/login-policy/recover'),
+  request: { params: TenantPathSchema }, responses: { 200: { description: 'Restores the managed tenant login policy to automatic',
+    content: { 'application/json': { schema: TenantLoginPolicySchema } } }, 403: { description: 'Platform administrator recovery session required' } },
 });
 registry.registerPath({
   method: 'get', path: '/api/t/{tenantSlug}/tenant/domains',
