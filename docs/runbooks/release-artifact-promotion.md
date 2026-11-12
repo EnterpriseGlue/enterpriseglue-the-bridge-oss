@@ -154,6 +154,15 @@ candidate and is not supported.
 Do not replace this status with a release-event job. A release event occurs
 after the tag exists and cannot prevent a partially published version.
 
+## Weekly security patch batch
+
+The scheduled Release Please preparation runs on Wednesdays at 03:30 UTC.
+Review eligible security fixes together in the pending release PR. Check that
+the complete batch recommends a patch version and verify the exact candidate.
+Publish the approved batch through the protected release workflow and record
+its publication and deployment evidence. Use the same batch to carry forward
+any scoped security exceptions due for remediation.
+
 ## Recovery
 
 First identify the exact release tag and its 40-character source commit. Do not
