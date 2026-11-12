@@ -1,5 +1,5 @@
 import { SsoConnectionViewSchema, SsoConnectionUpdateSchema, SsoConnectionTestSchema, SsoConnectionTestResultSchema, SsoProxyCatalogueViewSchema, SsoProxyCatalogueUpdateSchema } from './platform-admin/sso-connection.js';
-import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantRequestSchema, DocumentationGrantResponseSchema, DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema, DocumentationWorkspacesResponseSchema, DocumentationWorkspaceQuerySchema } from './auth/documentation.js';
+import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantRequestSchema, DocumentationGrantResponseSchema, DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema, DocumentationSubscriberIdentitySchema, DocumentationWorkspacesResponseSchema, DocumentationWorkspaceQuerySchema } from './auth/documentation.js';
 import { z } from 'zod';
 import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@asteasolutions/zod-to-openapi';
 
@@ -4239,6 +4239,7 @@ for (const [method, path, requestSchema, responseSchema] of [
   ['post', '/api/auth/documentation/grant', DocumentationGrantRequestSchema, DocumentationGrantResponseSchema],
   ['post', '/api/auth/documentation/exchange', DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema],
   ['get', '/api/auth/documentation/session', null, DocumentationAccessResponseSchema],
+  ['get', '/api/auth/documentation/subscriber', null, DocumentationSubscriberIdentitySchema],
   ['get', '/api/auth/documentation/workspaces', null, DocumentationWorkspacesResponseSchema],
   ['post', '/api/auth/documentation/logout', null, DocumentationLogoutResponseSchema],
 ] as const) {

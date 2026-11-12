@@ -33,6 +33,7 @@ import { useFeatureFlag } from '../../../shared/hooks/useFeatureFlag'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
+import { configuredDocumentationOrigin, documentationAccountLink } from '../../../utils/documentationAccess'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
 import { ExtensionSlot, useFilteredExtensionNavItems } from '../../../enterprise/ExtensionSlot'
 import { extensions, isMultiTenantEnabled, type NavExtension } from '../../../enterprise/extensionRegistry'
@@ -218,6 +219,15 @@ export default function LayoutWithProSidebar() {
     queryFn: () => apiClient.get<AuthenticatedIdentityProviderLinks>('/api/auth/me/identity-providers'),
     enabled: isProfileModalOpen && Boolean(user) && (!isMultiTenant || Boolean(tenantSlug)),
     staleTime: 15_000,
+  })
+  const documentationLinkQ = useQuery({
+    queryKey: ['auth', 'documentation', 'configuration'],
+    queryFn: async () => {
+      const { documentationOrigin } = await apiClient.get<{ documentationOrigin: string }>('/api/auth/documentation/configuration')
+      return documentationAccountLink(configuredDocumentationOrigin(documentationOrigin))
+    },
+    enabled: isProfileModalOpen && isMultiTenant && user?.isEmailVerified === true && !user.mustResetPassword,
+    retry: false,
   })
 
   const connectIdentityProvider = (providerId: string) => {
@@ -802,6 +812,10 @@ export default function LayoutWithProSidebar() {
               {platformAdminMenuVisible ? 'Platform Admin' : 'User'}
             </Tag>
           </div>
+
+          {documentationLinkQ.data && user?.isEmailVerified === true && !user.mustResetPassword && (
+            <Button as="a" href={documentationLinkQ.data} kind="ghost" size="sm">Open documentation</Button>
+          )}
 
           <TextInput
             id="profile-first-name"

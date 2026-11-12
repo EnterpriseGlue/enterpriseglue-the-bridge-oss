@@ -10,6 +10,10 @@ export const DocumentationExchangeRequestSchema = z.object({
   code: z.string().min(100).max(4096), verifier: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
 }).strict();
 export const DocumentationExchangeResponseSchema = z.object({ session: z.string().min(100).max(4096) }).strict();
+export const DocumentationSubscriberIdentitySchema = z.object({
+  email: z.email().max(320),
+  verified: z.literal(true),
+}).strict();
 export const DocumentationWorkspaceIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/);
 export const DocumentationWorkspaceSummarySchema = z.object({ id: DocumentationWorkspaceIdSchema, name: z.string().trim().min(1).max(120) }).strict();
 export const DocumentationWorkspacesResponseSchema = z.object({ workspaceContract: z.literal('customer-documentation/v2'), workspaces: z.array(DocumentationWorkspaceSummarySchema).max(32) }).strict();

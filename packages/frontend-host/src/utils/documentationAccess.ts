@@ -29,3 +29,15 @@ export function isDocumentationIntent(search: string): boolean {
 export function accountDestination(documentation: boolean, registration = false): string {
   return documentation ? '/documentation/access' : registration ? '/cloud/onboarding' : '/login';
 }
+
+export function configuredDocumentationOrigin(value: string): string {
+  const origin = new URL(value);
+  if (origin.protocol !== 'https:' || origin.pathname !== '/' || origin.username || origin.password || origin.search || origin.hash) {
+    throw new Error('Invalid documentation origin');
+  }
+  return origin.origin;
+}
+
+export function documentationAccountLink(origin: string): string {
+  return new URL('/?account=1', origin).href;
+}

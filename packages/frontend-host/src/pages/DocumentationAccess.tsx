@@ -5,7 +5,7 @@ import PublicAuthShell from '../shared/components/PublicAuthShell';
 import LoginProviderButton from '../shared/components/LoginProviderButton';
 import { apiClient } from '../shared/api/client';
 import { useAuth } from '../shared/hooks/useAuth';
-import { clearDocumentationRequest, getDocumentationRequest } from '../utils/documentationAccess';
+import { clearDocumentationRequest, configuredDocumentationOrigin, documentationAccountLink, getDocumentationRequest } from '../utils/documentationAccess';
 
 type Provider = { id: string; displayName: string; protocol: 'oidc' | 'saml' };
 export default function DocumentationAccess() {
@@ -41,9 +41,8 @@ export default function DocumentationAccess() {
     if (request && !accountView) return;
     let active = true;
     void apiClient.get<{documentationOrigin: string}>('/api/auth/documentation/configuration').then((value) => {
-      const origin = new URL(value.documentationOrigin);
-      if (origin.protocol !== 'https:' || origin.pathname !== '/' || origin.username || origin.password || origin.search || origin.hash) throw new Error();
-      if (active) setDocumentationOrigin(origin.origin);
+      const origin = configuredDocumentationOrigin(value.documentationOrigin);
+      if (active) setDocumentationOrigin(origin);
     }).catch(() => { if (active) setError('Documentation access is not available yet. Please return to the documentation link supplied to you.'); });
     return () => { active = false; };
   }, [request, accountView]);
@@ -76,10 +75,13 @@ export default function DocumentationAccess() {
     } catch { setError('Your profile could not be saved. Please try again.'); }
     finally { setBusy(false); }
   };
+  const documentationLink = documentationOrigin && isAuthenticated && user?.isEmailVerified === true && !user.mustResetPassword
+    ? documentationAccountLink(documentationOrigin)
+    : documentationOrigin;
   return <PublicAuthShell title={accountView ? 'Your EnterpriseGlue account' : 'Documentation access'} description="Use your EnterpriseGlue account to read documentation. No Cloud organization or workspace is required.">
     <Stack gap={5}>
       {error && <InlineNotification kind="error" lowContrast hideCloseButton title="Could not continue" subtitle={error} />}
-      {!request && !accountView ? <><InlineNotification kind="info" lowContrast hideCloseButton title="Start from the documentation site" subtitle="Open the configured documentation site to begin a secure sign-in. Your account remains available without creating a Cloud organization." />{documentationOrigin && <Button as="a" href={documentationOrigin} kind="primary">Open documentation</Button>}</>
+      {!request && !accountView ? <><InlineNotification kind="info" lowContrast hideCloseButton title="Start from the documentation site" subtitle="Open the configured documentation site to begin a secure sign-in. Your account remains available without creating a Cloud organization." />{documentationLink && <Button as="a" href={documentationLink} kind="primary">Open documentation</Button>}</>
         : isLoading ? <InlineLoading description="Checking your account session…" />
         : isAuthenticated && user?.mustResetPassword ? <Button as={Link} to="/reset-password">Complete required password reset</Button>
         : isAuthenticated && user?.isEmailVerified === false ? <Button as={Link} to="/resend-verification">Verify your email address</Button>
@@ -90,7 +92,7 @@ export default function DocumentationAccess() {
             <TextInput id="documentation-last-name" labelText="Last name" autoComplete="family-name" maxLength={100} value={lastName} onChange={event => { setLastName(event.target.value); setSaved(false); }} />
             {saved && <p role="status">Your profile has been updated.</p>}
             <Button type="submit" disabled={busy || (firstName === (user?.firstName || '') && lastName === (user?.lastName || ''))}>{busy ? 'Saving…' : 'Save profile'}</Button>
-            {documentationOrigin && <Button as="a" href={documentationOrigin} kind="ghost">Back to documentation</Button>}
+            {documentationLink && <Button as="a" href={documentationLink} kind="ghost">Back to documentation</Button>}
           </Stack>
         </form>
         : isAuthenticated ? <Button disabled={busy} onClick={() => void continueToDocumentation()}>{busy ? 'Opening documentation…' : 'Continue to documentation'}</Button>
