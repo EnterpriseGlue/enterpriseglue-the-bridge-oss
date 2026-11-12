@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.36.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.36.0...v0.36.1) (2026-11-12)
+
+### Changes
+
+- **cloud-authentication:** Allow verified email links to establish managed Cloud sessions and protect link requests with optional Turnstile verification.
+- **git:** Seed an active GitHub provider when a managed Cloud tenant is created.
+
+Full upgrade, compatibility and verification details: [v0.36.1 release notes](docs/releases/v0.36.1.md).
+
 ## [0.36.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.10...v0.36.0) (2026-11-11)
 
 ### Changes
