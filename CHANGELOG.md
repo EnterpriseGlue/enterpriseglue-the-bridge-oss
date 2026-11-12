@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.37.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.36.1...v0.37.0) (2026-11-12)
+
+
+### Features
+
+* **auth:** add verified documentation subscriber handoff ([94ed6ba](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/94ed6badb7653ad0c2623eff9ea5a7f7398b8807))
+* **auth:** enforce company sign-in with verified administrator recovery ([ecaa591](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ecaa59174fbc6a925f79e71271dc01e31ad6244b))
+* **auth:** require verified MFA for managed platform administrators ([13d786d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/13d786dc3c818a939f0f529ff94fe318bb953aec))
+* **auth:** support Microsoft Cloud account sign-in ([a015c7a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a015c7a46fa6f37e698f02335bd7b2c50fc9f8ad))
+* **cloud:** verify organization request identity and send notifications ([b80af23](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b80af236aff376b726982201487562211bc7d20b))
+* **docs:** share a verified account email with the documentation gateway ([3076ae1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3076ae13a49a3d1129a69d39b46919d67022d2fa))
+* **host-dashboard:** guide new workspaces through setup ([e4ea916](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e4ea9167148456fddacc41a6d0ecdfffd8bea562))
+* **host:** expose first-run workspace actions through a dashboard slot ([2bd924a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2bd924a3e2fd22c8c4c312d34fa4c938adba06c3))
+
+
+### Bug Fixes
+
+* **auth:** apply Microsoft mailbox proof to normalized issuers ([9051a74](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9051a74851e11a6ffe4fe05a1bc6fe5fa953ab31))
+* **release:** retain Oracle receipts and documentation catch-up inputs ([83e27ab](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/83e27abbf76c09614a0ae89d424edf995ad0b590))
+* **release:** retain Oracle receipts and documentation catch-up inputs ([dfd1112](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/dfd11127faa3cc853a0c1dccf1f5eaa4a22f1e47))
+
 ## [0.36.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.36.0...v0.36.1) (2026-11-12)
 
 ### Changes
