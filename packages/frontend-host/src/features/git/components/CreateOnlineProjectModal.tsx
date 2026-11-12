@@ -33,6 +33,7 @@ interface CreateOnlineProjectModalProps {
   onClose: () => void;
   existingProjectId?: string;
   existingProjectName?: string;
+  initialGitConnection?: boolean;
 }
 
 export default function CreateOnlineProjectModal(props: CreateOnlineProjectModalProps) {
@@ -42,7 +43,7 @@ export default function CreateOnlineProjectModal(props: CreateOnlineProjectModal
   return <NewProjectModal key={formKey} {...props} />;
 }
 
-function NewProjectModal({ open, onClose, existingProjectId, existingProjectName }: CreateOnlineProjectModalProps) {
+function NewProjectModal({ open, onClose, existingProjectId, existingProjectName, initialGitConnection }: CreateOnlineProjectModalProps) {
   const {
     navigate,
     toTenantPath,
@@ -125,6 +126,7 @@ function NewProjectModal({ open, onClose, existingProjectId, existingProjectName
     onClose,
     existingProjectId,
     existingProjectName,
+    initialGitConnection,
   });
 
   return (

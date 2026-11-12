@@ -308,23 +308,12 @@ export default function ProjectOverview() {
   const [deployProjectId, setDeployProjectId] = React.useState<string | null>(null)
   const [deployCancelSelection, setDeployCancelSelection] = React.useState<null | (() => void)>(null)
   const createOnlineModal = useModal()
+  const [initialGitConnection, setInitialGitConnection] = React.useState(false)
   const [onlineProjectContext, setOnlineProjectContext] = React.useState<{ id: string; name: string } | null>(null)
   const [engineAccessOpen, setEngineAccessOpen] = React.useState(false)
   const [engineAccessProject, setEngineAccessProject] = React.useState<{ id: string; name: string } | null>(null)
   const [selectedEngineForRequest, setSelectedEngineForRequest] = React.useState<string | null>(null)
   const [gitSettingsProjectId, setGitSettingsProjectId] = React.useState<string | null>(null)
-
-  const didHandleOpenCreateProject = React.useRef(false)
-  React.useEffect(() => {
-    if (didHandleOpenCreateProject.current) return
-    const state = (location as any).state as any
-    if (!state?.openCreateProject) return
-
-    didHandleOpenCreateProject.current = true
-    setOnlineProjectContext(null)
-    createOnlineModal.openModal()
-    nav(toTenantPath('/starbase'), { replace: true, state: {} })
-  }, [location, nav, toTenantPath, createOnlineModal])
 
   React.useEffect(() => {
     if (!isBulkSyncOpen) return
@@ -480,6 +469,19 @@ export default function ProjectOverview() {
     ? null
     : `Missing permission ${PlatformPermission.PROJECT_CREATE}`
 
+  const didHandleOpenCreateProject = React.useRef(false)
+  React.useEffect(() => {
+    if (didHandleOpenCreateProject.current) return
+    const state = (location as any).state as any
+    if (!state?.openCreateProject || createProjectUnavailableReason) return
+
+    didHandleOpenCreateProject.current = true
+    setOnlineProjectContext(null)
+    setInitialGitConnection(state.connectToGit === true)
+    createOnlineModal.openModal()
+    nav(toTenantPath('/starbase'), { replace: true, state: {} })
+  }, [location, nav, toTenantPath, createOnlineModal, createProjectUnavailableReason])
+
   const getProjectRowActionUnavailableReason = React.useCallback((project: Project, action: ProjectOverviewRowAction): string | null => {
     const permission = getProjectOverviewRowActionPermission(action)
     if (!permission) return null
@@ -595,6 +597,7 @@ export default function ProjectOverview() {
 
   const openCreateProject = React.useCallback(() => {
     if (createProjectUnavailableReason) return
+    setInitialGitConnection(false)
     setOnlineProjectContext(null)
     createOnlineModal.openModal()
   }, [createOnlineModal, createProjectUnavailableReason])
@@ -779,6 +782,7 @@ export default function ProjectOverview() {
         onCancelDisconnectProject={() => !busy && setDisconnectProject(null)}
         onConfirmDisconnectProject={handleDisconnectFromGit}
         createOnlineModalOpen={createOnlineModal.isOpen}
+        initialGitConnection={initialGitConnection}
         onCloseCreateOnlineModal={() => createOnlineModal.closeModal()}
         existingProjectId={onlineProjectContext?.id}
         existingProjectName={onlineProjectContext?.name}
