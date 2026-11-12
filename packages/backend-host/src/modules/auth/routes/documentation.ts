@@ -1,4 +1,4 @@
-import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantResponseSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema, DocumentationWorkspacesResponseSchema, DocumentationWorkspaceQuerySchema } from '@enterpriseglue/shared/schemas/auth/documentation.js';
+import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantResponseSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema, DocumentationSubscriberIdentitySchema, DocumentationWorkspacesResponseSchema, DocumentationWorkspaceQuerySchema } from '@enterpriseglue/shared/schemas/auth/documentation.js';
 import { Router } from 'express';
 import { apiLimiter, identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { requireCloudAccountOrTenantAuth, requireDocumentationAuth } from '@enterpriseglue/shared/middleware/auth.js';
@@ -34,6 +34,9 @@ router.get('/api/auth/documentation/session', apiLimiter, requireDocumentationAu
   if (query.workspace) documentationWorkspaceService.require(req.user!, query.workspace);
   res.json(DocumentationAccessResponseSchema.parse({ authenticated: true, permission: 'documentation:read', workspaceContract: 'customer-documentation/v2', ...(query.workspace ? { workspaceId: query.workspace } : {}) }));
 }));
+router.get('/api/auth/documentation/subscriber', apiLimiter, requireDocumentationAuth('session'), (req, res) => {
+  res.json(DocumentationSubscriberIdentitySchema.parse({ email: req.user!.email, verified: true }));
+});
 router.get('/api/auth/documentation/workspaces', apiLimiter, requireDocumentationAuth('session'), (req, res) => {
   res.json(DocumentationWorkspacesResponseSchema.parse({ workspaceContract: 'customer-documentation/v2', workspaces: documentationWorkspaceService.list(req.user!) }));
 });

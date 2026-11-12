@@ -615,3 +615,8 @@ The UI is gated by `VITE_FEATURE_*` flags (see `frontend/.env.example`), such as
 - `EG_DOCUMENTATION_GATEWAY_SECRET`: Dedicated 32–512 character API-only secret, also installed on the documentation gateway. It must differ from `JWT_SECRET`.
 
 The integration requires managed pooled Cloud account identity. Unset configuration disables access. Neither variable belongs in frontend runtime configuration. See [the account contract](documentation-account-access.md).
+
+The subscriber gateway can exchange the existing one-time browser grant and
+call `GET /api/auth/documentation/subscriber` with the resulting documentation
+session and the dedicated gateway credential. The response contains the
+current verified email address for subscriber matching.

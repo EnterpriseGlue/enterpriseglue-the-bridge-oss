@@ -5,14 +5,15 @@ import DocumentationAccess from '@src/pages/DocumentationAccess';
 import Signup from '@src/pages/Signup';
 import CloudEmailAuth from '@src/pages/CloudEmailAuth';
 import { apiClient } from '@src/shared/api/client';
+import { useAuth } from '@src/shared/hooks/useAuth';
 import { accountDestination, getDocumentationRequest } from '@src/utils/documentationAccess';
 import userEvent from '@testing-library/user-event';
 vi.mock('@src/shared/api/client', () => ({ apiClient: { get: vi.fn(), post: vi.fn() } }));
-vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: () => ({ isAuthenticated: false, isLoading: false }) }));
+vi.mock('@src/shared/hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('@src/shared/components/PublicAuthShell', () => ({ default: ({ title, description, children }: { title: string; description: string; children: React.ReactNode }) => <><h1>{title}</h1><p>{description}</p>{children}</> }));
 vi.mock('@src/enterprise/extensionRegistry', () => ({ isMultiTenantEnabled: () => false }));
 const browserRequest = `?state=${'s'.repeat(43)}&challenge=${'c'.repeat(43)}`;
-beforeEach(() => { vi.clearAllMocks(); sessionStorage.clear(); vi.mocked(apiClient.get).mockResolvedValue([{ id: 'google', displayName: 'Google', protocol: 'oidc' }]); vi.mocked(apiClient.post).mockResolvedValue({}); });
+beforeEach(() => { vi.clearAllMocks(); sessionStorage.clear(); vi.mocked(apiClient.get).mockResolvedValue([{ id: 'google', displayName: 'Google', protocol: 'oidc' }]); vi.mocked(apiClient.post).mockResolvedValue({}); vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false } as ReturnType<typeof useAuth>); });
 describe('documentation-only account entry', () => {
   it('offers existing account methods without requesting organization provisioning', async () => {
     render(<MemoryRouter initialEntries={[`/documentation/access${browserRequest}`]}><DocumentationAccess /></MemoryRouter>);
@@ -29,6 +30,15 @@ describe('documentation-only account entry', () => {
     expect(await screen.findByRole('link', { name: 'Open documentation' })).toHaveAttribute('href', 'https://docs.staging.enterpriseglue.ai');
     expect(apiClient.get).toHaveBeenCalledExactlyOnceWith('/api/auth/documentation/configuration');
     expect(apiClient.post).not.toHaveBeenCalled();
+  });
+  it('starts the subscriber handoff from the configured origin for a verified signed-in reader', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ documentationOrigin: 'https://docs.staging.enterpriseglue.ai' });
+    vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isLoading: false,
+      user: { isEmailVerified: true, mustResetPassword: false },
+    } as ReturnType<typeof useAuth>);
+    render(<MemoryRouter initialEntries={['/documentation/access']}><DocumentationAccess /></MemoryRouter>);
+    expect(await screen.findByRole('link', { name: 'Open documentation' })).toHaveAttribute('href',
+      'https://docs.staging.enterpriseglue.ai/?account=1');
   });
   it('keeps a documentation request across the identity-provider redirect without accepting external destinations', () => {
     const first = getDocumentationRequest(browserRequest); expect(first).not.toBeNull();

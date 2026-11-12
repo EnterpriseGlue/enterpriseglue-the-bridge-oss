@@ -37,6 +37,7 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   tokenAuthenticatedRoute('POST', '/api/auth/documentation/exchange', 'high', 'A dedicated gateway credential and a single-use PKCE-bound documentation grant establish a limited documentation session.'),
   tokenAuthenticatedRoute('GET', '/api/auth/documentation/workspaces', 'high', 'A dedicated gateway credential and live documentation session return only explicitly granted customer workspaces for the verified account.'),
   tokenAuthenticatedRoute('GET', '/api/auth/documentation/session', 'high', 'A dedicated gateway credential and documentation token require live account and exact source-session validity; no tenant-management authority is returned.'),
+  tokenAuthenticatedRoute('GET', '/api/auth/documentation/subscriber', 'high', 'A dedicated gateway credential and live documentation session return only the current account’s verified email address.'),
   publicRoute('GET', '/health', 'low', 'platform-runtime', 'Unauthenticated health probes expose only sanitized configuration bootstrap state.'),
   publicRoute('GET', '/ready', 'low', 'platform-runtime', 'Unauthenticated readiness probes expose only sanitized configuration bootstrap state.'),
   publicRoute('GET', '/metrics', 'low', 'platform-runtime', 'Unauthenticated metrics expose only bounded enum-backed configuration bootstrap, aggregate engine-tenancy, and login-experience gauges/counters without tenant, engine, provider, or principal identifiers.'),

@@ -86,6 +86,26 @@ describe('documentation account boundary', () => {
     expect((await check(exchanged.body.session)).status).toBe(200); expect(updates).toBe(2);
     expect(JSON.parse(row.deviceInfo!)).toEqual({ sessionClass: 'cloud_account', documentationSessions: [claims.jti] });
   });
+  it('discloses only the verified email to the gateway while the exact documentation session is valid', async () => {
+    const code = new URL((await grant()).body.callbackUrl).searchParams.get('code')!;
+    const token = (await exchange(code)).body.session;
+    const subscriber = (credential: string, gatewayKey = config.documentationGatewaySecret!) =>
+      request(server).get('/api/auth/documentation/subscriber')
+        .set('x-enterpriseglue-documentation-key', gatewayKey)
+        .set('Authorization', `Bearer ${credential}`);
+    const identity = await subscriber(token);
+    expect(identity.status).toBe(200);
+    expect(identity.headers['cache-control']).toBe('no-store');
+    expect(identity.body).toEqual({ email: user.email, verified: true });
+    expect((await subscriber(token, 'wrong')).status).toBe(401);
+    expect((await subscriber(browserToken)).status).toBe(401);
+    expect((await subscriber(code)).status).toBe(401);
+    user.isEmailVerified = false;
+    expect((await subscriber(token)).status).toBe(403);
+    user.isEmailVerified = true;
+    row.revokedAt = Date.now();
+    expect((await subscriber(token)).status).toBe(401);
+  });
   it('updates the same account profile without tenant access and rejects documentation credentials', async () => {
     const result = await request(server).patch('/api/auth/me').set('Authorization', `Bearer ${browserToken}`).send({ firstName: 'Alex', lastName: 'Reader', email: 'cannot-change@example.test' });
     expect(result.status).toBe(200); expect(result.body).toMatchObject({ firstName: 'Alex', lastName: 'Reader', email: user.email, session: { tenant: { id: null } } });
