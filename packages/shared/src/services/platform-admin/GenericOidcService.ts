@@ -288,6 +288,12 @@ export class GenericOidcService {
     return { mfaVerified: amrMatch || acrMatch };
   }
 
+  administratorMfaVerified(rawConfiguration: Record<string, unknown>, claims: OidcIdentityClaims): boolean {
+    const provider = config(rawConfiguration);
+    const explicitMfa = Array.isArray(claims.amr) && claims.amr.some(value => typeof value === 'string' && value.toLowerCase() === 'mfa');
+    return explicitMfa || (typeof claims.acr === 'string' && provider.mfaAcrValues.includes(claims.acr));
+  }
+
   async createLogoutRequest(rawConfiguration: Record<string, unknown>, state: string, network?: SsoHttpContext): Promise<string | null> {
     if(network)return withSsoHttpContext(network,()=>this.createLogoutRequest(rawConfiguration, state));
     try {

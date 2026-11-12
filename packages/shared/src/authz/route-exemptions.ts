@@ -61,6 +61,7 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   tokenAuthenticatedRoute('DELETE', '/scim/v2/:directoryKey/Groups/:id', 'high', 'A directory-scoped provisioning bearer credential authorizes archival of a directory group without deleting internal users or groups.'),
   publicRoute('POST', '/api/auth/login', 'high', 'platform-auth', 'Credential login must be reachable before a session exists and is protected by authentication rate limits.'),
   publicRoute('POST', '/api/auth/recovery/login', 'high', 'platform-auth', 'Dedicated administrator recovery verifies local credentials and current canonical platform-administrator membership under authentication rate limits.'),
+  tokenAuthenticatedRoute('POST', '/api/auth/recovery/session', 'high', 'A recent second-factor verified global Cloud session and current canonical platform-administrator membership authorize a short recovery session.'),
   tokenAuthenticatedRoute('POST', '/api/t/:tenantSlug/auth/complete-onboarding', 'high', 'A one-time onboarding token authorizes completion before the normal user session is issued.'),
   tokenAuthenticatedRoute('GET', '/api/t/:tenantSlug/auth/onboarding/login-methods', 'low', 'Verified onboarding context restricts enrollment method discovery to its tenant.'),
   tokenAuthenticatedRoute('GET', '/api/t/:tenantSlug/auth/onboarding/providers/:providerId/start', 'high', 'Verified fresh onboarding context binds invitation and tenant to signed provider state; completion consumes the invitation transactionally.'),

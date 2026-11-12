@@ -99,11 +99,16 @@ Enabling the setting also blocks already-issued tenant sessions that used a
 different method. The user's account and organization membership are retained.
 
 If the tenant provider is unavailable, a platform administrator can start a
-recovery session with `POST /api/auth/recovery/login`. With the same session and
-its CSRF token, send `POST /api/t/{tenantSlug}/tenant/login-policy/recover` for
-the affected tenant. The operation requires `platform.tenants.manage`, records
-the actor and previous mode, and restores the automatic sign-in mode while
-preserving the provider selection. Verify the organization's login methods
+recovery session through `/admin-recovery`. When managed Cloud administrator
+MFA is required, sign in using the independent operator MFA method and select
+**Start recovery session** within five minutes. When MFA is disabled, the
+existing recovery sign-in form uses `POST /api/auth/recovery/login`.
+
+With the recovery session and its CSRF token, send
+`POST /api/t/{tenantSlug}/tenant/login-policy/recover` for the affected tenant.
+The operation requires `platform.tenants.manage`, records the actor and previous
+mode, and restores the automatic sign-in mode while preserving the provider
+selection. Verify the organization's login methods
 before asking the tenant administrator to repair and re-enable company SSO.
 
 PUT requires the `expectedVersion` returned by GET. Updates use a database

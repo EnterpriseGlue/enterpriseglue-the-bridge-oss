@@ -1,3 +1,4 @@
+import { requireCloudAdministratorMfa } from '@enterpriseglue/shared/services/platform-admin/requireCloudAdministratorMfa.js';
 import { Request, Response, NextFunction } from 'express';
 import { hasCloudAccountAuthentication, normalizeUserJwtPayload, verifyToken, type AuthenticatedUserJwtPayload, type JwtPayload, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { Errors, AppError } from './errorHandler.js';
@@ -207,6 +208,7 @@ async function authenticateBrowserSession(
     !hasCloudAccountAuthentication(payload) || !await isCloudEmailLinkAccount(user, dataSource))) {
     throw Errors.unauthorized('Sign in again using an eligible account method');
   }
+  await requireCloudAdministratorMfa(user.id, payload.cloudAdministratorMfaVerified, dataSource);
   const session = await requireCurrentBrowserSession(payload, dataSource);
   if (payload.recovery === 'platform_administrator'
     && !(await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId)) {
@@ -397,6 +399,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       if (user && recoveryIsCurrent && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
         if (payload.authenticationMethod === 'email_link' && (!managedCloudAccountSessionsEnabled() ||
           !hasCloudAccountAuthentication(payload) || !await isCloudEmailLinkAccount(user, dataSource))) return next();
+        await requireCloudAdministratorMfa(user.id, payload.cloudAdministratorMfaVerified, dataSource);
         const session = await requireCurrentBrowserSession(payload, dataSource);
         req.user = { ...payload, email: user.email };
         // Optional authentication must establish the same tenant-aware request

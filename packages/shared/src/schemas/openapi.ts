@@ -4357,6 +4357,17 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: 'post', path: '/api/auth/recovery/session',
+  security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+  ...authzExemption('POST', '/api/auth/recovery/session'),
+  request: { body: { content: { 'application/json': { schema: z.object({}).strict() } } } },
+  responses: {
+    204: { description: 'Short platform-administrator recovery session issued in browser cookies' },
+    401: { description: 'A recent verified platform-administrator Cloud session is required' },
+  },
+});
+
 // POST /api/auth/complete-onboarding
 registry.registerPath({ method: 'get', path: '/api/auth/onboarding/login-methods', ...authzExemption('GET', '/api/auth/onboarding/login-methods'), responses: {
   200: { description: 'Enrollment methods for the verified invitation tenant; requires the onboarding cookie', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } },

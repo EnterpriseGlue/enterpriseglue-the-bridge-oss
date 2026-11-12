@@ -118,6 +118,7 @@ function tenancyCapabilities(includeShardIdentity: boolean) {
     databaseIsolation: config.tenancyMode === 'pooled' ? 'postgres_rls' : 'application',
     customDomainsEnabled: config.tenancyMode === 'pooled',
     organizationDiscoveryEnabled: config.tenancyMode === 'pooled',
+    cloudPlatformAdminMfaRequired: config.cloudPlatformAdminMfaRequired,
     signedPlacementAssertionsEnabled: placementAssertionVersions.length > 0,
     placementAssertionVersions,
     placementV2Required: config.tenancyCloudRequired,
