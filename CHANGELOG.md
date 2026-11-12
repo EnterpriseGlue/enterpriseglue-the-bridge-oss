@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.36.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.36.0...v0.36.1) (2026-11-12)
+
+
+### Bug Fixes
+
+* **auth:** parse browser cookies without dynamic property writes ([22157be](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/22157be824b11c43d8a9970d171a5039c298e53f))
+* **auth:** share browser protections with the database fixture ([f15e1c1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f15e1c15cf495ee47d63e0383b9cabb77514b246))
+* **auth:** support protected Cloud email-link sign-in ([2b4a6a0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2b4a6a044efa8497166dadcfdaf5c949db3d01f4))
+* **auth:** support protected Cloud email-link sign-in ([6a99780](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6a99780b3b643eaca590e19ff60d302a98b4a01a))
+* **auth:** verify CSRF for email proof completion ([a0bd8f0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a0bd8f0eaf00927266554c63c2018dddf2b722cc))
+* **deploy:** wire Cloud email protection through the host chart ([02f36e1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/02f36e18a7221fa8125ed21e22ec98357b949778))
+* **git:** seed GitHub for new managed cloud tenants ([298e970](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/298e9707300fc7be8ee0cadb21c91bb1831b5c14))
+* **git:** seed GitHub for new managed cloud tenants ([acb52b0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/acb52b0559c502e92879ada8658091a567067895))
+* **release:** align Cloud email host package versions ([eae21d5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/eae21d5481f15a5149726fa9c6eacad5d7b6fab6))
+
 ## [0.36.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.10...v0.36.0) (2026-11-11)
 
 ### Changes
