@@ -19,6 +19,47 @@ beforeEach(() => {
   removeRoleAssignment.mockResolvedValue(undefined);
 });
 
+describe('TenantService Git provider defaults', () => {
+  const originalMode = config.tenancyMode;
+  const originalCloudMode = config.tenancyCloudRequired;
+
+  afterEach(() => {
+    config.tenancyMode = originalMode;
+    config.tenancyCloudRequired = originalCloudMode;
+  });
+
+  it.each([true, false])('initializes GitHub only for cloud tenants (cloud=%s)', async (cloud) => {
+    config.tenancyMode = 'pooled';
+    config.tenancyCloudRequired = cloud;
+    const insertProvider = vi.fn().mockResolvedValue(undefined);
+    const tenants = {
+      insert: vi.fn().mockResolvedValue(undefined),
+      findOneByOrFail: vi.fn().mockImplementation(async ({ id }) => ({ id })),
+    };
+    const manager = {
+      getRepository(entity: { name: string }) {
+        if (entity.name === 'Tenant') return tenants;
+        if (entity.name === 'GitProvider') return { insert: insertProvider };
+        return { insert: vi.fn().mockResolvedValue(undefined) };
+      },
+    };
+    getDataSource.mockResolvedValue({
+      manager,
+      transaction: (create: (store: typeof manager) => unknown) => create(manager),
+    });
+
+    const tenant = await new TenantService().create({ name: 'Test tenant', slug: 'test-tenant' });
+
+    if (cloud) {
+      expect(insertProvider).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+        tenantId: tenant.id, type: 'github', isActive: true,
+      }));
+    } else {
+      expect(insertProvider).not.toHaveBeenCalled();
+    }
+  });
+});
+
 describe('TenantService placement assertions', () => {
   const originalKey = config.tenantPlacementKey;
   const originalMaxAge = config.tenantPlacementMaxAgeSeconds;

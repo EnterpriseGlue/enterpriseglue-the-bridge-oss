@@ -7,7 +7,10 @@ import { generateAccessToken, generateRefreshToken } from '@enterpriseglue/share
 import { config } from '@enterpriseglue/shared/config/index.js';
 
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.fn() }));
-vi.mock('@enterpriseglue/shared/utils/jwt.js', () => ({ generateAccessToken: vi.fn(() => 'access-token'), generateRefreshToken: vi.fn(() => 'refresh-token') }));
+vi.mock('@enterpriseglue/shared/utils/jwt.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@enterpriseglue/shared/utils/jwt.js')>(),
+  generateAccessToken: vi.fn(() => 'access-token'), generateRefreshToken: vi.fn(() => 'refresh-token'),
+}));
 vi.mock('@enterpriseglue/shared/utils/id.js', () => ({ generateId: vi.fn(() => 'session-1') }));
 describe('authSessionService', () => {
   const originalCloudConfig = {
