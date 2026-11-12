@@ -358,6 +358,9 @@ jobs:
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.postgres.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.postgres.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
           EG_BACKEND_ENV_FILE=./infra/docker/env/examples/images.oracle.env.example docker compose --project-directory . --env-file "$ENV_EXAMPLES_DIR/images.oracle.env.example" -f "$COMPOSE_DIR/docker-compose.prod.yml" -f "$COMPOSE_DIR/docker-compose.oracle.yml" -f "$COMPOSE_DIR/docker-compose.images.yml" config >/dev/null
 
+      - name: Validate the standalone Operaton Compose download
+        run: python3 scripts/test-selfhost-operaton-kit.py
+
       - name: Validate backend exposure overlay wiring
         shell: bash
         run: |

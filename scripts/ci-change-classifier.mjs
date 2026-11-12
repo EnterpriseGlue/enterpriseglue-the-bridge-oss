@@ -187,6 +187,7 @@ const classifiers = {
     /^patches\/[^/]+\.patch$/,
     /^(?:backend|frontend)\/Dockerfile(?:\.prod|\.oracle-dev)?$/,
     /^infra\/docker\//,
+    /^scripts\/(?:build|test)-selfhost-operaton-kit\.py$/,
     /^scripts\/(?:smoke-images-local|e2e-smoke-postgres-images|run-trivy-image-scan|check-release-dockerfile-pins)/,
     /^\.github\/workflows\/(?:docker-images|docker-images-reusable|security-nightly|security-nightly-reusable)\.yml$/,
   ],

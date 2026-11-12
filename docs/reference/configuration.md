@@ -368,6 +368,26 @@ round-trip, and authoritative-removal procedure.
 - `EG_CONFIG_SECRET_PROVIDER`: `env`, `file`, or `docker`; defaults to `env`.
 - `EG_CONFIG_SECRET_FILE_ROOT`: Required root directory for `file://` secret references when the provider is `file`; optional Docker secret mount root, which defaults to `/run/secrets` when the provider is `docker`.
 
+### Standalone customer Operaton Compose package
+
+The [standalone Docker package](../how-to/deploy-docker.md#standalone-package-with-customer-operaton)
+uses the same engine, login policy, and role-assignment schemas as the
+configuration API. Its Compose inputs include:
+
+| Variable | Meaning |
+| --- | --- |
+| `OPERATON_IMAGE` | Customer-provided Operaton image for the `operaton` service. |
+| `OPERATON_SIDECAR_IMAGE` | Customer sidecar image when `COMPOSE_PROFILES=sidecar` is enabled. |
+| `EG_OPERATON_BUNDLE` | Host path to the engine and access bundle. Defaults to `./enterpriseglue-config.json`. |
+| `EG_OPERATON_POLICY_BUNDLE` | Optional policy bundle applied before a peer-authenticated customer sidecar is registered. |
+| `EG_EXTRA_CA_FILE` | Optional CA file path inside the backend container, such as `/run/secrets/customer-root-ca.pem`. |
+| `FRONTEND_HOST_PORT` | Loopback HTTP port for the frontend. Defaults to `8080`. Set `FRONTEND_URL` to the external HTTPS origin for SSO. |
+
+Bundle credentials use `docker://<name>` references to files in the
+package's read-only `secrets/` mount. Local administrator bootstrap still
+uses `ADMIN_EMAIL` and `ADMIN_PASSWORD`. The setup step assigns the exact
+local account `system.engine.operator` on the configured engine.
+
 ### Engine endpoint policy
 
 Production outbound engine traffic always enforces this policy and fails closed

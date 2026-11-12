@@ -19,6 +19,9 @@ Open **http://localhost:8080**. Stop with `docker compose -f docker-compose.self
 
 See `infra/docker/env/examples/selfhost.env.example` for all available options.
 
+For a customer Operaton distribution with first-launch admin access, see the
+[standalone Operaton package](deploy-docker.md#standalone-package-with-customer-operaton).
+
 ---
 
 ## Prerequisites

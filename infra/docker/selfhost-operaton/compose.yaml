@@ -1,0 +1,5 @@
+include:
+  - path:
+      - ./compose.host.yaml
+      - ./compose.operaton.yaml
+      - ./compose.customer.yaml

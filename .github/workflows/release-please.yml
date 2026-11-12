@@ -361,6 +361,29 @@ jobs:
           test -f "$release_file"
           gh release edit "$RELEASE_TAG" --notes-file "$release_file"
 
+      - name: Publish the versioned Operaton Compose download
+        if: steps.publication.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
+          RELEASE_TAG: ${{ steps.publication.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          builder=".artifacts/release-source/scripts/build-selfhost-operaton-kit.py"
+          if [[ ! -f "$builder" ]]; then
+            exit 0
+          fi
+          output_dir="$(mktemp -d)"
+          trap 'rm -rf "$output_dir"' EXIT
+          asset="enterpriseglue-operaton-$RELEASE_TAG.zip"
+          python3 "$builder" "$RELEASE_TAG" "$output_dir/$asset"
+          published="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name')"
+          if grep -Fxq "$asset" <<<"$published"; then
+            gh release download "$RELEASE_TAG" --pattern "$asset" --output "$output_dir/published.zip"
+            cmp "$output_dir/$asset" "$output_dir/published.zip"
+          else
+            gh release upload "$RELEASE_TAG" "$output_dir/$asset"
+          fi
+
       - name: Observe actual publication progress and retain the signed attempt
         if: always() && steps.publication.outputs.is_release == 'true'
         env:

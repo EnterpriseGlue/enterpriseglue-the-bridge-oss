@@ -654,3 +654,18 @@ test('documentation handoff selects release controls without application or data
   }
   assert.equal(classifyChangedFiles(['scripts/unrecognized-control.mjs']).unknown_high_risk,true);
 });
+
+test('the Operaton Compose kit selects deployment checks without unrelated suites', () => {
+  for (const path of [
+    'infra/docker/selfhost-operaton/setup.mjs',
+    'scripts/build-selfhost-operaton-kit.py',
+    'scripts/test-selfhost-operaton-kit.py',
+  ]) {
+    const result = classifyChangedFiles([path]);
+    assert.equal(result.unknown_high_risk, false, path);
+    assert.equal(result.run_compose_render, true, path);
+    assert.equal(result.run_release_readiness, true, path);
+    assert.equal(result.run_database_matrix, false, path);
+    assert.equal(result.run_plugin_images, false, path);
+  }
+});

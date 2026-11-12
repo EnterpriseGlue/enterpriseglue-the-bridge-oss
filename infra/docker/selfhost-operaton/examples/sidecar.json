@@ -1,0 +1,40 @@
+{
+  "bundle": {
+    "apiVersion": "enterpriseglue.ai/v1beta1",
+    "kind": "EnterpriseGlueConfigBundle",
+    "metadata": {
+      "key": "platform.local-operaton",
+      "owner": "customer-operations"
+    },
+    "tenantKey": "default",
+    "mode": "additive",
+    "imports": [
+      "./engines.json"
+    ]
+  },
+  "files": {
+    "./engines.json": {
+      "engines": [
+        {
+          "key": "engine.customer-operaton",
+          "name": "Customer Operaton",
+          "type": "operaton",
+          "externalId": "customer-operaton",
+          "baseUrl": "https://sidecar:8443/engine-rest",
+          "connectionMode": "customer_sidecar",
+          "auth": {
+            "type": "bearer",
+            "tokenRef": "docker://sidecar-token"
+          },
+          "tenancy": {
+            "mode": "dedicated",
+            "tenantRef": {
+              "type": "default"
+            }
+          },
+          "runtimeAccessScope": "engine_wide"
+        }
+      ]
+    }
+  }
+}

@@ -50,6 +50,17 @@ test('candidate staging is downstream of successful exact merge-queue CI', () =>
   assert.match(stage, /commit\.parents\?\.\[0\]\?\.sha !== baseRef/)
 })
 
+test('the Operaton download is built from approved release source and immutable on retry', () => {
+  const publication = releasePlease.slice(
+    releasePlease.indexOf('      - name: Publish the versioned Operaton Compose download'),
+    releasePlease.indexOf('      - name: Observe actual publication progress'),
+  )
+  assert.match(publication, /steps\.publication\.outputs\.is_release == 'true'/)
+  assert.match(publication, /\.artifacts\/release-source\/scripts\/build-selfhost-operaton-kit\.py/)
+  assert.match(publication, /gh release download[\s\S]*cmp[\s\S]*gh release upload/)
+  assert.doesNotMatch(publication, /--clobber/)
+})
+
 test('candidate staging validates the release-only delta before exact artifact checkout', () => {
   const validator = stage.slice(
     stage.indexOf('  validate-source:\n'),
@@ -103,6 +114,7 @@ test('candidate staging qualifies every public artifact before recording success
   assert.match(stage, /smoke-images-local\.sh/)
   assert.match(stage, /--force-oracle/)
   assert.match(stage, /Run Mission Control browser journey on exact candidate images/)
+  assert.match(stage, /Qualify the Operaton Compose download on exact candidate images[\s\S]*?test-selfhost-operaton-kit\.py --live --tag/)
   assert.match(stage, /test:e2e:smoke:postgres:images/)
   assert.match(stage, /release-candidate-image-browser-/)
   assert.match(stage, /--severity CRITICAL,HIGH,MEDIUM,LOW,UNKNOWN/)
