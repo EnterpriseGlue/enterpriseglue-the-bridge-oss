@@ -2,7 +2,7 @@
   "$schema": "./schema.json",
   "schemaVersion": 1,
   "id": "cloud-organization-request-identity",
-  "type": "feat",
+  "type": "feature",
   "scope": "cloud-onboarding",
   "breaking": false,
   "audiences": [
