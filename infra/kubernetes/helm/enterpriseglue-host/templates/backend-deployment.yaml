@@ -1,4 +1,13 @@
 {{- include "enterpriseglue-host.releaseEffectCohortValidate" . }}
+{{- $emailProtection := .Values.cloudEmailSignupProtection }}
+{{- if $emailProtection.enabled }}
+{{- if not .Values.workers.enabled }}
+{{- fail "cloudEmailSignupProtection requires the split API runtime" }}
+{{- end }}
+{{- if has $emailProtection.secret.name (list .Values.database.applicationSecretName .Values.database.migrationSecretName .Values.database.preflightSecretName .Values.database.managedShardBootstrap.seedSecretName .Values.pluginManager.configurationSecret.name) }}
+{{- fail "cloudEmailSignupProtection requires a dedicated API-only Secret" }}
+{{- end }}
+{{- end }}
 {{- if .Values.apiConfigBundle.enabled }}
 {{- if or (hasKey .Values.podAnnotations "enterpriseglue.io/api-config-bundle-contract") (hasKey .Values.podAnnotations "enterpriseglue.io/api-config-bundle-sha256") }}
 {{- fail "apiConfigBundle rollout annotations cannot be overridden through podAnnotations" }}
@@ -82,6 +91,16 @@ spec:
           env:
             {{- include "enterpriseglue-host.oracleNativeEnvironment" . | nindent 12 }}
             {{- include "enterpriseglue-host.releaseEffectCohortEnvironment" . | nindent 12 }}
+            {{- if $emailProtection.enabled }}
+            - name: EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY
+              value: {{ required "cloudEmailSignupProtection requires a site key" $emailProtection.siteKey | quote }}
+            - name: EG_CLOUD_EMAIL_TURNSTILE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "cloudEmailSignupProtection requires a Secret name" $emailProtection.secret.name | quote }}
+                  key: {{ required "cloudEmailSignupProtection requires a Secret key" $emailProtection.secret.key | quote }}
+                  optional: false
+            {{- end }}
             {{- if .Values.apiConfigBundle.enabled }}
             - name: EG_CONFIG_BUNDLE_PATH
               value: {{ printf "/etc/enterpriseglue/platform-config/%s" .Values.apiConfigBundle.configMapKey | quote }}

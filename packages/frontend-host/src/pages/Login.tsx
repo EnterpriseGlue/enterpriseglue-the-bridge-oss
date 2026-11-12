@@ -88,13 +88,14 @@ function providerPasswordLoginPath(provider: PublicLoginProvider, slug: string |
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, setAuthenticatedUser, refreshPermissions, isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { login, setAuthenticatedUser, refreshPermissions, user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/);
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null;
   const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null;
   const isAdministratorRecovery = /(?:^|\/)admin-recovery\/?$/.test(location.pathname);
   const tenancyCapabilities = getTenancyCapabilities();
+  const managedMfaRecovery = isAdministratorRecovery && tenancyCapabilities.cloudPlatformAdminMfaRequired === true;
   const isOrganizationFinder = tenancyCapabilities.mode === 'pooled'
     && tenancyCapabilities.organizationDiscoveryEnabled
     && !tenantSlug
@@ -113,6 +114,7 @@ export default function Login() {
   const [cloudProviderError, setCloudProviderError] = useState<string | null>(null);
   const [membershipAttempt, setMembershipAttempt] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [recoverySessionActive, setRecoverySessionActive] = useState(false);
   const [loginMethods, setLoginMethods] = useState<PublicLoginMethodsResponse | null>(null);
   const [directLdapProvider, setDirectLdapProvider] = useState<PublicLoginProvider | null>(null);
   const [loginStep, setLoginStep] = useState<'discover' | 'methods' | 'local'>('methods');
@@ -217,7 +219,7 @@ export default function Login() {
   }, [email, tenantSlug]);
 
   useEffect(() => {
-    if (isAuthLoading || !isAuthenticated || isOrganizationFinder) return;
+    if (isAuthLoading || !isAuthenticated || isOrganizationFinder || managedMfaRecovery) return;
 
     const params = new URLSearchParams(location.search);
     if (params.get('error')) return;
@@ -225,7 +227,7 @@ export default function Login() {
     const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : `/t/${DEFAULT_TENANT_SLUG}/`;
     const fromRaw = (location.state as LoginLocationState | null)?.from?.pathname;
     navigate(toSafeInternalPath(fromRaw, fallback), { replace: true });
-  }, [isAuthLoading, isAuthenticated, isOrganizationFinder, location.search, location.state, navigate, tenantSlug]);
+  }, [isAuthLoading, isAuthenticated, isOrganizationFinder, location.search, location.state, managedMfaRecovery, navigate, tenantSlug]);
 
   // Handle OAuth error messages (success now redirects directly to root)
   useEffect(() => {
@@ -453,6 +455,21 @@ export default function Login() {
       setTouchedFields((current) => ({ ...current, password: false }));
       setLoginErrorFocusTarget('email');
       setLoginError(parsed.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openMfaRecovery = async () => {
+    if (isLoading || recoverySessionActive) return;
+    setLoginError(null);
+    setIsLoading(true);
+    try {
+      await apiClient.post('/api/auth/recovery/session', {});
+      setRecoverySessionActive(true);
+    } catch (err) {
+      setLoginErrorFocusTarget('notification');
+      setLoginError(parseApiError(err, 'Recovery login failed').message);
     } finally {
       setIsLoading(false);
     }
@@ -739,6 +756,9 @@ export default function Login() {
           <Button as={RouterLink} to="/signup/email/signin" kind="ghost" size="md" className="eg-login-secondary-action">
             Sign in with a passkey
           </Button>
+          <Button as={RouterLink} to="/signup/email" kind="ghost" size="md" className="eg-login-secondary-action">
+            Email me a sign-in link
+          </Button>
         </>}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>
@@ -798,9 +818,20 @@ export default function Login() {
           lowContrast
           hideCloseButton
           title="Administrator recovery"
-          subtitle="Only the designated platform administrator can use this emergency login with a local password. Use it only if your organization’s login provider is unavailable."
+          subtitle={managedMfaRecovery
+            ? 'Sign in with your independent platform administrator method, then use that verified session for recovery.'
+            : 'Only the designated platform administrator can use this emergency login with a local password. Use it only if your organization’s login provider is unavailable.'}
           style={{ marginBottom: 'var(--spacing-5)' }}
         />}
+
+        {managedMfaRecovery && (tenantSlug
+          ? <Button as={RouterLink} to="/admin-recovery">Open platform recovery</Button>
+          : isAuthenticated && user?.platformRole === 'admin'
+            ? recoverySessionActive
+              ? <InlineNotification kind="success" lowContrast hideCloseButton title="Recovery session active"
+                  subtitle="Use the recovery session within five minutes." />
+              : <Button disabled={isLoading} onClick={() => void openMfaRecovery()}>Start recovery session</Button>
+            : <Button as={RouterLink} to="/login">Sign in as platform administrator</Button>)}
 
         {loginMethods?.configurationStatus === 'no_login_method' && !isAdministratorRecovery && <InlineNotification
           kind="error"
@@ -907,7 +938,7 @@ export default function Login() {
             <Button type="submit" kind="primary" size="md" disabled={isLoading} className="eg-login-primary-action">Continue</Button>
             <Button type="button" kind="ghost" size="md" onClick={() => { setDiscoveredProviderIds(null); setLoginError(null); setLoginStep('methods'); }} className="eg-login-secondary-action">Choose a login method instead</Button>
           </form>
-        ) : showLocalForm ? (
+        ) : showLocalForm && !managedMfaRecovery ? (
           <form onSubmit={handleSubmit} noValidate>
             {isAdministratorRecovery && <h2 ref={chooserHeadingRef} tabIndex={-1} className="eg-login-section-heading">Recovery credentials</h2>}
             <div style={{ marginBottom: 'var(--spacing-5)' }}>

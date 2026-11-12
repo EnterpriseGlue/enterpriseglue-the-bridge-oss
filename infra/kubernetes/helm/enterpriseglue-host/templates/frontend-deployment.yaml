@@ -39,6 +39,9 @@ spec:
               value: {{ printf "%s-api:%v" (include "enterpriseglue-host.fullname" .) .Values.backend.service.port | quote }}
             - { name: EG_FRONTEND_RUNTIME_API_BASE_URL, value: "" }
             - { name: EG_FRONTEND_RUNTIME_CONFIG_REQUIRED, value: "true" }
+            {{- if .Values.cloudEmailSignupProtection.enabled }}
+            - { name: EG_FRONTEND_CLOUD_EMAIL_TURNSTILE_ENABLED, value: "true" }
+            {{- end }}
           securityContext:
             {{- include "enterpriseglue-host.containerSecurityContext" . | nindent 12 }}
           resources:

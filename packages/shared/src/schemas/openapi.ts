@@ -4263,17 +4263,37 @@ registry.registerPath({
   request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.enum(['/cloud/onboarding', '/login', '/documentation/access']) }).strict() },
   responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding, organization login or documentation access' }, 404: { description: 'Cloud account identity or provider unavailable' } },
 });
+const { CloudEmailSignupChallengeSchema, CloudEmailSignupRequestSchema } = await import('./auth/cloud-email-signup.js');
+registry.registerPath({
+  method: 'get', path: '/api/auth/cloud-signup/email/challenge',
+  ...authzExemption('GET', '/api/auth/cloud-signup/email/challenge'),
+  responses: {
+    200: { description: 'Public email verification widget key, or null when disabled', content: { 'application/json': { schema: CloudEmailSignupChallengeSchema } } },
+    404: { description: 'Managed Cloud account identity is disabled' },
+  },
+});
 registry.registerPath({
   method: 'post', path: '/api/auth/cloud-signup/email/request',
   ...authzExemption('POST', '/api/auth/cloud-signup/email/request'),
-  request: { body: { content: { 'application/json': { schema: z.object({ email: z.email().max(320), intent: z.enum(['cloud', 'documentation']).optional() }).strict() } } } },
-  responses: { 202: { description: 'Generic response; a verification link or existing-account guidance is sent when eligible', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 404: { description: 'Managed Cloud account identity is disabled' }, 503: { description: 'Outbound email is unavailable' } },
+  request: { body: { content: { 'application/json': { schema: CloudEmailSignupRequestSchema } } } },
+  responses: { 202: { description: 'Generic response; a verification link or existing-account guidance is sent when eligible', content: { 'application/json': { schema: z.object({ message: z.string() }) } } }, 400: { description: 'Disposable address or missing, invalid, expired or reused configured challenge' }, 404: { description: 'Managed Cloud account identity is disabled' }, 503: { description: 'Email or verification service unavailable' } },
 });
 registry.registerPath({
   method: 'get', path: '/api/auth/cloud-signup/email/verify',
   ...authzExemption('GET', '/api/auth/cloud-signup/email/verify'),
   request: { query: z.object({ token: z.string(), intent: z.enum(['cloud', 'documentation']).optional() }) },
-  responses: { 302: { description: 'Sets short-lived, HttpOnly address-proof cookie and redirects to passkey registration; does not create an account' }, 401: { description: 'Invalid or expired link' } },
+  responses: { 302: { description: 'Sets a short-lived HttpOnly proof cookie and redirects to the applicable email continuation' }, 401: { description: 'Invalid or expired link' }, 404: { description: 'Managed Cloud account identity is disabled' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-signup/email/complete',
+  ...authzExemption('POST', '/api/auth/cloud-signup/email/complete'),
+  responses: {
+    200: { description: 'Consumes the proof and signs in the existing Cloud email-link account', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } },
+    201: { description: 'Consumes the proof and creates a signed-in Cloud email-link account', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } },
+    401: { description: 'Missing, ineligible, expired or consumed email proof' },
+    403: { description: 'Missing or invalid browser CSRF token' },
+    404: { description: 'Managed Cloud account identity is disabled' },
+  },
 });
 registry.registerPath({
   method: 'post', path: '/api/auth/cloud-signup/email/passkey/options',
@@ -4297,6 +4317,19 @@ registry.registerPath({
   request: { body: { content: { 'application/json': { schema: z.object({ id: z.string(), rawId: z.string(), type: z.literal('public-key'), response: z.record(z.string(), z.unknown()), clientExtensionResults: z.record(z.string(), z.unknown()) }).passthrough() } } } },
   responses: { 200: { description: 'Consumes the challenge and issues a tenant-neutral Cloud account session after verified user-presence and user-verification evidence', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } }, 401: { description: 'Invalid, expired, or reused passkey assertion' } },
 });
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-passkey/register/options',
+  security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+  ...authzExemption('POST', '/api/auth/cloud-passkey/register/options'),
+  responses: { 200: { description: 'Session-bound WebAuthn registration options for a signed-in Cloud email-link account', content: { 'application/json': { schema: z.object({ challenge: z.string() }).passthrough() } } }, 401: { description: 'Eligible Cloud email-link session required' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-passkey/register/complete',
+  security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+  ...authzExemption('POST', '/api/auth/cloud-passkey/register/complete'),
+  request: { body: { content: { 'application/json': { schema: z.object({ id: z.string(), rawId: z.string(), type: z.literal('public-key'), response: z.record(z.string(), z.unknown()), clientExtensionResults: z.record(z.string(), z.unknown()) }).passthrough() } } } },
+  responses: { 201: { description: 'Adds a verified passkey to the authenticated account', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } }, 400: { description: 'Invalid registration payload' }, 401: { description: 'Ineligible session or invalid, expired or consumed registration challenge' }, 413: { description: 'Registration payload exceeds the supported limit' } },
+});
 
 registry.registerPath({
   method: 'post',
@@ -4314,6 +4347,17 @@ registry.registerPath({
   responses: {
     200: { description: 'Canonical platform-administrator recovery login successful', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } },
     401: { description: 'Invalid credentials or recovery is unavailable' },
+  },
+});
+
+registry.registerPath({
+  method: 'post', path: '/api/auth/recovery/session',
+  security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+  ...authzExemption('POST', '/api/auth/recovery/session'),
+  request: { body: { content: { 'application/json': { schema: z.object({}).strict() } } } },
+  responses: {
+    204: { description: 'Short platform-administrator recovery session issued in browser cookies' },
+    401: { description: 'A recent verified platform-administrator Cloud session is required' },
   },
 });
 

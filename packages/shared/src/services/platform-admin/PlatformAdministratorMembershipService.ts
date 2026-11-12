@@ -7,6 +7,12 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 
 export const PLATFORM_ADMINISTRATORS_GROUP_ID = 'system.group.platform_administrators';
 
+export async function isCloudEmailLinkAccount(user: Pick<User, 'id' | 'authProvider' | 'isEmailVerified' | 'isActive' | 'mustResetPassword'>,
+  store: DataSource | EntityManager): Promise<boolean> {
+  return user.authProvider === 'email_link' && user.isEmailVerified && user.isActive && !user.mustResetPassword &&
+    !(await getActivePlatformAdministratorUserIds([user.id], store)).has(user.id);
+}
+
 /**
  * Compatibility projection for endpoints that still expose `platformRole`.
  * Authorization itself uses assignments and permissions, never this value.

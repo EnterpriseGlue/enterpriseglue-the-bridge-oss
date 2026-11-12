@@ -27,6 +27,13 @@ apiConfigBundle:
     key: ""
   secrets: []
 
+cloudEmailSignupProtection:
+  enabled: false
+  siteKey: ""
+  secret:
+    name: ""
+    key: ""
+
 frontend:
   replicas: 2
   resources:

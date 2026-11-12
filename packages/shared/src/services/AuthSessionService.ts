@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import { requireCloudAdministratorMfa } from './platform-admin/requireCloudAdministratorMfa.js';
+import { claimActivePlatformAdministratorMembership } from './platform-admin/PlatformAdministratorMembershipService.js';
 import { runWithPlatformDatabaseCapability } from './platform-database-context.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -7,7 +8,7 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { generateAccessToken, generateRefreshToken, normalizeUserJwtPayload, verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { generateAccessToken, generateRefreshToken, hasCloudAccountAuthentication, normalizeUserJwtPayload, verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
 import type { JwtPayload, UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { IsNull, MoreThan, type EntityManager } from 'typeorm';
 import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
@@ -51,19 +52,45 @@ export interface IssuedAuthSession {
   tenantId: string | null;
 }
 
-function persistedSessionClass(session: RefreshToken): JwtPayload['sessionClass'] | null {
+function persistedSessionInfo(session: RefreshToken): Record<string, unknown> | null {
   try {
-    const value = session.deviceInfo ? JSON.parse(session.deviceInfo) as Record<string, unknown> : null;
-    return value?.sessionClass === 'cloud_account' ? 'cloud_account' : null;
+    return session.deviceInfo ? JSON.parse(session.deviceInfo) as Record<string, unknown> : null;
   } catch {
     return null;
   }
+}
+
+function persistedSessionClass(session: RefreshToken): JwtPayload['sessionClass'] | null {
+  return persistedSessionInfo(session)?.sessionClass === 'cloud_account' ? 'cloud_account' : null;
 }
 
 /** Issues a renewable user session with optional provider lineage for targeted revocation. */
 class AuthSessionService {
   async issue(user: { id: string; email: string; authSessionVersion?: number }, input: IssueAuthSessionInput = {}): Promise<IssuedAuthSession> {
     return this.issueSession(user, input);
+  }
+
+  async recoverFromVerifiedCloudSession(principal: UserJwtPayload, input: Pick<IssueAuthSessionInput, 'userAgent' | 'ipAddress'>): Promise<IssuedAuthSession> {
+    const denied = () => Errors.unauthorized('Sign in again with your verified platform administrator method');
+    if (!config.cloudPlatformAdminMfaRequired || principal.sessionClass !== 'cloud_account' ||
+        principal.cloudAdministratorMfaVerified !== true || !principal.sessionId || !principal.email) throw denied();
+    const dataSource = await getDataSource();
+    return dataSource.transaction(async store => {
+      const now = Date.now();
+      const source = await store.getRepository(RefreshToken).findOneBy({
+        id: principal.sessionId, userId: principal.userId, tenantId: IsNull(),
+        revokedAt: IsNull(), expiresAt: MoreThan(now),
+      });
+      const createdAt = Number(source?.createdAt);
+      const saved = source && persistedSessionInfo(source);
+      if (!source || saved?.sessionClass !== 'cloud_account' || saved.cloudAdministratorMfaVerified !== true ||
+          !Number.isSafeInteger(createdAt) || createdAt > now || createdAt <= now - 5 * 60_000 ||
+          !await claimActivePlatformAdministratorMembership(principal.userId, store)) throw denied();
+      return this.issueSession({ id: principal.userId, email: principal.email!, authSessionVersion: principal.authSessionVersion }, {
+        ...input, store, administratorRecovery: true, authenticationMethod: 'recovery',
+        mfaVerified: true, cloudAdministratorMfaVerified: true,
+      }, source, Math.min(Number(source.expiresAt), now + 5 * 60_000));
+    });
   }
 
   /** Caller must independently authorize the target tenant and its membership.
@@ -91,8 +118,7 @@ class AuthSessionService {
     if (source.sessionClass === 'cloud_account' && (config.tenancyMode !== 'pooled'
       || !config.tenancyCloudRequired
       || !config.cloudAccountIdentityEnabled
-      || !['oidc', 'saml', 'passkey'].includes(source.authenticationMethod || '')
-      || (source.authenticationMethod === 'passkey' && source.mfaVerified !== true))) throw denied();
+      || !hasCloudAccountAuthentication(source))) throw denied();
     const dataSource = await getDataSource();
     const session = await dataSource.getRepository(RefreshToken).findOneBy({
       id: source.sessionId, userId: source.userId, tenantId: source.tenantId || IsNull(),
@@ -128,7 +154,7 @@ class AuthSessionService {
     }, session);
   }
 
-  private async issueSession(user: { id: string; email: string; authSessionVersion?: number }, input: IssueAuthSessionInput, source?: RefreshToken): Promise<IssuedAuthSession> {
+  private async issueSession(user: { id: string; email: string; authSessionVersion?: number }, input: IssueAuthSessionInput, source?: RefreshToken, expiresAtLimit = Infinity): Promise<IssuedAuthSession> {
     const isCloudAccountSession = input.sessionClass === 'cloud_account';
     const cloudAccountSessionsEnabled = config.tenancyMode === 'pooled'
       && config.tenancyCloudRequired
@@ -136,13 +162,13 @@ class AuthSessionService {
     if (input.sessionClass !== undefined && input.sessionClass !== 'cloud_account') {
       throw Errors.unauthorized('Invalid session class');
     }
-    const isPasskey = input.authenticationMethod === 'passkey';
+    const isNativeCloudAuthentication = input.authenticationMethod === 'passkey' || input.authenticationMethod === 'email_link';
     if (isCloudAccountSession && (!cloudAccountSessionsEnabled
       || input.administratorRecovery
       || Boolean(input.tenantId?.trim())
       || Boolean(input.tenantSlug?.trim())
-      || (isPasskey
-        ? input.mfaVerified !== true
+      || (isNativeCloudAuthentication
+        ? !hasCloudAccountAuthentication(input)
           || Boolean(input.identityProviderId)
           || input.identityProviderUpdatedAt != null
           || Boolean(input.identityProviderProtocol)
@@ -190,7 +216,7 @@ class AuthSessionService {
       providerSessionId: input.federationSession?.sessionId?.trim() || null,
       providerNameIdFormat: input.federationSession?.nameIdFormat?.trim() || null,
       tokenHash: await bcrypt.hash(refreshToken, 10),
-      expiresAt: now + config.jwtRefreshTokenExpires * 1000,
+      expiresAt: Math.min(now + config.jwtRefreshTokenExpires * 1000, expiresAtLimit),
       createdAt: now,
       revokedAt: null,
       deviceInfo: JSON.stringify({
@@ -255,11 +281,13 @@ class AuthSessionService {
         else await dataSource.transaction(issueProviderSession);
       });
     } else if (source) {
-      await dataSource.transaction(insertSession);
+      if (input.store) await insertSession(input.store);
+      else await dataSource.transaction(insertSession);
     } else {
       await (input.store || dataSource).getRepository(RefreshToken).insert(token);
     }
-    return { accessToken, refreshToken, expiresIn: config.jwtAccessTokenExpires, tenantId };
+    return { accessToken, refreshToken,
+      expiresIn: Math.min(config.jwtAccessTokenExpires, Math.ceil((expiresAtLimit - now) / 1000)), tenantId };
   }
 }
 
