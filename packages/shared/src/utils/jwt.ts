@@ -48,6 +48,7 @@ export interface SessionAssuranceOptions {
   mfaVerified?: boolean;
   cloudAdministratorMfaVerified?: boolean;
   sessionClass?: JwtPayload['sessionClass'];
+  maximumTtl?: number;
   tenantId?: string;
   tenantSlug?: string;
 }
@@ -105,7 +106,7 @@ export function normalizeUserJwtPayload(payload: JwtPayload): UserJwtPayload {
 /**
  * Generate an access token (short-lived)
  */
-export function generateAccessToken(user: User | any, options: SessionAssuranceOptions = {}, maximumTtl = Infinity): string {
+export function generateAccessToken(user: User | any, options: SessionAssuranceOptions = {}): string {
   const payload: JwtPayload = {
     principalType: 'user',
     principalId: user.id,
@@ -122,14 +123,14 @@ export function generateAccessToken(user: User | any, options: SessionAssuranceO
   };
 
   return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: Math.min(config.jwtAccessTokenExpires, maximumTtl),
+    expiresIn: Math.min(config.jwtAccessTokenExpires, options.maximumTtl ?? Infinity),
   });
 }
 
 /**
  * Generate a refresh token (long-lived)
  */
-export function generateRefreshToken(user: User | any, options: SessionAssuranceOptions = {}, maximumTtl = Infinity): string {
+export function generateRefreshToken(user: User | any, options: SessionAssuranceOptions = {}): string {
   const payload: JwtPayload = {
     principalType: 'user',
     principalId: user.id,
@@ -146,7 +147,7 @@ export function generateRefreshToken(user: User | any, options: SessionAssurance
   };
 
   return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: Math.min(config.jwtRefreshTokenExpires, maximumTtl),
+    expiresIn: Math.min(config.jwtRefreshTokenExpires, options.maximumTtl ?? Infinity),
   });
 }
 

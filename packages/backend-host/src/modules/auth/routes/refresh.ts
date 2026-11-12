@@ -160,10 +160,11 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     authenticationMethod: payload.authenticationMethod,
     mfaVerified: payload.mfaVerified === true,
     ...(payload.cloudAdministratorMfaVerified === true ? { cloudAdministratorMfaVerified: true } : {}),
+    ...(Number.isFinite(recoveryTtl) ? { maximumTtl: recoveryTtl } : {}),
     ...(payload.sessionClass ? { sessionClass: payload.sessionClass } : {}),
     ...(tenantId ? { tenantId } : {}),
     ...(tenantSlug ? { tenantSlug } : {}),
-  }, recoveryTtl);
+  });
 
   // Set new access token as httpOnly cookie
   res.cookie('accessToken', accessToken, {

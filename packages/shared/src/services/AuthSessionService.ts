@@ -198,21 +198,22 @@ class AuthSessionService {
       (isCloudAccountSession && input.authenticationMethod === 'passkey' && input.mfaVerified === true);
     await requireCloudAdministratorMfa(user.id, cloudAdministratorMfaVerified, input.store);
     const sessionId = generateId();
+    const now = Date.now();
+    const maximumTtl = Math.floor((expiresAtLimit - now) / 1000);
+    if (!(maximumTtl > 0)) throw Errors.unauthorized('Session has expired');
     const tokenOptions = {
       sessionId,
       administratorRecovery: input.administratorRecovery === true,
       authenticationMethod: input.authenticationMethod,
       mfaVerified: input.mfaVerified === true,
       ...(cloudAdministratorMfaVerified ? { cloudAdministratorMfaVerified: true } : {}),
+      ...(Number.isFinite(maximumTtl) ? { maximumTtl } : {}),
       ...(input.sessionClass ? { sessionClass: input.sessionClass } : {}),
       ...(tenantId ? { tenantId } : {}),
       ...(tenantSlug ? { tenantSlug } : {}),
     };
-    const now = Date.now();
-    const maximumTtl = Math.floor((expiresAtLimit - now) / 1000);
-    if (!(maximumTtl > 0)) throw Errors.unauthorized('Session has expired');
-    const accessToken = generateAccessToken(user, tokenOptions, maximumTtl);
-    const refreshToken = generateRefreshToken(user, tokenOptions, maximumTtl);
+    const accessToken = generateAccessToken(user, tokenOptions);
+    const refreshToken = generateRefreshToken(user, tokenOptions);
     const token = {
       id: sessionId,
       userId: user.id,

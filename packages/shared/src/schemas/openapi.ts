@@ -3254,7 +3254,11 @@ registry.registerPath({
   method: 'post', path: '/api/t/{tenantSlug}/tenant/login-policy/recover',
   ...authzExtension('platform.tenants.manage', 'POST', '/api/t/{tenantSlug}/tenant/login-policy/recover'),
   request: { params: TenantPathSchema }, responses: { 200: { description: 'Restores the managed tenant login policy to automatic',
-    content: { 'application/json': { schema: TenantLoginPolicySchema } } }, 403: { description: 'Platform administrator recovery session required' } },
+    content: { 'application/json': { schema: TenantLoginPolicySchema } } },
+    401: { description: 'An authenticated recovery session is required' },
+    403: { description: 'Platform tenant management permission and CSRF proof are required' },
+    404: { description: 'The managed tenant or recovery route is unavailable' },
+  },
 });
 registry.registerPath({
   method: 'get', path: '/api/t/{tenantSlug}/tenant/domains',
@@ -4390,10 +4394,11 @@ registry.registerPath({
   method: 'post', path: '/api/auth/recovery/session',
   security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
   ...authzExemption('POST', '/api/auth/recovery/session'),
-  request: { body: { content: { 'application/json': { schema: z.object({}).strict() } } } },
+  request: { body: { required: true, content: { 'application/json': { schema: z.object({}).strict() } } } },
   responses: {
     204: { description: 'Short platform-administrator recovery session issued in browser cookies' },
     401: { description: 'A recent verified platform-administrator Cloud session is required' },
+    403: { description: 'Valid CSRF proof is required' },
   },
 });
 
