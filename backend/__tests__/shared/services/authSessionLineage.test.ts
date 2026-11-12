@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
+import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { generateAccessToken, generateRefreshToken, normalizeUserJwtPayload, verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
@@ -28,6 +29,7 @@ describe('durable browser session identity', () => {
     const store = { getRepository: (entity: unknown) => {
       if (entity === RefreshToken) return { insert, findOneBy: findSession, update: claimSession };
       if (entity === IdentityProvider) return { findOneBy: findProvider, update: claimProvider };
+      if (entity === TenantLoginPolicy) return { findOneBy: async () => null };
       throw new Error('Unexpected repository');
     } };
     vi.mocked(getDataSource).mockResolvedValue({ ...store, transaction: async (work: (value: typeof store) => unknown) => work(store) } as any);
