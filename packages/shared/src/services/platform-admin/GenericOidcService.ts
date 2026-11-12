@@ -58,7 +58,11 @@ export interface OidcBackChannelLogoutClaims extends JwtPayload {
 }
 
 const BACK_CHANNEL_LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';
-const ENTRA_ORGANIZATIONS_ISSUER = 'https://login.microsoftonline.com/organizations/v2.0';
+const MICROSOFT_COMMON_ISSUER = 'https://login.microsoftonline.com/common/v2.0';
+const ENTRA_TENANT_INDEPENDENT_ISSUERS = new Set([
+  'https://login.microsoftonline.com/organizations/v2.0',
+  MICROSOFT_COMMON_ISSUER,
+]);
 const ENTRA_TENANT_ISSUER_TEMPLATE = 'https://login.microsoftonline.com/{tenantid}/v2.0';
 const ENTRA_TENANT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -68,6 +72,10 @@ function base64Url(value: Buffer): string {
 
 function normalizeIssuer(value: string): string {
   return value.replace(/\/$/, '');
+}
+
+export function isMicrosoftCommonOidcIssuer(value: unknown): boolean {
+  return typeof value === 'string' && normalizeIssuer(value) === MICROSOFT_COMMON_ISSUER;
 }
 
 function config(input: Record<string, unknown>): GenericOidcProviderConfiguration {
@@ -130,7 +138,7 @@ async function discover(issuerUrl: string): Promise<OidcDiscoveryDocument> {
   const expectedIssuer = normalizeIssuer(issuer.toString());
   const discoveredIssuer = typeof document.issuer === 'string' ? normalizeIssuer(document.issuer) : '';
   if (discoveredIssuer !== expectedIssuer && !(
-    expectedIssuer === ENTRA_ORGANIZATIONS_ISSUER
+    ENTRA_TENANT_INDEPENDENT_ISSUERS.has(expectedIssuer)
     && discoveredIssuer === ENTRA_TENANT_ISSUER_TEMPLATE
   )) throw new Error('OIDC discovery issuer does not match the configured issuer');
   const authorizationEndpoint = typeof document.authorization_endpoint === 'string' ? document.authorization_endpoint : '';
@@ -150,18 +158,18 @@ function verifiedTokenIssuer(
   provider: GenericOidcProviderConfiguration,
   decodedPayload: string | JwtPayload,
 ): string {
-  if (normalizeIssuer(provider.issuerUrl) !== ENTRA_ORGANIZATIONS_ISSUER) return metadataIssuer;
+  if (!ENTRA_TENANT_INDEPENDENT_ISSUERS.has(provider.issuerUrl)) return metadataIssuer;
   if (metadataIssuer !== ENTRA_TENANT_ISSUER_TEMPLATE || typeof decodedPayload === 'string') {
-    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra organizations issuer is invalid');
+    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra discovery issuer is invalid');
   }
   const tenantId = typeof decodedPayload.tid === 'string' ? decodedPayload.tid.trim() : '';
   const claimedIssuer = typeof decodedPayload.iss === 'string' ? normalizeIssuer(decodedPayload.iss) : '';
   if (!ENTRA_TENANT_ID.test(tenantId)) {
-    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra organization tenant is invalid');
+    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra token tenant is invalid');
   }
   const expectedIssuer = ENTRA_TENANT_ISSUER_TEMPLATE.replace('{tenantid}', tenantId);
   if (claimedIssuer.toLowerCase() !== expectedIssuer.toLowerCase()) {
-    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra token issuer does not match its organization tenant');
+    throw new IdentityProviderFailure('invalid_signature', 'Microsoft Entra token issuer does not match its tenant');
   }
   return expectedIssuer;
 }
@@ -288,6 +296,12 @@ export class GenericOidcService {
     return { mfaVerified: amrMatch || acrMatch };
   }
 
+  administratorMfaVerified(rawConfiguration: Record<string, unknown>, claims: OidcIdentityClaims): boolean {
+    const provider = config(rawConfiguration);
+    const explicitMfa = Array.isArray(claims.amr) && claims.amr.some(value => typeof value === 'string' && value.toLowerCase() === 'mfa');
+    return explicitMfa || (typeof claims.acr === 'string' && provider.mfaAcrValues.includes(claims.acr));
+  }
+
   async createLogoutRequest(rawConfiguration: Record<string, unknown>, state: string, network?: SsoHttpContext): Promise<string | null> {
     if(network)return withSsoHttpContext(network,()=>this.createLogoutRequest(rawConfiguration, state));
     try {
@@ -375,13 +389,16 @@ export class GenericOidcService {
   ): Promise<JwtPayload> {
     const decoded = jwt.decode(token, { complete: true });
     if (!decoded || typeof decoded === 'string' || !decoded.header.kid || !decoded.header.alg || decoded.header.alg === 'none') throw new Error(`${label} header is invalid`);
+    const issuer = verifiedTokenIssuer(metadata.issuer, provider, decoded.payload);
+    const entraTenantIndependent = ENTRA_TENANT_INDEPENDENT_ISSUERS.has(provider.issuerUrl);
     const jwks = await fetchJson(validateIdentityProviderEndpointUrl(metadata.jwks_uri, 'OIDC JWKS URI', ['https:']));
     const keys = Array.isArray(jwks.keys) ? jwks.keys : [];
-    const jwk = keys.find((key) => key && typeof key === 'object' && (key as Record<string, unknown>).kid === decoded.header.kid) as JsonWebKey | undefined;
+    const jwk = keys.find((key) => key && typeof key === 'object' && key.kid === decoded.header.kid
+      && (!entraTenantIndependent || key.issuer === issuer || key.issuer === ENTRA_TENANT_ISSUER_TEMPLATE)) as JsonWebKey | undefined;
     if (!jwk) throw new Error('OIDC signing key was not found in the provider JWKS');
     const key = createPublicKey({ key: jwk, format: 'jwk' });
     const claims = jwt.verify(token, key, {
-      algorithms: ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], issuer: verifiedTokenIssuer(metadata.issuer, provider, decoded.payload),
+      algorithms: ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'], issuer,
       audience: provider.clientId,
     }) as JwtPayload;
     const audiences = typeof claims.aud === 'string'

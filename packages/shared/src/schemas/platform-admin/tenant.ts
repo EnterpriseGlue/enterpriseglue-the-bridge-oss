@@ -225,10 +225,11 @@ export const PlatformCloudIdentityActionSchema = z.enum([
 
 export const PlatformCloudIdentityRequestSchema = z.object({
   action: PlatformCloudIdentityActionSchema,
-}).strict();
+  includeRequester: z.literal(true).optional(),
+}).strict().refine(value => value.includeRequester !== true || value.action === 'platform.tenants.self_create',
+  'Requester metadata is available only for organization onboarding');
 
-export const PlatformCloudIdentityClaimsSchema = z.object({
-  schemaVersion: z.literal('platform-cloud-identity.enterpriseglue.io/v1'),
+const PlatformCloudIdentityBase = z.object({
   iss: z.string().min(1).max(255),
   aud: z.string().min(1).max(256),
   sub: z.string().regex(/^user:[A-Za-z0-9][A-Za-z0-9._:-]{0,249}$/),
@@ -238,7 +239,15 @@ export const PlatformCloudIdentityClaimsSchema = z.object({
   iat: z.number().int().nonnegative(),
   nbf: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
-}).strict().superRefine((claims, ctx) => {
+});
+export const PlatformCloudOrganizationRequesterSchema = z.object({
+  email: z.email().max(320), method: z.enum(['google', 'microsoft', 'email', 'passkey', 'sso']),
+}).strict();
+export const PlatformCloudIdentityClaimsSchema = z.discriminatedUnion('schemaVersion', [
+  PlatformCloudIdentityBase.extend({ schemaVersion: z.literal('platform-cloud-identity.enterpriseglue.io/v1') }).strict(),
+  PlatformCloudIdentityBase.extend({ schemaVersion: z.literal('platform-cloud-identity.enterpriseglue.io/v2'),
+    action: z.literal('platform.tenants.self_create'), requester: PlatformCloudOrganizationRequesterSchema }).strict(),
+]).superRefine((claims, ctx) => {
   if (claims.nbf !== Math.max(0, claims.iat - 2)) {
     ctx.addIssue({ code: 'custom', path: ['nbf'], message: 'nbf must be exactly two seconds before iat, bounded at zero' });
   }
@@ -333,6 +342,7 @@ export const TenancyCapabilitiesSchema = z.object({
   databaseIsolation: z.enum(['application', 'postgres_rls']),
   customDomainsEnabled: z.boolean(),
   organizationDiscoveryEnabled: z.boolean().default(false),
+  cloudPlatformAdminMfaRequired: z.boolean().optional(),
   signedPlacementAssertionsEnabled: z.boolean(),
   placementAssertionVersions: z.array(z.enum(['v1', 'v2', 'v3'])).default([]),
   placementV2Required: z.boolean().default(false),

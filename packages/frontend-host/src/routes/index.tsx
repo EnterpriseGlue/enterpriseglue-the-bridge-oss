@@ -54,6 +54,7 @@ import VerifyEmail from '../pages/VerifyEmail'
 import Signup from '../pages/Signup'
 import DocumentationAccess from '../pages/DocumentationAccess'
 import CloudEmailAuth from '../pages/CloudEmailAuth'
+import CloudMicrosoftEmail from '../pages/CloudMicrosoftEmail'
 import AcceptInvite from '../pages/AcceptInvite'
 
 // Admin pages
@@ -717,6 +718,7 @@ export function getPublicRoutes(): RouteObject[] {
     { path: '/signup/email/continue', element: <CloudEmailAuth /> },
     { path: '/signup/email/passkey', element: <CloudEmailAuth /> },
     { path: '/signup/email/signin', element: <CloudEmailAuth /> },
+    { path: '/signup/microsoft/email', element: <CloudMicrosoftEmail /> },
     { 
       path: '/git/oauth/callback', 
       element: (

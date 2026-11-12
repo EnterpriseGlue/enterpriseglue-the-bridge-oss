@@ -199,7 +199,7 @@ describe('POST /api/auth/refresh', () => {
         where: expect.objectContaining({
           id: sessionId, tenantId: expect.objectContaining({ _type: 'isNull' }),
         }),
-        select: ['tokenHash', 'tenantId', 'deviceInfo'],
+        select: ['tokenHash', 'tenantId', 'deviceInfo', 'identityProviderId', 'providerSubjectId', 'expiresAt'],
       }));
       expect(jwt.generateAccessToken).toHaveBeenCalledWith(mockUser, expect.objectContaining({
         sessionId, sessionClass: 'cloud_account', authenticationMethod: 'oidc',

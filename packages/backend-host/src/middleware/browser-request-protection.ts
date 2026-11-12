@@ -45,8 +45,8 @@ export function installBrowserRequestProtection(app: express.Express): void {
       // Skip CSRF for login/refresh and CSRF token fetch (these endpoints validate credentials directly)
       if (req.path === '/api/auth/login' || req.path === '/api/auth/refresh' || req.path === '/api/csrf-token') return true;
       if (req.method === 'POST' && /^\/api\/(?:t\/[^/]+\/)?auth\/identity\/callback$/.test(req.path)) return true;
-      // Email completion consumes a browser proof cookie before an access cookie exists.
-      if (/^\/api\/auth\/cloud-signup\/email\/complete\/?$/i.test(req.path)) return false;
+      // These requests use browser proof cookies before an access cookie exists.
+      if (/^\/api\/auth\/cloud-signup\/(?:email\/complete|microsoft\/email\/(?:request|complete))\/?$/i.test(req.path)) return false;
 
       const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
       const hasBearer = authHeader.startsWith('Bearer ');

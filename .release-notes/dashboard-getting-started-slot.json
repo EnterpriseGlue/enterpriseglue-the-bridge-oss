@@ -47,8 +47,8 @@
   "packages": [
     {
       "name": "@enterpriseglue/frontend-host",
-      "previousVersion": "0.20.18",
-      "newVersion": "0.20.19",
+      "previousVersion": "0.20.21",
+      "newVersion": "0.20.22",
       "impact": "patch"
     }
   ],
