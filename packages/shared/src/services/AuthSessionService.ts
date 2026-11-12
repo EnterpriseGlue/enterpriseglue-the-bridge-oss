@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { requireCloudAdministratorMfa } from './platform-admin/requireCloudAdministratorMfa.js';
 import { runWithPlatformDatabaseCapability } from './platform-database-context.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
@@ -28,6 +29,8 @@ export interface IssueAuthSessionInput {
   authenticationMethod?: JwtPayload['authenticationMethod'];
   /** Must be derived from verified authentication evidence, never request input. */
   mfaVerified?: boolean;
+  /** Verified by a managed global provider or carried by an exact derived session. */
+  cloudAdministratorMfaVerified?: boolean;
   /** Explicit tenant-neutral managed-Cloud onboarding authority. */
   sessionClass?: JwtPayload['sessionClass'];
   /** Provider session identifiers required for standards-based federated logout. */
@@ -83,7 +86,8 @@ class AuthSessionService {
       || (source.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)
       || source.authenticationMethod !== principal.authenticationMethod
       || source.recovery !== principal.recovery || source.sessionClass !== principal.sessionClass
-      || (source.mfaVerified === true) !== (principal.mfaVerified === true)) throw denied();
+      || (source.mfaVerified === true) !== (principal.mfaVerified === true)
+      || (source.cloudAdministratorMfaVerified === true) !== (principal.cloudAdministratorMfaVerified === true)) throw denied();
     if (source.sessionClass === 'cloud_account' && (config.tenancyMode !== 'pooled'
       || !config.tenancyCloudRequired
       || !config.cloudAccountIdentityEnabled
@@ -112,6 +116,7 @@ class AuthSessionService {
     return this.issueSession({ ...user, authSessionVersion: source.authSessionVersion ?? 0 }, {
       tenantId: input.tenantId, tenantSlug: input.tenantSlug,
       authenticationMethod: source.authenticationMethod, mfaVerified: source.mfaVerified === true,
+      ...(source.cloudAdministratorMfaVerified === true ? { cloudAdministratorMfaVerified: true } : {}),
       administratorRecovery: source.recovery === 'platform_administrator',
       userAgent: input.userAgent, ipAddress: input.ipAddress,
       ...(provider ? {
@@ -159,12 +164,16 @@ class AuthSessionService {
     if (config.tenancyMode === 'pooled' && !input.administratorRecovery && !isCloudAccountSession && (!tenantId || !tenantSlug)) {
       throw Errors.unauthorized('A tenant-scoped login is required');
     }
+    const cloudAdministratorMfaVerified = input.cloudAdministratorMfaVerified === true ||
+      (isCloudAccountSession && input.authenticationMethod === 'passkey' && input.mfaVerified === true);
+    await requireCloudAdministratorMfa(user.id, cloudAdministratorMfaVerified, input.store);
     const sessionId = generateId();
     const tokenOptions = {
       sessionId,
       administratorRecovery: input.administratorRecovery === true,
       authenticationMethod: input.authenticationMethod,
       mfaVerified: input.mfaVerified === true,
+      ...(cloudAdministratorMfaVerified ? { cloudAdministratorMfaVerified: true } : {}),
       ...(input.sessionClass ? { sessionClass: input.sessionClass } : {}),
       ...(tenantId ? { tenantId } : {}),
       ...(tenantSlug ? { tenantSlug } : {}),
@@ -190,6 +199,7 @@ class AuthSessionService {
         ...(input.administratorRecovery ? { recovery: 'platform_administrator' } : {}),
         ...(input.authenticationMethod ? { authenticationMethod: input.authenticationMethod } : {}),
         ...(input.mfaVerified === true ? { mfaVerified: true } : {}),
+        ...(cloudAdministratorMfaVerified ? { cloudAdministratorMfaVerified: true } : {}),
         ...(input.sessionClass ? { sessionClass: input.sessionClass } : {}),
         ...(input.federationSession ? {
           federationSession: {

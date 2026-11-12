@@ -115,14 +115,14 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     if(admin.isInitialized){await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.query(`DROP ROLE IF EXISTS ${runtimeName}`);await admin.query(`DROP ROLE IF EXISTS ${ownerName}`);await admin.destroy();}
     Object.assign(config,original);
   });
-  async function signIn(subject:string,email:string,returnTo:'/cloud/onboarding'|'/login'='/cloud/onboarding') {
+  async function signIn(subject:string,email:string,returnTo:'/cloud/onboarding'|'/login'='/cloud/onboarding', amr?:string[]) {
     const browser=request.agent(server);
     const start=await browser.get(`/api/auth/cloud-signup/providers/${providerId}/start?returnTo=${encodeURIComponent(returnTo)}`);
     expect(start.status,start.body.error).toBe(302);
     const location=new URL(start.headers.location);
     const state=location.searchParams.get('state')!;
     const parsed=parseSignedOidcState(state)!;
-    protocol.setTokenClaims({sub:subject,email,email_verified:true,nonce:parsed.nonce});
+    protocol.setTokenClaims({sub:subject,email,email_verified:true,nonce:parsed.nonce,...(amr?{amr}:{})});
     const callback=await browser.get('/api/auth/identity/callback').query({state,code:'verified-code'});
     return {browser,callback};
   }
@@ -529,5 +529,38 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     const sessions=await runtime.getRepository(RefreshToken).findBy({userId:user.id,tenantId:target.id});
     expect(sessions).not.toHaveLength(0);expect(sessions.every(row=>row.identityProviderId===providerId)).toBe(true);
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
+  });
+  it('requires authoritative second-factor evidence on new and existing administrator sessions', async () => {
+    const email = 'mfa-admin@example.test';
+    const subject = 'mfa-admin';
+    const saved = config.cloudPlatformAdminMfaRequired;
+    const initial = await signIn(subject, email);
+    const account = await initial.browser.get('/cloud-probe');
+    expect(account.status).toBe(200);
+    await userService.updateUser(account.body.userId, { platformRole: 'admin' });
+    const previous = await signIn(subject, email, '/login', ['otp']);
+    expect((await previous.browser.get('/cloud-probe')).status).toBe(200);
+    config.cloudPlatformAdminMfaRequired = true;
+    try {
+      expect((await previous.browser.get('/cloud-probe')).status).toBe(401);
+      expect((await previous.browser.post('/api/auth/refresh').send({})).status).toBe(401);
+
+      const insufficient = await signIn(subject, email, '/login', ['hwk']);
+      const refused = new URL(insufficient.callback.headers.location);
+      expect(refused.pathname).toBe('/login');
+      expect(refused.searchParams.get('error')).toBe('PLATFORM_ADMINISTRATOR_MFA_REQUIRED');
+      expect((await insufficient.browser.get('/cloud-probe')).status).toBe(401);
+
+      const verified = await signIn(subject, email, '/cloud/onboarding', ['pwd', 'mfa']);
+      expect(new URL(verified.callback.headers.location).pathname).toBe('/cloud/onboarding');
+      expect((await verified.browser.get('/cloud-probe')).status).toBe(200);
+      expect((await verified.browser.post('/api/auth/refresh').send({})).status).toBe(200);
+      expect((await verified.browser.get('/cloud-probe')).status).toBe(200);
+
+      const member = await signIn('mfa-member', 'mfa-member@example.test');
+      expect((await member.browser.get('/cloud-probe')).status).toBe(200);
+    } finally {
+      config.cloudPlatformAdminMfaRequired = saved;
+    }
   });
 });

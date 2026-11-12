@@ -19,6 +19,7 @@ import { genericOidcService } from '@enterpriseglue/shared/services/platform-adm
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
 import { samlAssertionReplayService } from '@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js';
 import { IdentityProviderAccountLinkRequiredError, identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
+import { CloudAdministratorMfaRequiredError } from '@enterpriseglue/shared/services/platform-admin/requireCloudAdministratorMfa.js';
 import { authSessionService, type IssuedAuthSession, type IssueAuthSessionInput } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { directLdapIdentityService } from '@enterpriseglue/shared/services/platform-admin/DirectLdapIdentityService.js';
@@ -273,6 +274,7 @@ async function setProviderSession(
   provider: IdentityProvider,
   evidence: {
     mfaVerified: boolean;
+    cloudAdministratorMfaVerified?: boolean;
     subjectId: string;
     sessionId?: string | null;
     nameIdFormat?: string | null;
@@ -302,6 +304,7 @@ async function setProviderSession(
       ? { sessionClass: 'cloud_account' as const }
       : {}),
     mfaVerified: evidence.mfaVerified,
+    ...(evidence.cloudAdministratorMfaVerified ? { cloudAdministratorMfaVerified: true } : {}),
     federationSession: {
       subjectId: evidence.subjectId,
       sessionId: evidence.sessionId,
@@ -569,6 +572,15 @@ router.get('/api/auth/identity/:key/start', apiLimiter, identityFlowLimiter, res
   await startMeasuredProviderLogin(req, res, provider);
 }));
 
+function redirectForAdministratorMfa(error: unknown, res: Response): boolean {
+  if (!(error instanceof CloudAdministratorMfaRequiredError)) return false;
+  const retry = new URL('/login', config.frontendUrl);
+  retry.searchParams.set('error', error.code);
+  retry.searchParams.set('message', error.message);
+  res.redirect(retry.toString());
+  return true;
+}
+
 async function completeOidcLogin(req: Request, res: Response): Promise<void> {
   if (req.method === 'POST' && !req.is('application/x-www-form-urlencoded')) {
     throw Errors.validation('OIDC POST callback requires form-urlencoded content');
@@ -610,6 +622,8 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
       const assurance = genericOidcService.authenticationAssurance(rawConfiguration, claims);
       const evidence = {
         mfaVerified: assurance.mfaVerified,
+        cloudAdministratorMfaVerified: config.cloudPlatformAdminMfaRequired && provider.tenantId === null &&
+          genericOidcService.administratorMfaVerified(rawConfiguration, claims),
         subjectId: claims.sub,
         sessionId: typeof claims.sid === 'string' ? claims.sid : null,
       };
@@ -645,6 +659,7 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
     if (!parsed?.accountLink) recordLoginExperienceMetric({
       method: 'oidc', event: redirectRejected ? 'redirect_failed' : 'failed', durationMs: stateDuration(parsed?.timestamp),
     });
+    if (redirectForAdministratorMfa(error, res)) return;
     if (error instanceof IdentityProviderAccountLinkRequiredError && parsed) {
       const tenantPrefix = parsed.tenantSlug ? `/t/${encodeURIComponent(parsed.tenantSlug)}` : '';
       const message = encodeURIComponent('This sign-in method is not connected yet. Sign in with an existing method, then connect it from your profile.');
@@ -689,6 +704,7 @@ async function completeSamlLogin(req: Request, res: Response): Promise<void> {
       const assurance = genericSamlService.authenticationAssurance(rawConfiguration, profile);
       const evidence = {
         mfaVerified: assurance.mfaVerified,
+        cloudAdministratorMfaVerified: config.cloudPlatformAdminMfaRequired && provider.tenantId === null && assurance.mfaVerified,
         subjectId: identity.subjectId,
         sessionId: typeof profile.sessionIndex === 'string' ? profile.sessionIndex : null,
         nameIdFormat: typeof profile.nameIDFormat === 'string' ? profile.nameIDFormat : null,
@@ -708,6 +724,7 @@ async function completeSamlLogin(req: Request, res: Response): Promise<void> {
       await logAudit(auditFromRequest(req, { action: AuditActions.LOGIN_FAILED, resourceType: 'identity_provider', resourceId: selectedProvider.current.id, details: { providerKey: selectedProvider.current.key, protocol: 'saml', reason: 'session_not_issued' } }));
     }
     recordLoginExperienceMetric({ method: 'saml', event: 'failed', durationMs: stateDuration(parsed?.timestamp) });
+    if (redirectForAdministratorMfa(error, res)) return;
     throw error;
   }
 }

@@ -1,3 +1,4 @@
+import { requireCloudAdministratorMfa } from '@enterpriseglue/shared/services/platform-admin/requireCloudAdministratorMfa.js';
 import { Request, Response, NextFunction } from 'express';
 import { normalizeUserJwtPayload, verifyToken, type AuthenticatedUserJwtPayload, type JwtPayload, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { Errors, AppError } from './errorHandler.js';
@@ -202,6 +203,7 @@ async function authenticateBrowserSession(
   if ((payload.authSessionVersion ?? 0) !== (user.authSessionVersion ?? 0)) {
     throw Errors.unauthorized('Session has been revoked');
   }
+  await requireCloudAdministratorMfa(user.id, payload.cloudAdministratorMfaVerified, dataSource);
   await requireCurrentBrowserSession(payload, dataSource);
   if (payload.recovery === 'platform_administrator'
     && !(await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId)) {
@@ -389,6 +391,7 @@ export async function optionalAuth(req: Request, res: Response, next: NextFuncti
       const recoveryIsCurrent = payload.recovery !== 'platform_administrator'
         || (await getActivePlatformAdministratorUserIds([payload.userId], dataSource)).has(payload.userId);
       if (user && recoveryIsCurrent && (payload.authSessionVersion ?? 0) === (user.authSessionVersion ?? 0)) {
+        await requireCloudAdministratorMfa(user.id, payload.cloudAdministratorMfaVerified, dataSource);
         await requireCurrentBrowserSession(payload, dataSource);
         req.user = { ...payload, email: user.email };
         // Optional authentication must establish the same tenant-aware request

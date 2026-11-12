@@ -1,3 +1,4 @@
+import { requireCloudAdministratorMfa } from '@enterpriseglue/shared/services/platform-admin/requireCloudAdministratorMfa.js';
 import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
@@ -103,6 +104,8 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     throw Errors.unauthorized('Session has been revoked');
   }
 
+  await requireCloudAdministratorMfa(user.id, payload.cloudAdministratorMfaVerified, dataSource);
+
   // Verify refresh token exists and is not revoked
   const tokenResult = await refreshTokenRepo.find({
     where: config.tenancyMode !== 'pooled' ? [{
@@ -147,6 +150,7 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     administratorRecovery: payload.recovery === 'platform_administrator',
     authenticationMethod: payload.authenticationMethod,
     mfaVerified: payload.mfaVerified === true,
+    ...(payload.cloudAdministratorMfaVerified === true ? { cloudAdministratorMfaVerified: true } : {}),
     ...(payload.sessionClass ? { sessionClass: payload.sessionClass } : {}),
     ...(tenantId ? { tenantId } : {}),
     ...(tenantSlug ? { tenantSlug } : {}),
