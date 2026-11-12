@@ -17,6 +17,7 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { PostgresAdapter } from '@enterpriseglue/shared/db/adapters/PostgresAdapter.js';
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { requireAuth, requireCloudAccountOrTenantAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -63,14 +64,14 @@ describePostgres('managed Cloud account session with PostgreSQL', () => {
       await pool.end();
     }
 
-    // Apply the production adapter's schema normalization, then keep this
-    // focused database to the three entities exercised by session issuance.
+    // Apply the production adapter's schema normalization. The tenant switch
+    // also reads the target organization's login policy.
     new PostgresAdapter();
     database.current = new DataSource({
       type: 'postgres',
       ...connection,
       schema,
-      entities: [User, IdentityProvider, RefreshToken],
+      entities: [User, IdentityProvider, RefreshToken, TenantLoginPolicy],
       synchronize: true,
       logging: false,
     });

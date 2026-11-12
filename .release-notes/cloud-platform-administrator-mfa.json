@@ -1,0 +1,78 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-platform-administrator-mfa",
+  "type": "feature",
+  "scope": "cloud-authentication",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "security"
+  ],
+  "summary": "Require a verified second factor for configured managed Cloud platform administrators.",
+  "userImpact": [
+    "A platform administrator uses an operator identity provider that attests MFA or an enrolled user-verifying passkey."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Set EG_CLOUD_PLATFORM_ADMIN_MFA_REQUIRED after verifying the independent platform sign-in and recovery methods."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds an authenticated exchange for a short recovery session from a recent verified platform sign-in."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The host checks verified MFA when issuing, refreshing and accepting platform administrator sessions.",
+    "Recovery rechecks current platform administrator membership and serializes session creation against source session revocation.",
+    "Recovery token renewal and tenant switching preserve the original session deadline."
+  ],
+  "documentation": [
+    "docs/reference/configuration.md"
+  ],
+  "knownLimitations": [
+    "The deployment must verify that the operator identity provider supplies recognized MFA evidence."
+  ],
+  "rollback": [
+    "Restore the prior compatible host and frontend configuration."
+  ],
+  "validation": [
+    "Native PostgreSQL tests cover verified sign-in, refresh, short recovery, tenant switching, CSRF, company policy recovery, and denial for an ordinary member."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.24.3",
+      "newVersion": "0.24.4",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.19",
+      "newVersion": "0.20.20",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.15",
+      "newVersion": "0.28.16",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": [
+      "platform-administrator-recovery"
+    ]
+  }
+}

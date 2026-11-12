@@ -47,6 +47,7 @@ interface UseOnlineProjectWizardProps {
   onClose: () => void
   existingProjectId?: string
   existingProjectName?: string
+  initialGitConnection?: boolean
 }
 
 export function useOnlineProjectWizard({
@@ -54,6 +55,7 @@ export function useOnlineProjectWizard({
   onClose,
   existingProjectId,
   existingProjectName,
+  initialGitConnection,
 }: UseOnlineProjectWizardProps) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -92,7 +94,7 @@ export function useOnlineProjectWizard({
   const [projectName, setProjectName] = React.useState(existingProjectName || '')
   const [importFromEngine, setImportFromEngine] = React.useState(false)
   const [selectedImportEngineId, setSelectedImportEngineId] = React.useState('')
-  const [connectToGit, setConnectToGit] = React.useState<boolean>(!!existingProjectId)
+  const [connectToGit, setConnectToGit] = React.useState(Boolean(existingProjectId || (initialGitConnection && gitCreateDecision.allowed)))
   const [repoMode, setRepoMode] = React.useState<'new' | 'existing' | null>(null)
   const [providerId, setProviderId] = React.useState('')
   const [namespace, setNamespace] = React.useState('')

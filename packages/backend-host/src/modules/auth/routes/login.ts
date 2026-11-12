@@ -9,13 +9,14 @@ import { authLimiter , apiLimiter} from '@enterpriseglue/shared/middleware/rateL
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
+import { requireCloudAccountOrTenantAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { buildUserCapabilities } from '@enterpriseglue/shared/services/capabilities.js';
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { claimActivePlatformAdministratorMembership, getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
-import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
+import { authSessionService, type IssuedAuthSession } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { AuthenticatedSessionLoginResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
 import { recordLoginExperienceMetric, type LoginExperienceMethod } from '@enterpriseglue/shared/auth/login-experience-metrics.js';
@@ -33,6 +34,13 @@ const loginSchema = z.object({
 // supplied account is missing or is not backed by a local password.
 const DUMMY_RECOVERY_PASSWORD_HASH = '$2b$10$FulX.IcV.dB1ngCEwjZdZ.528DLnKVfgdxe67s/ca43vzSUj3KSZ6';
 const RECOVERY_CREDENTIAL_ERROR = 'Invalid email or password';
+
+function setAuthSessionCookies(req: Request, res: Response, session: IssuedAuthSession, refreshExpiresIn = config.jwtRefreshTokenExpires): void {
+  const options = { httpOnly: true, secure: shouldUseSecureCookies(), sameSite: 'lax' as const, path: '/' };
+  res.cookie('accessToken', session.accessToken, { ...options, maxAge: session.expiresIn * 1000 });
+  res.cookie('refreshToken', session.refreshToken, { ...options, maxAge: refreshExpiresIn * 1000 });
+  rotateXsrfToken(req, res, session.refreshToken);
+}
 
 /**
  * Authenticate a local credential. Ordinary login obeys the configured login
@@ -276,23 +284,7 @@ async function authenticateLocal(req: Request, res: Response, recovery: boolean)
   });
   const platformAdministratorUserIds = preloadedPlatformAdministratorUserIds || await getActivePlatformAdministratorUserIds([user.id], dataSource);
   
-  // Set tokens in HTTP-only cookies (same pattern as Microsoft OAuth)
-  res.cookie('accessToken', session.accessToken, {
-    httpOnly: true,
-    secure: shouldUseSecureCookies(),
-    sameSite: 'lax',
-    maxAge: session.expiresIn * 1000,
-    path: '/',
-  });
-
-  res.cookie('refreshToken', session.refreshToken, {
-    httpOnly: true,
-    secure: shouldUseSecureCookies(),
-    sameSite: 'lax',
-    maxAge: config.jwtRefreshTokenExpires * 1000,
-    path: '/',
-  });
-  rotateXsrfToken(req, res, session.refreshToken);
+  setAuthSessionCookies(req, res, session);
 
   // Return user info (tokens are in cookies, not in body)
   res.json(AuthenticatedSessionLoginResponseSchema.parse({
@@ -351,5 +343,16 @@ router.post('/api/auth/login', apiLimiter, ...(config.tenancyMode === 'pooled' ?
 router.post('/api/auth/recovery/login', apiLimiter, authLimiter, validateBody(loginSchema), asyncHandler(async (req, res) => {
   await authenticateMeasuredLocal(req, res, true);
 }));
+
+router.post('/api/auth/recovery/session', apiLimiter, authLimiter, requireCloudAccountOrTenantAuth,
+  validateBody(z.object({}).strict()), asyncHandler(async (req, res) => {
+    const session = await authSessionService.recoverFromVerifiedCloudSession(req.user!, {
+      userAgent: req.headers['user-agent'] || null, ipAddress: req.ip,
+    });
+    await logAudit({ userId: req.user!.userId, action: AuditActions.LOGIN_SUCCESS,
+      details: { recovery: 'platform_administrator', method: 'verified_cloud_session' } });
+    setAuthSessionCookies(req, res, session, session.expiresIn);
+    res.status(204).end();
+  }));
 
 export default router;

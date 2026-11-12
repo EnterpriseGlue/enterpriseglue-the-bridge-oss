@@ -24,6 +24,7 @@ import { fetchList } from '../shared/api/fetchList';
 import { EngineSelector, useSelectedEngine } from '../components/EngineSelector'
 import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
 import { useAuth } from '../shared/hooks/useAuth'
+import { ExtensionSlot } from '../enterprise/ExtensionSlot'
 import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../shared/auth/guards'
 import type { DashboardContext, DashboardStats } from '@enterpriseglue/shared/schemas/dashboard.js'
@@ -189,7 +190,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { timePeriod, setTimePeriod } = useDashboardFilterStore()
   const selectedEngineId = useSelectedEngine()
-  const { hasPlatformPermission, hasAnyEnginePermission, permissions } = useAuth()
+  const { hasPlatformPermission, hasAnyEnginePermission, permissions, user } = useAuth()
   const dashboardReadDecision = evaluateActionSnapshot(permissions, 'platform.dashboard.read', { type: 'platform', id: null })
   const canReadDashboard = dashboardReadDecision.allowed
 
@@ -382,41 +383,60 @@ export default function Dashboard() {
         </div>
 
       {showGettingStarted && (
-        <Tile className="eg-dashboard-get-started">
-          <div className="eg-dashboard-get-started__content">
-            <div>
-              <h2>Get started</h2>
-              <p>
-                Create a project and connect an engine to start deploying and monitoring processes.
-              </p>
-            </div>
-            <div className="eg-dashboard-get-started__actions">
-              {totalProjects === 0 && (
-                <Button
-                  kind="primary"
-                  size="sm"
-                  onClick={() => safeNavigate(toTenantPath('/starbase'), { state: { openCreateProject: true } })}
-                >
-                  Create project
-                </Button>
-              )}
-              {connectedEngines === 0 && (
-                <Button
-                  kind="secondary"
-                  size="sm"
-                  onClick={() => safeNavigate(toTenantPath('/engines'), { state: { openNewEngine: true } })}
-                >
-                  Add engine
-                </Button>
-              )}
-              {connectedEngines > 0 && !canViewProcessData && (
-                <Button kind="tertiary" size="sm" onClick={() => safeNavigate(toTenantPath('/engines'))}>
-                  Request access
-                </Button>
-              )}
-            </div>
-          </div>
-        </Tile>
+        <ExtensionSlot
+          name="dashboard-getting-started"
+          props={{
+            tenantSlug,
+            needsProject: totalProjects === 0,
+            needsEngine: connectedEngines === 0,
+            canCreateProject: evaluateActionSnapshot(permissions, 'project.projects.create', { type: 'platform' }).allowed ||
+              hasPlatformPermission(PlatformPermission.PROJECT_CREATE),
+            canConnectProject: evaluateActionSnapshot(permissions, 'project.create.git.create', { type: 'platform' }).allowed,
+            canManageTenantSettings: evaluateActionSnapshot(permissions, 'tenant.settings.manage', {
+              type: 'tenant', id: user?.session?.tenant.id || null,
+            }).allowed,
+            openCreateProject: (connectToGit = false) => safeNavigate(toTenantPath('/starbase'), {
+              state: { openCreateProject: true, connectToGit },
+            }),
+          }}
+          fallback={(
+            <Tile className="eg-dashboard-get-started">
+              <div className="eg-dashboard-get-started__content">
+                <div>
+                  <h2>Get started</h2>
+                  <p>
+                    Create a project and connect an engine to start deploying and monitoring processes.
+                  </p>
+                </div>
+                <div className="eg-dashboard-get-started__actions">
+                  {totalProjects === 0 && (
+                    <Button
+                      kind="primary"
+                      size="sm"
+                      onClick={() => safeNavigate(toTenantPath('/starbase'), { state: { openCreateProject: true } })}
+                    >
+                      Create project
+                    </Button>
+                  )}
+                  {connectedEngines === 0 && (
+                    <Button
+                      kind="secondary"
+                      size="sm"
+                      onClick={() => safeNavigate(toTenantPath('/engines'), { state: { openNewEngine: true } })}
+                    >
+                      Add engine
+                    </Button>
+                  )}
+                  {connectedEngines > 0 && !canViewProcessData && (
+                    <Button kind="tertiary" size="sm" onClick={() => safeNavigate(toTenantPath('/engines'))}>
+                      Request access
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Tile>
+          )}
+        />
       )}
 
       {selectedEngineHasScopedRuntimeAccess && (

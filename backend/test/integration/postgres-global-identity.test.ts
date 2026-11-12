@@ -4,7 +4,7 @@ import { RestorePlatformGroupOwnership1700000000135 } from '@enterpriseglue/shar
 import { withPostgresMigrationContext } from '@enterpriseglue/shared/db/postgres-migration-context.js';
 import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { PlatformUserResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,6 +16,8 @@ import rateLimit from 'express-rate-limit';
 import request from 'supertest';
 import { installBrowserRequestProtection } from '@enterpriseglue/backend-host/middleware/browser-request-protection.js';
 import { XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
+import { verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { genericOidcService, type OidcIdentityClaims } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { MockOidcProvider } from '../identity-mocks/index.js';
 
 // Only connection selection is injected. Repositories, transactions, TypeORM
@@ -25,6 +27,12 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({getDataSource:async 
   if (!database.current) throw new Error('Fixture is not initialized');
   return database.current;
 }}));
+// Tenant OIDC uses an explicit Undici dispatcher. Keep the real connection
+// scope and lease checks while routing its external requests to the signed fixture.
+vi.mock('undici', async (importOriginal) => ({
+  ...await importOriginal<typeof import('undici')>(),
+  fetch: (input: URL | string, init?: RequestInit) => globalThis.fetch(input, init),
+}));
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { PostgresAdapter } from '@enterpriseglue/shared/db/adapters/PostgresAdapter.js';
 import { installPostgresContextBoundary, assertPostgresContextBoundary } from '@enterpriseglue/shared/infrastructure/persistence/subscribers/TenantRlsSubscriber.js';
@@ -49,6 +57,7 @@ import { mockCloudPasskeyCredential } from '../../__tests__/fixtures/cloudPasske
 import { CloudPasskey } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskey.js';
 import tenantRoutes from '@enterpriseglue/backend-host/modules/tenancy/routes/tenants.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
+import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
 import { parseSignedOidcState } from '@enterpriseglue/backend-host/modules/auth/routes/sso-state.js';
 import { runConfigBundleBootstrap } from '@enterpriseglue/backend-host/services/configBundleBootstrap.js';
 import { ConfigBundleApplyRun } from '@enterpriseglue/shared/infrastructure/persistence/entities/ConfigBundleApplyRun.js';
@@ -81,8 +90,9 @@ const connection={type:'postgres' as const, host:env('POSTGRES_HOST','127.0.0.1'
 const admin=new DataSource({...connection,username:env('POSTGRES_USER','postgres'),password:env('POSTGRES_PASSWORD','postgres')});
 const protocol=new MockOidcProvider({callbackUrl:'http://localhost:5173/api/auth/identity/callback'});
 const original={tenancyMode:config.tenancyMode,tenancyCloudRequired:config.tenancyCloudRequired,cloudAccountIdentityEnabled:config.cloudAccountIdentityEnabled,postgresSchema:config.postgresSchema};
-let owner:DataSource, runtime:DataSource, app:express.Express, providerId:string;
+let owner:DataSource, runtime:DataSource, app:express.Express, providerId:string, microsoftProviderId:string;
 let server:Server;
+const microsoftIssuer = 'https://login.microsoftonline.com/common/v2.0';
 
 describe('verified global OIDC callback and renewable sessions under forced PostgreSQL RLS', () => {
   beforeAll(async () => {
@@ -100,6 +110,11 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     await authzGroupService.seedDefaultPlatformGroups(owner);
     const provider=await identityProviderService.upsert({tenantId:null,key:'identity.oidc.global-fixture',displayName:'Verified fixture',protocol:'oidc',isEnabled:true,authenticationMode:'direct',configuration:protocol.configuration()});
     providerId=provider.id;
+    const microsoft = await identityProviderService.upsert({
+      tenantId: null, key: 'identity.oidc.microsoft-fixture', displayName: 'Microsoft', protocol: 'oidc',
+      isEnabled: true, authenticationMode: 'direct', configuration: { ...protocol.configuration(), issuerUrl: microsoftIssuer + '/' },
+    });
+    microsoftProviderId = microsoft.id;
     const runner=owner.createQueryRunner();try{await applyPostgresTenantPolicies(runner);}finally{await runner.release();}
     await owner.query(`GRANT USAGE ON SCHEMA ${schema} TO ${runtimeName}`);
     await owner.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${runtimeName}`);
@@ -108,7 +123,7 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     app = express();
     app.use(express.json(), express.urlencoded({ extended: false }));
     installBrowserRequestProtection(app);
-    app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);app.use(cloudEmailRoutes);
+    app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);app.use(cloudEmailRoutes);app.use(loginRoutes);
     app.use(rateLimit({ windowMs: 60_000, limit: 50, standardHeaders: true, legacyHeaders: false }));
     app.get('/cloud-probe',requireCloudAccountOrTenantAuth,(req,res)=>res.json({userId:req.user!.userId,sessionClass:req.user!.sessionClass,
       tenantId:req.user!.tenantId, authenticationMethod:req.user!.authenticationMethod, mfaVerified:req.user!.mfaVerified}));
@@ -133,14 +148,14 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     if(admin.isInitialized){await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.query(`DROP ROLE IF EXISTS ${runtimeName}`);await admin.query(`DROP ROLE IF EXISTS ${ownerName}`);await admin.destroy();}
     Object.assign(config,original);
   });
-  async function signIn(subject:string,email:string,returnTo:'/cloud/onboarding'|'/login'='/cloud/onboarding') {
+  async function signIn(subject:string,email:string,returnTo:'/cloud/onboarding'|'/login'='/cloud/onboarding', amr?:string[]) {
     const browser=request.agent(server);
     const start=await browser.get(`/api/auth/cloud-signup/providers/${providerId}/start?returnTo=${encodeURIComponent(returnTo)}`);
     expect(start.status,start.body.error).toBe(302);
     const location=new URL(start.headers.location);
     const state=location.searchParams.get('state')!;
     const parsed=parseSignedOidcState(state)!;
-    protocol.setTokenClaims({sub:subject,email,email_verified:true,nonce:parsed.nonce});
+    protocol.setTokenClaims({sub:subject,email,email_verified:true,nonce:parsed.nonce,...(amr?{amr}:{})});
     const callback=await browser.get('/api/auth/identity/callback').query({state,code:'verified-code'});
     return {browser,callback};
   }
@@ -205,7 +220,11 @@ describe('verified global OIDC callback and renewable sessions under forced Post
 
   it('lists only public global choices, exchanges a real signed token, persists identity and renews a tenant-neutral session', async()=>{
     const listed=await request(server).get('/api/auth/cloud-signup/providers');expect(listed.status).toBe(200);
-    expect(listed.body).toEqual([{id:providerId,displayName:'Verified fixture',protocol:'oidc'}]);
+    expect(listed.body).toHaveLength(2);
+    expect(listed.body).toEqual(expect.arrayContaining([
+      { id: providerId, displayName: 'Verified fixture', protocol: 'oidc' },
+      { id: microsoftProviderId, displayName: 'Microsoft', protocol: 'oidc' },
+    ]));
     const {browser,callback}=await signIn('verified-a','verified-a@example.test');
     expect(callback.status,JSON.stringify(callback.body)).toBe(302);
     expect(callback.headers.location).toContain('/cloud/onboarding');
@@ -221,6 +240,19 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     const permissions=await permissionService.getCurrentUserPermissions(bound,null);expect(permissions.platform.length).toBeGreaterThan(0);
     expect(await runtime.getRepository(SsoSyncRun).find()).toEqual([]);
     const sessions=await runtime.getRepository(RefreshToken).findBy({userId:bound});expect(sessions).toHaveLength(1);
+    const signing = { tenantPlacementV2ShardId: config.tenantPlacementV2ShardId,
+      tenantWorkloadReceiptPrivateKey: config.tenantWorkloadReceiptPrivateKey, tenantWorkloadReceiptKeyId: config.tenantWorkloadReceiptKeyId,
+      tenantWorkloadReceiptIssuer: config.tenantWorkloadReceiptIssuer, platformCloudIdentityAudience: config.platformCloudIdentityAudience };
+    const signer = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    Object.assign(config, { tenantPlacementV2ShardId: 'fixture-shard', tenantWorkloadReceiptPrivateKey: signer.privateKey.export({ format: 'pem', type: 'pkcs8' }),
+      tenantWorkloadReceiptKeyId: 'fixture-key', tenantWorkloadReceiptIssuer: 'fixture-issuer', platformCloudIdentityAudience: 'fixture-audience' });
+    try {
+      const identity = await browserPost(browser, '/api/platform/cloud-identity', { action: 'platform.tenants.self_create', includeRequester: true });
+      expect(identity.status, JSON.stringify(identity.body)).toBe(200);
+      const payload = JSON.parse(Buffer.from(identity.body.token.split('.')[1], 'base64url').toString());
+      expect(payload).toMatchObject({ schemaVersion: 'platform-cloud-identity.enterpriseglue.io/v2',
+        action: 'platform.tenants.self_create', sub: 'user:' + bound, requester: { email: 'verified-a@example.test', method: 'sso' } });
+    } finally { Object.assign(config, signing); }
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
   });
   it('returns verified Cloud sign-in to organization login without assigning a tenant from email',async()=>{
@@ -561,6 +593,202 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect(sessions).not.toHaveLength(0);expect(sessions.every(row=>row.identityProviderId===providerId)).toBe(true);
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
   });
+
+  it('enforces company SSO for existing tenant sessions, refresh and switching, with a platform recovery path', async () => {
+    const { browser: existing, callback } = await signIn('sso-only-owner', 'sso-only-owner@example.test');
+    expect(callback.status, callback.body.error).toBe(302);
+    const user = await runtime.getRepository(User).findOneByOrFail({ email: 'sso-only-owner@example.test' });
+    const tenant = await tenantService.create({ name: 'SSO-only tenant', slug: 'sso-only-tenant', ownerUserId: user.id });
+    const tenantContext = { tenantId: tenant.id, tenantSlug: tenant.slug };
+    const policy = { localPasswordMode: 'disabled' as const, providerSelectionMode: 'chooser' as const };
+    await expect(runWithTenantDatabaseContext(tenantContext, () => tenantLoginPolicyService.upsert(tenant.id, policy, user.id)))
+      .rejects.toThrow('Enable a company sign-in provider');
+    const switchTenant = (browser: typeof existing) => browserPost(browser, '/api/auth/switch-tenant', { tenantSlug: tenant.slug });
+    expect((await switchTenant(existing)).status).toBe(200);
+    const companyCallbackPath = `/api/t/${tenant.slug}/auth/identity/callback`;
+    const company = await runWithTenantDatabaseContext(tenantContext, () => identityProviderService.upsert({
+      tenantId: tenant.id, key: 'identity.oidc.company-fixture', displayName: 'Company', protocol: 'oidc', isEnabled: true,
+      authenticationMode: 'direct', configuration: { ...protocol.configuration(), callbackUrl: `http://localhost:5173${companyCallbackPath}` },
+    }));
+    const finishCompanySignIn = async (browser: typeof existing, start: request.Response) => {
+      expect(start.status, start.body.error).toBe(302);
+      const state = new URL(start.headers.location).searchParams.get('state');
+      const parsed = state && parseSignedOidcState(state);
+      if (!state || !parsed) throw new Error('Company sign-in did not issue signed state');
+      protocol.setTokenClaims({ sub: 'company-owner', email: user.email, email_verified: true, nonce: parsed.nonce });
+      return browser.get(companyCallbackPath).query({ state, code: 'verified-company-code' });
+    };
+    const returnTo = `/t/${tenant.slug}/`;
+    const linked = await finishCompanySignIn(existing,
+      await existing.get(`/api/auth/me/identity-providers/${company.id}/link`).query({ returnTo }));
+    expect(linked.status, linked.body.error).toBe(302);
+    const links = await existing.get('/api/auth/me/identity-providers').expect(200);
+    expect(links.body.providers).toContainEqual(expect.objectContaining({ id: company.id, linked: true }));
+    const policyCsrf = await existing.get('/api/csrf-token').expect(200);
+    const updated = await existing.put(`/api/t/${tenant.slug}/tenant/login-policy`)
+      .set(XSRF_HEADER_NAME, policyCsrf.body.csrfToken)
+      .send(policy);
+    expect(updated.status, updated.body.error).toBe(200);
+    expect((await existing.get('/tenant-only-probe')).status).toBe(403);
+    expect((await existing.post('/api/auth/refresh').send({})).status).toBe(403);
+    const { browser: cloud } = await signIn('sso-only-owner', 'sso-only-owner@example.test');
+    expect((await cloud.get('/cloud-probe')).status).toBe(200);
+    expect((await switchTenant(cloud)).status).toBe(403);
+
+    const companyBrowser = request.agent(server);
+    const signedIn = await finishCompanySignIn(companyBrowser,
+      await companyBrowser.get(`/api/t/${tenant.slug}/auth/providers/${company.id}/start`).query({ returnTo }));
+    expect(signedIn.status, signedIn.body.error).toBe(302);
+    expect((await companyBrowser.get('/cloud-probe').expect(200)).body).toMatchObject({ userId: user.id, tenantId: tenant.id });
+    expect(await runtime.getRepository(User).countBy({ email: user.email })).toBe(1);
+    expect((await companyBrowser.get('/tenant-only-probe')).status).toBe(200);
+    expect((await companyBrowser.post('/api/auth/refresh').send({})).status).toBe(200);
+
+    const recoveryPath = `/api/t/${tenant.slug}/tenant/login-policy/recover`;
+    const deniedRecovery = await browserPost(companyBrowser, recoveryPath);
+    expect(deniedRecovery.status).toBe(403);
+    expect(deniedRecovery.body.error).not.toBe('Invalid CSRF token');
+    const operatorEmail = 'sso-recovery@example.test';
+    const { browser: initialOperator } = await signIn('sso-recovery', operatorEmail);
+    const operator = await initialOperator.get('/cloud-probe').expect(200);
+    await userService.updateUser(operator.body.userId, { platformRole: 'admin' });
+    const originalMfaRequired = config.cloudPlatformAdminMfaRequired;
+    config.cloudPlatformAdminMfaRequired = true;
+    try {
+      const { browser: verifiedOperator } = await signIn('sso-recovery', operatorEmail, '/login', ['pwd', 'mfa']);
+      await verifiedOperator.get('/cloud-probe').expect(200);
+      expect((await browserPost(verifiedOperator, recoveryPath)).status).toBe(401);
+      expect((await browserPost(verifiedOperator, '/api/auth/recovery/session')).status).toBe(204);
+      const restored = await browserPost(verifiedOperator, recoveryPath);
+      expect(restored.status, restored.body.error).toBe(200);
+      expect(restored.body).toMatchObject({ localPasswordMode: 'auto', providerSelectionMode: 'chooser' });
+    } finally {
+      config.cloudPlatformAdminMfaRequired = originalMfaRequired;
+    }
+    expect((await switchTenant(cloud)).status).toBe(200);
+  }, 30_000);
+
+  it('requires authoritative second-factor evidence on new and existing administrator sessions', async () => {
+    const email = 'mfa-admin@example.test';
+    const subject = 'mfa-admin';
+    const saved = config.cloudPlatformAdminMfaRequired;
+    const initial = await signIn(subject, email);
+    const account = await initial.browser.get('/cloud-probe');
+    expect(account.status).toBe(200);
+    await userService.updateUser(account.body.userId, { platformRole: 'admin' });
+    const previous = await signIn(subject, email, '/login', ['otp']);
+    expect((await previous.browser.get('/cloud-probe')).status).toBe(200);
+    config.cloudPlatformAdminMfaRequired = true;
+    try {
+      expect((await previous.browser.get('/cloud-probe')).status).toBe(401);
+      expect((await previous.browser.post('/api/auth/refresh').send({})).status).toBe(401);
+
+      const insufficient = await signIn(subject, email, '/login', ['hwk']);
+      const refused = new URL(insufficient.callback.headers.location);
+      expect(refused.pathname).toBe('/login');
+      expect(refused.searchParams.get('error')).toBe('PLATFORM_ADMINISTRATOR_MFA_REQUIRED');
+      expect((await insufficient.browser.get('/cloud-probe')).status).toBe(401);
+
+      const verified = await signIn(subject, email, '/cloud/onboarding', ['pwd', 'mfa']);
+      expect(new URL(verified.callback.headers.location).pathname).toBe('/cloud/onboarding');
+      expect((await verified.browser.get('/cloud-probe')).status).toBe(200);
+      expect((await verified.browser.post('/api/auth/refresh').send({})).status).toBe(200);
+      expect((await verified.browser.get('/cloud-probe')).status).toBe(200);
+
+      const member = await signIn('mfa-member', 'mfa-member@example.test');
+      expect((await member.browser.get('/cloud-probe')).status).toBe(200);
+      expect((await browserPost(member.browser, '/api/auth/recovery/session')).status).toBe(401);
+      expect((await verified.browser.post('/api/auth/recovery/session').send({})).status).toBe(403);
+      const recoverySession = await browserPost(verified.browser, '/api/auth/recovery/session');
+      expect(recoverySession.status).toBe(204);
+      const recovery = await verified.browser.get('/cloud-probe').expect(200);
+      expect(recovery.body).toMatchObject({ userId: account.body.userId, authenticationMethod: 'recovery', mfaVerified: true });
+      const sessions = await runtime.getRepository(RefreshToken).findBy({ userId: account.body.userId });
+      const recoveryRow = sessions.find(row => JSON.parse(row.deviceInfo || '{}').recovery === 'platform_administrator');
+      expect(recoveryRow).toBeDefined();
+      expect(Number(recoveryRow!.expiresAt) - Number(recoveryRow!.createdAt)).toBeLessThanOrEqual(5 * 60_000);
+      const expectBoundedCookie = (response: request.Response, name: string) => {
+        const cookies = response.get('Set-Cookie') as unknown as string[];
+        const cookie = cookies.find(value => value.startsWith(name + '='));
+        expect(cookie).toBeDefined();
+        const value = cookie!.slice(name.length + 1).split(';', 1)[0];
+        const payload = verifyToken(decodeURIComponent(value)) as { exp?: number };
+        expect(payload.exp).toBeGreaterThan(0);
+        expect(payload.exp! * 1000).toBeLessThanOrEqual(Number(recoveryRow!.expiresAt));
+      };
+      expectBoundedCookie(recoverySession, 'accessToken');
+      expectBoundedCookie(recoverySession, 'refreshToken');
+      const renewed = await verified.browser.post('/api/auth/refresh').send({}).expect(200);
+      expectBoundedCookie(renewed, 'accessToken');
+      const target = await tenantService.create({ name: 'Recovery scope', slug: 'recovery-scope', ownerUserId: account.body.userId });
+      const switched = await browserPost(verified.browser, '/api/auth/switch-tenant', { tenantSlug: target.slug });
+      expect(switched.status).toBe(200);
+      expectBoundedCookie(switched, 'accessToken');
+      expectBoundedCookie(switched, 'refreshToken');
+    } finally {
+      config.cloudPlatformAdminMfaRequired = saved;
+    }
+  });
+
+  it('verifies a new Microsoft mailbox and signs the linked subject back in without an email claim', async () => {
+    const directoryTenant = 'e2f91b02-d9ef-4eeb-9921-114020624c73';
+    const subject = 'microsoft-subject';
+    const email = 'verified-mailbox@example.test';
+    const providerHint = 'provider-email-hint@example.test';
+    const start = vi.spyOn(genericOidcService, 'createAuthorizationRequest').mockImplementation(async (_provider, state) => ({
+      url: `${microsoftIssuer}/authorize?state=${encodeURIComponent(state)}`, codeVerifier: 'fixture-verifier',
+    }));
+    const exchange = vi.spyOn(genericOidcService, 'exchangeCode');
+    const originalMfaRequired = config.cloudPlatformAdminMfaRequired;
+    vi.mocked(sendVerificationEmail).mockResolvedValue({ success: true });
+    const signInMicrosoft = async (claims: OidcIdentityClaims) => {
+      const browser = request.agent(server);
+      const started = await browser.get(`/api/auth/cloud-signup/providers/${microsoftProviderId}/start?returnTo=%2Fcloud%2Fonboarding`).expect(302);
+      exchange.mockResolvedValueOnce(claims);
+      const state = new URL(started.headers.location).searchParams.get('state')!;
+      const callback = await browser.get('/api/auth/identity/callback').query({ state, code: 'verified-fixture-code' }).expect(302);
+      return { browser, callback };
+    };
+    try {
+      const { browser, callback } = await signInMicrosoft({ sub: subject, tid: directoryTenant, email: providerHint, email_verified: true });
+      expect(new URL(callback.headers.location).pathname).toBe('/signup/microsoft/email');
+      expect(await runtime.getRepository(User).countBy({ email: providerHint })).toBe(0);
+      await browser.get('/cloud-probe').expect(401);
+      const prefix = '/api/auth/cloud-signup/microsoft/email';
+      expect((await browserPost(browser, `${prefix}/request`, { email })).status).toBe(202);
+      const link = new URL(vi.mocked(sendVerificationEmail).mock.lastCall![0].verificationUrl);
+      await request(server).get(link.pathname + link.search).expect(401);
+      await browser.get(link.pathname + link.search).expect(302);
+      expect(await runtime.getRepository(User).countBy({ email })).toBe(0);
+      await browser.post(`${prefix}/complete`).send({}).expect(403);
+      const complete = await browserPost(browser, `${prefix}/complete`);
+      expect(complete.status, JSON.stringify(complete.body)).toBe(200);
+      expect(complete.body).toEqual({ destination: '/cloud/onboarding' });
+      const account = await runtime.getRepository(User).findOneByOrFail({ email });
+      expect(account.isEmailVerified).toBe(true);
+      expect((await browser.get('/cloud-probe').expect(200)).body.userId).toBe(account.id);
+      expect((await browserPost(browser, `${prefix}/complete`)).status).toBe(401);
+
+      const returned = await signInMicrosoft({ sub: subject, tid: directoryTenant });
+      expect(new URL(returned.callback.headers.location).pathname).toBe('/cloud/onboarding');
+      expect((await returned.browser.get('/cloud-probe').expect(200)).body.userId).toBe(account.id);
+      expect(await runtime.getRepository(User).countBy({ email: providerHint })).toBe(0);
+
+      await userService.updateUser(account.id, { platformRole: 'admin' });
+      config.cloudPlatformAdminMfaRequired = true;
+      const unverifiedAdmin = await signInMicrosoft({ sub: subject, tid: directoryTenant });
+      expect(new URL(unverifiedAdmin.callback.headers.location).searchParams.get('error')).toBe('PLATFORM_ADMINISTRATOR_MFA_REQUIRED');
+      await unverifiedAdmin.browser.get('/cloud-probe').expect(401);
+      const verifiedAdmin = await signInMicrosoft({ sub: subject, tid: directoryTenant, amr: ['pwd', 'mfa'] });
+      expect((await verifiedAdmin.browser.get('/cloud-probe').expect(200)).body.userId).toBe(account.id);
+      expect((await browserPost(verifiedAdmin.browser, '/api/auth/recovery/session')).status).toBe(204);
+    } finally {
+      config.cloudPlatformAdminMfaRequired = originalMfaRequired;
+      start.mockRestore();
+      exchange.mockRestore();
+    }
+  });
+
   it('renews an email-link session and binds optional passkey enrollment to that exact session under RLS', async () => {
     vi.mocked(sendVerificationEmail).mockResolvedValue({ success: true });
     vi.mocked(generateRegistrationOptions).mockResolvedValue({ challenge: 'local-fixture-challenge' } as never);
