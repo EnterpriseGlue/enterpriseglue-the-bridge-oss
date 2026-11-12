@@ -71,6 +71,12 @@ test('Oracle publication requires a released SHA and retained security-qualified
   assert.ok(publish.indexOf('scripts/scan-oracle-image.sh') < publish.indexOf('docker push'));
   assert.match(publish, /--type cyclonedx/);
   assert.match(publish, /actions\/attest-build-provenance@/);
+  const receipt = publish.slice(publish.indexOf('      - name: Sign and verify the publication receipt'), publish.indexOf('      - uses: actions/upload-artifact@'));
+  assert.match(receipt, /cosign attest .*--predicate oracle-image-publication\.json "\$subject"/);
+  assert.match(receipt, /cosign verify-attestation[\s\S]*--certificate-github-workflow-sha[\s\S]*\.predicate\) == \$receipt\[0\]/);
+  assert.doesNotMatch(receipt, /continue-on-error/);
+  assert.match(publish, /id: archive\n        if: always\(\)\n        continue-on-error: true/);
+  assert.match(publish, /steps\.archive\.outcome == 'failure'/);
   assert.match(publish, /COSIGN_EXPERIMENTAL: '1'/);
   assert.match(publish, /run-id: \$\{\{ needs.validate.outputs.qualification_run_id \|\| github.run_id \}\}/);
   assert.match(publish, /needs.qualify.result == 'skipped' && needs.validate.outputs.qualification_run_id != ''/);
@@ -219,12 +225,14 @@ if (process.env.ORACLE_COSIGN_MODE_CANARY === 'true') {
   });
 
   test('the exact pinned CLI accepts every Cosign invocation from the Oracle publisher', () => {
-    assert.equal(publisherCosignCommands.length, 3);
+    assert.equal(publisherCosignCommands.length, 4);
     for (const command of publisherCosignCommands) {
       execFileSync('bash', ['-c', `set -euo pipefail\n${command} --help`], {
         env: { ...process.env, COSIGN_EXPERIMENTAL: '1', arch: 'amd64',
           image: 'ghcr.io/enterpriseglue/enterpriseglue-release-canary-backend',
-          ref: 'ghcr.io/enterpriseglue/enterpriseglue-release-canary-backend@sha256:' + 'a'.repeat(64), digest: 'sha256:' + 'a'.repeat(64) },
+          ref: 'ghcr.io/enterpriseglue/enterpriseglue-release-canary-backend@sha256:' + 'a'.repeat(64), digest: 'sha256:' + 'a'.repeat(64),
+          subject: 'ghcr.io/enterpriseglue/enterpriseglue-release-canary-backend@sha256:' + 'a'.repeat(64),
+          predicate_type: 'https://enterpriseglue.ai/attestations/oracle-image-publication/v1' },
         stdio: 'pipe',
       });
     }
@@ -253,6 +261,32 @@ if (process.env.ORACLE_COSIGN_SCRATCH_SUBJECT) {
         env: { ...process.env, COSIGN_EXPERIMENTAL: '1' }, encoding: 'utf8', stdio: 'pipe', timeout: 180000,
       });
       assert.ok(verified.trim(), 'The signed CycloneDX attestation must be verified.');
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  test('the Oracle receipt is retrievable from the signed scratch digest without an Actions archive', () => {
+    const subject = process.env.ORACLE_COSIGN_SCRATCH_SUBJECT;
+    const identity = process.env.ORACLE_COSIGN_CERTIFICATE_IDENTITY;
+    assert.match(subject, /^ghcr\.io\/enterpriseglue\/enterpriseglue-release-canary-backend@sha256:[0-9a-f]{64}$/);
+    assert.match(identity, /^https:\/\/github\.com\/EnterpriseGlue\/enterpriseglue-the-bridge-oss\/\.github\/workflows\/release-canary\.yml@refs\/heads\/[A-Za-z0-9._/-]+$/);
+    const predicateType = 'https://enterpriseglue.ai/attestations/oracle-image-publication/v1';
+    const [image, digest] = subject.split('@');
+    const receipt = { schemaVersion: 'enterpriseglue-oracle-image-publication/v1', image, digest };
+    const directory = mkdtempSync(path.join(tmpdir(), 'eg-oracle-receipt-canary-'));
+    const command = publisherCosignCommands.find(value => value.includes('--predicate oracle-image-publication.json'));
+    assert.ok(command);
+    try {
+      writeFileSync(path.join(directory, 'oracle-image-publication.json'), JSON.stringify(receipt));
+      const env = { ...process.env, COSIGN_EXPERIMENTAL: '1', subject, predicate_type: predicateType };
+      execFileSync('bash', ['-c', `set -euo pipefail\n${command}`], { cwd: directory, env, stdio: 'pipe', timeout: 180000 });
+      const verified = execFileSync('cosign', ['verify-attestation', '--type', predicateType,
+        '--certificate-identity', identity, '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com', subject], {
+        env, encoding: 'utf8', stdio: 'pipe', timeout: 180000,
+      });
+      const statements = verified.trim().split('\n').map(line => JSON.parse(Buffer.from(JSON.parse(line).payload, 'base64')));
+      const statement = statements.find(item => item.subject.some(entry => entry.digest.sha256 === digest.slice(7)));
+      assert.ok(statement, 'The receipt must match the signed scratch subject.');
+      assert.deepEqual(statement.predicate, receipt);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 }

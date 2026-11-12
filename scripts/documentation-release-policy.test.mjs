@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { validateDocumentationImpact } from './lib/documentation-release-policy.mjs'
 import { requestDocumentationUpdate } from './request-documentation-update.mjs'
@@ -27,7 +28,11 @@ test('handoff reuses canonical Markdown and sends an immutable identity without 
 })
 test('mismatched notes or missing credentials stop only the independent handoff', async () => {
   const f=fixture({mismatch:true});await assert.rejects(requestDocumentationUpdate({execute:f.execute}),/canonical Markdown/);assert.equal(f.dispatches,0)
-  await assert.rejects(requestDocumentationUpdate({execute:fixture().execute,env:{}}),/pending/)
+  const missing=fixture();await assert.rejects(requestDocumentationUpdate({execute:missing.execute,env:{}}),error=>{
+    assert.match(error.message,/pending/)
+    assert.deepEqual(error.handoffInputs,{release_tag:'v0.33.0',source_commit:sha,notes_sha256:createHash('sha256').update(notes).digest('hex')})
+    return true
+  });assert.equal(missing.dispatches,0)
 })
 test('transport retries are bounded and can recover without rerunning a software publisher', async () => {
   const f=fixture({failDispatch:true});await assert.rejects(requestDocumentationUpdate({execute:f.execute,env:{DOCUMENTATION_UPDATE_TOKEN:'private-dispatch-fixture'},wait:async()=>{}}),/three delivery attempts/);assert.equal(f.dispatches,3)

@@ -19,9 +19,13 @@ export async function requestDocumentationUpdate({ tag, env = process.env, execu
   assert.equal(file.encoding, 'base64')
   const notes = Buffer.from(file.content, 'base64').toString('utf8')
   assert.equal(release.body.trim(), notes.trim(), 'GitHub release notes must match the existing canonical Markdown before documentation intake.')
-  assert.ok(env.DOCUMENTATION_UPDATE_TOKEN, 'Documentation is pending: configure the separate private-workflow handoff token.')
   const body = { ref: 'main', inputs: { release_tag: tag, source_commit: source,
     notes_sha256: createHash('sha256').update(notes).digest('hex') } }
+  if (!env.DOCUMENTATION_UPDATE_TOKEN) {
+    const error = new Error('Documentation is pending: configure the separate private-workflow handoff token or run the private catch-up.')
+    error.handoffInputs = body.inputs
+    throw error
+  }
   let error
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -30,7 +34,9 @@ export async function requestDocumentationUpdate({ tag, env = process.env, execu
       return { status: 'handoff-accepted', releaseTag: tag, sourceCommit: source, documentationPublished: false }
     } catch (failure) { error = failure; if (attempt < 2) await wait(2000 * (attempt + 1)) }
   }
-  throw new Error('Documentation handoff is pending after three delivery attempts; retry this independent workflow.', { cause: error })
+  const pending = new Error('Documentation handoff is pending after three delivery attempts; retry this independent workflow.', { cause: error })
+  pending.handoffInputs = body.inputs
+  throw pending
 }
 if (import.meta.url === pathToFileURL(resolve(process.argv[1] || '')).href) {
   try {
@@ -38,7 +44,13 @@ if (import.meta.url === pathToFileURL(resolve(process.argv[1] || '')).href) {
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Documentation: ${result.status} for ${result.releaseTag}. Content review and publishing are independent.\n`)
     console.log(JSON.stringify(result))
   } catch (error) {
-    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, 'Documentation: pending. Retry this workflow after resolving its configuration or transport error. OSS publication is independent.\n')
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, 'Documentation: pending. Retry this workflow after resolving its configuration or transport error. OSS publication is independent.\n')
+      if (error.handoffInputs) {
+        appendFileSync(process.env.GITHUB_STEP_SUMMARY, '\nRun **Prepare private documentation update** from `main` in the private homepage repository with these verified inputs.\n\n```json\n' +
+          JSON.stringify(error.handoffInputs, null, 2) + '\n```\n')
+      }
+    }
     console.error(error.message); process.exitCode = 1
   }
 }

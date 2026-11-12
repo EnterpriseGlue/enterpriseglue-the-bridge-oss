@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "oracle-publication-receipt",
+  "type": "fix",
+  "scope": "oracle-images",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Retain Oracle publication receipts in GHCR and provide verified inputs for manual documentation catch-up.",
+  "userImpact": ["Operators can verify Oracle image publication when GitHub Actions artifact storage is unavailable and prepare a private documentation draft when automatic handoff is pending."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["The publisher requires independent verification of the receipt signed by the protected workflow before reporting successful publication."],
+  "documentation": ["docs/runbooks/release-artifact-promotion.md", "docs/development/release-notes-process.md"],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "release-maintainers",
+    "pages": [],
+    "reason": "This changes internal release evidence retention and keeps the customer image reference contract."
+  },
+  "knownLimitations": ["Previously published images can be verified through their existing signatures, build provenance and SBOM attestations."],
+  "rollback": ["Use the retained signature and build provenance for an existing Oracle image digest."],
+  "validation": ["The release canary checks the exact Cosign commands and verifies the signed receipt against a scratch image digest."],
+  "packages": []
+}

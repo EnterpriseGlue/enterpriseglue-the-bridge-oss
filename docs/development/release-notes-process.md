@@ -444,7 +444,9 @@ publication. The release-note and signed-candidate gates are unchanged.
 
 Configure `DOCUMENTATION_UPDATE_TOKEN` with only the private homepage Actions
 workflow-dispatch permission. Failed delivery is visible in the separate workflow
-and its step summary; retry it with the same release tag. The private receiver
+and its step summary. The summary includes the verified tag, commit, and notes
+hash for an operator to run the private draft workflow directly. Retry automatic
+delivery with the same release tag after repairing credentials. The private receiver
 verifies the released tag/source/body independently and produces an idempotent,
 source-bound draft result. It preserves the current navigation and records page
 updates for review. Reorganizing navigation requires an explicit content change.
