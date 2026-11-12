@@ -4,7 +4,7 @@ import { RestorePlatformGroupOwnership1700000000135 } from '@enterpriseglue/shar
 import { withPostgresMigrationContext } from '@enterpriseglue/shared/db/postgres-migration-context.js';
 import { TenantLoginPolicy } from '@enterpriseglue/shared/infrastructure/persistence/entities/TenantLoginPolicy.js';
 import { PlatformUserResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID, createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -240,6 +240,19 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     const permissions=await permissionService.getCurrentUserPermissions(bound,null);expect(permissions.platform.length).toBeGreaterThan(0);
     expect(await runtime.getRepository(SsoSyncRun).find()).toEqual([]);
     const sessions=await runtime.getRepository(RefreshToken).findBy({userId:bound});expect(sessions).toHaveLength(1);
+    const signing = { tenantPlacementV2ShardId: config.tenantPlacementV2ShardId,
+      tenantWorkloadReceiptPrivateKey: config.tenantWorkloadReceiptPrivateKey, tenantWorkloadReceiptKeyId: config.tenantWorkloadReceiptKeyId,
+      tenantWorkloadReceiptIssuer: config.tenantWorkloadReceiptIssuer, platformCloudIdentityAudience: config.platformCloudIdentityAudience };
+    const signer = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    Object.assign(config, { tenantPlacementV2ShardId: 'fixture-shard', tenantWorkloadReceiptPrivateKey: signer.privateKey.export({ format: 'pem', type: 'pkcs8' }),
+      tenantWorkloadReceiptKeyId: 'fixture-key', tenantWorkloadReceiptIssuer: 'fixture-issuer', platformCloudIdentityAudience: 'fixture-audience' });
+    try {
+      const identity = await browserPost(browser, '/api/platform/cloud-identity', { action: 'platform.tenants.self_create', includeRequester: true });
+      expect(identity.status, JSON.stringify(identity.body)).toBe(200);
+      const payload = JSON.parse(Buffer.from(identity.body.token.split('.')[1], 'base64url').toString());
+      expect(payload).toMatchObject({ schemaVersion: 'platform-cloud-identity.enterpriseglue.io/v2',
+        action: 'platform.tenants.self_create', sub: 'user:' + bound, requester: { email: 'verified-a@example.test', method: 'sso' } });
+    } finally { Object.assign(config, signing); }
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
   });
   it('returns verified Cloud sign-in to organization login without assigning a tenant from email',async()=>{

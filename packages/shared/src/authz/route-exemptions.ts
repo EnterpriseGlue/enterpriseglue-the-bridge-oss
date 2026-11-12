@@ -100,6 +100,8 @@ export const AUTHZ_ROUTE_EXEMPTIONS: AuthzRouteExemption[] = [
   publicRoute('POST', '/api/auth/tenant-discovery/exchange', 'high', 'native-tenancy', 'A short-lived single-use email token may list only the linked user\'s active memberships and never creates an authenticated session.'),
   tokenAuthenticatedRoute('GET', '/api/auth/my-tenants', 'medium', 'Lists only active tenant memberships belonging to the authenticated principal.'),
   tokenAuthenticatedRoute('POST', '/api/auth/switch-tenant', 'high', 'Exchanges the authenticated session only after rechecking the caller\'s active target-tenant membership.'),
+  tokenAuthenticatedRoute('POST', '/api/workloads/cloud/organization-notifications', 'high',
+    'The private release controller for the selected release may send fixed organization notification templates to the configured reviewer or the same active verified account.'),
   {
     method: 'GET', route: '/api/t/:tenantSlug/tenant/cloud-identity', kind: 'auth-only', risk: 'high', owner: 'native-tenancy',
     reason: 'The native session, resolved placement v3 assertion, and active tenant membership are revalidated before a short-lived release-bound identity is minted.',

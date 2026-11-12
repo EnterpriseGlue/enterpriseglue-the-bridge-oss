@@ -2994,11 +2994,38 @@ registry.register('TenancyCapabilities', TenancyCapabilitiesSchema);
 registry.register('SignedTenantWorkloadReceipt', SignedTenantWorkloadReceiptSchema);
 registry.register('TenantCloudIdentityResponse', TenantCloudIdentityResponseSchema);
 registry.register('PlatformCloudIdentityClaims', PlatformCloudIdentityClaimsSchema);
-registry.register('PlatformCloudIdentityRequest', PlatformCloudIdentityRequestSchema);
+const PlatformCloudIdentityOpenApiRequest = PlatformCloudIdentityRequestSchema.openapi({
+  oneOf: [
+    { not: { required: ['includeRequester'] } },
+    { required: ['includeRequester'], properties: { action: { type: 'string', enum: ['platform.tenants.self_create'] } } },
+  ],
+});
+registry.register('PlatformCloudIdentityRequest', PlatformCloudIdentityOpenApiRequest);
 registry.register('PlatformCloudIdentityResponse', PlatformCloudIdentityResponseSchema);
 registry.register('TenantReleaseWorkAssignmentResponse', TenantReleaseWorkAssignmentResponseSchema);
 registry.register('SignedTenantReleaseActivationReceipt', SignedTenantReleaseActivationReceiptSchema);
 registry.register('ReleaseEffectSettlementStatus', ReleaseEffectSettlementStatusSchema);
+const { CloudOrganizationNotificationSchema } = await import('./platform-admin/cloud-organization-notification.js');
+registry.registerComponent('securitySchemes', 'ReleaseControllerBearer', {
+  type: 'http', scheme: 'bearer', description: 'Private credential for the release controller',
+});
+registry.registerPath({
+  method: 'post', path: '/api/workloads/cloud/organization-notifications',
+  ...authzExemption('POST', '/api/workloads/cloud/organization-notifications'),
+  security: [{ ReleaseControllerBearer: [] }],
+  request: {
+    headers: z.object({ 'x-enterpriseglue-release-id': z.string().min(1).max(256) }),
+    body: { required: true, content: { 'application/json': { schema: CloudOrganizationNotificationSchema } } },
+  },
+  responses: {
+    204: { description: 'The configured transport accepted the fixed notification' },
+    400: { description: 'Invalid notification or serving release identity' },
+    401: { description: 'Private release-controller bearer credential required' },
+    404: { description: 'Cloud email or the bound verified account is unavailable' },
+    409: { description: 'The review address or transport is not configured. Delivery did not start.' },
+    503: { description: 'Delivery outcome unavailable' },
+  },
+});
 registry.registerPath({
   method: 'post', path: '/api/workloads/tenants/{tenantId}/release-assignment-operations',
   ...authzExemption('POST', '/api/workloads/tenants/{tenantId}/release-assignment-operations'),
@@ -3208,12 +3235,13 @@ registry.registerPath({
 });
 registry.registerPath({
   method: 'post', path: '/api/platform/cloud-identity',
+  description: 'The optional includeRequester field is accepted for platform.tenants.self_create. It adds verified account metadata derived from the current session to a version 2 claim.',
   ...requestActionAuthzExtension([
     'platform.tenants.self_create',
     'platform.tenants.read',
     'platform.tenants.manage',
   ], 'POST', '/api/platform/cloud-identity'),
-  request: { body: { content: { 'application/json': { schema: PlatformCloudIdentityRequestSchema } } } },
+  request: { body: { content: { 'application/json': { schema: PlatformCloudIdentityOpenApiRequest } } } },
   responses: {
     200: { description: 'Short-lived identity for exactly one authorized platform tenant action', content: { 'application/json': { schema: PlatformCloudIdentityResponseSchema } } },
     400: { description: 'The requested action is missing, unsupported, or malformed' },

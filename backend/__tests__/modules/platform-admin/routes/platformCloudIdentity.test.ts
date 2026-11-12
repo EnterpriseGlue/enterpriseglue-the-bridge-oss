@@ -10,6 +10,7 @@ const issue = vi.hoisted(() => vi.fn(({ action }: { action: string }) => ({
   token: `${action}.${'x'.repeat(40)}`,
   expiresIn: 90 as const,
 })));
+const organizationRequester = vi.hoisted(() => vi.fn(async () => ({ email: 'verified@example.test', method: 'google' as const })));
 
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireCloudAccountOrTenantAuth: (req: any, res: any, next: any) => {
@@ -44,7 +45,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformCloudIdentityService.js', () => ({
-  platformCloudIdentityService: { issue },
+  platformCloudIdentityService: { issue, organizationRequester },
 }));
 
 import { config } from '@enterpriseglue/shared/config/index.js';
@@ -66,6 +67,7 @@ describe('platform Cloud identity and direct tenant mutation routes', () => {
     authz.allowed = new Set(['platform.tenants.self_create', 'platform.tenants.read', 'platform.tenants.manage']);
     authz.evaluated.length = 0;
     issue.mockClear();
+    organizationRequester.mockClear();
     config.tenancyCloudRequired = false;
     config.cloudAccountIdentityEnabled = true;
     config.tenantPlacementV2ShardId = 'regional-shard-01';
@@ -92,6 +94,26 @@ describe('platform Cloud identity and direct tenant mutation routes', () => {
       });
     },
   );
+
+  it('adds only session-derived requester metadata to an authorized onboarding claim', async () => {
+    const action = 'platform.tenants.self_create';
+    const response = await request(app).post('/api/platform/cloud-identity').set('x-test-cloud-account', 'true')
+      .send({ action, includeRequester: true });
+    expect(response.status).toBe(200);
+    expect(organizationRequester).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ userId: 'operator-1' }));
+    expect(issue).toHaveBeenCalledExactlyOnceWith({ userId: 'operator-1', shardId: 'regional-shard-01', action,
+      requester: { email: 'verified@example.test', method: 'google' } });
+    expect(response.body).not.toHaveProperty('requester');
+  });
+
+  it('rejects requester metadata input and manage claims with requester inclusion', async () => {
+    const path = '/api/platform/cloud-identity';
+    expect((await request(app).post(path).send({ action: 'platform.tenants.self_create',
+      includeRequester: true, requester: { email: 'untrusted@example.test' } })).status).toBe(400);
+    expect((await request(app).post(path).send({ action: 'platform.tenants.manage', includeRequester: true })).status).toBe(400);
+    expect(organizationRequester).not.toHaveBeenCalled();
+    expect(issue).not.toHaveBeenCalled();
+  });
 
   it.each([
     ['platform.tenants.read', 'platform.tenants.manage'],

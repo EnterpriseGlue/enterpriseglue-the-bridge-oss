@@ -66,12 +66,12 @@ export async function sendEmailWithConfig(
   subject: string,
   html: string,
   text?: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; notConfigured?: true }> {
   const emailConfig = await getEmailConfigForTenant(tenantId);
 
   if (!emailConfig) {
-    logger.warn(`⚠️  Would send email to ${to} (email not configured — seed EMAIL_* env vars for first deploy or add a default config in Admin UI)`);
-    return { success: false, error: 'Email service not configured. Seed EMAIL_* env vars for first deploy or create a default email configuration.' };
+    logger.warn('Email delivery unavailable. Configure a default email provider.');
+    return { success: false, notConfigured: true, error: 'Email service not configured. Seed EMAIL_* env vars for first deploy or create a default email configuration.' };
   }
 
   return sendWithProvider({
