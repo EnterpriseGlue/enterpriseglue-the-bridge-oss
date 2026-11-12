@@ -141,6 +141,13 @@ apply_config_reference_secret() {
 
 apply_runtime_config() {
   # Keep the public domain name safe for YAML serialization; backend startup validates its scope.
+  local public_api_origin="${EG_PUBLIC_API_ORIGIN:-}"
+  local public_api_origin_pattern='^https://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?/?$'
+  [[ -z "$public_api_origin" || "$public_api_origin" =~ $public_api_origin_pattern ]] || error "Invalid EG_PUBLIC_API_ORIGIN"
+  local runtime_api_required=false
+  if [[ -n "$public_api_origin" ]]; then
+    runtime_api_required=true
+  fi
   local xsrf_cookie_domain="${EG_XSRF_COOKIE_DOMAIN:-}"
   [[ "$xsrf_cookie_domain" =~ ^[A-Za-z0-9.-]*$ ]] || error "Invalid EG_XSRF_COOKIE_DOMAIN"
   cat <<EOF | oc -n "$OPENSHIFT_NAMESPACE" apply -f -
@@ -156,6 +163,9 @@ data:
   API_PORT: "8787"
   FRONTEND_URL: "https://${OPENSHIFT_ROUTE_HOST}"
   EG_XSRF_COOKIE_DOMAIN: "$xsrf_cookie_domain"
+  EG_PUBLIC_API_ORIGIN: "$public_api_origin"
+  EG_FRONTEND_RUNTIME_API_BASE_URL: "$public_api_origin"
+  EG_FRONTEND_RUNTIME_CONFIG_REQUIRED: "$runtime_api_required"
   API_BASE_URL: ""
   DATABASE_TYPE: "$DATABASE_TYPE"
 

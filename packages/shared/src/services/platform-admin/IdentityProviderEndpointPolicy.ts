@@ -142,8 +142,15 @@ export function validateIdentityProviderCallbackUrl(raw: string, protocol: 'oidc
   if (parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw new Error(`${label} must not include credentials, query parameters, or a fragment`);
   }
-  if (parsed.origin !== frontend.origin || (parsed.pathname !== expectedPath && !tenantCallbackPattern.test(parsed.pathname))) {
-    throw new Error(`${label} must be the canonical global or tenant-scoped callback endpoint on ${frontend.origin}`);
+  const publicApiOrigin = config.publicApiOrigin;
+  if (
+    (parsed.origin !== frontend.origin && parsed.origin !== publicApiOrigin)
+    || (parsed.pathname !== expectedPath && !tenantCallbackPattern.test(parsed.pathname))
+  ) {
+    const origins = publicApiOrigin && publicApiOrigin !== frontend.origin
+      ? `${frontend.origin} or ${publicApiOrigin}`
+      : frontend.origin;
+    throw new Error(`${label} must be the canonical global or tenant-scoped callback endpoint on ${origins}`);
   }
   if (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
     throw new Error(`${label} must use HTTPS in production`);

@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@src/shared/notifications/ToastProvider';
 import Login from '@src/pages/Login';
 import { apiClient } from '@src/shared/api/client';
-import { redirectTo } from '@src/utils/redirect';
+import { redirectToApi } from '@src/utils/redirect';
 
 const loginMock = vi.fn().mockResolvedValue(undefined);
 const setAuthenticatedUser = vi.fn();
@@ -31,7 +31,7 @@ vi.mock('@src/shared/api/client', () => ({
 }));
 
 vi.mock('@src/utils/redirect', () => ({
-  redirectTo: vi.fn(),
+  redirectToApi: vi.fn(),
 }));
 
 describe('Login SSO auto-redirect behavior', () => {
@@ -103,7 +103,7 @@ describe('Login SSO auto-redirect behavior', () => {
 
     await waitFor(() => {
       expect(apiClient.get).toHaveBeenCalledWith('/api/t/default/auth/login-methods');
-      expect(redirectTo).toHaveBeenCalledWith('/api/t/default/auth/providers/oidc-1/start');
+      expect(redirectToApi).toHaveBeenCalledWith('/api/t/default/auth/providers/oidc-1/start');
     });
   });
 
@@ -120,7 +120,7 @@ describe('Login SSO auto-redirect behavior', () => {
       expect((apiClient.get as any).mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    expect(redirectTo).not.toHaveBeenCalled();
+    expect(redirectToApi).not.toHaveBeenCalled();
   });
 
   it('does not auto-redirect when more than one SSO provider is enabled', async () => {
@@ -138,7 +138,7 @@ describe('Login SSO auto-redirect behavior', () => {
       expect((apiClient.get as any).mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    expect(redirectTo).not.toHaveBeenCalled();
+    expect(redirectToApi).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /Sign in with Microsoft/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Partner SAML/i })).toBeInTheDocument();
   });
@@ -220,7 +220,7 @@ describe('Login SSO auto-redirect behavior', () => {
 
     expect(await screen.findByRole('heading', { name: 'Opening Microsoft Entra ID' })).toBeInTheDocument();
     await waitFor(() => {
-      expect(redirectTo).toHaveBeenCalledWith('/api/t/default/auth/providers/entra/start');
+      expect(redirectToApi).toHaveBeenCalledWith('/api/t/default/auth/providers/entra/start');
     });
   });
 
@@ -240,7 +240,7 @@ describe('Login SSO auto-redirect behavior', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Choose how to log in' })).toHaveFocus());
     expect(screen.getByRole('button', { name: /Continue with Corporate identity/ })).toBeInTheDocument();
     await new Promise((resolve) => window.setTimeout(resolve, 650));
-    expect(redirectTo).not.toHaveBeenCalled();
+    expect(redirectToApi).not.toHaveBeenCalled();
   });
 
   it('keeps break-glass credentials on the separate administrator recovery route', async () => {
@@ -267,6 +267,6 @@ describe('Login SSO auto-redirect behavior', () => {
 
     expect(await screen.findByText('Enter a valid email address')).toBeInTheDocument();
     await waitFor(() => expect(emailInput).toHaveFocus());
-    expect(redirectTo).not.toHaveBeenCalled();
+    expect(redirectToApi).not.toHaveBeenCalled();
   });
 });

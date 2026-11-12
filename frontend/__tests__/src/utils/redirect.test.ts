@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { redirectTo, replaceAndReloadToInternalPath } from '../../../../packages/frontend-host/src/utils/redirect';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { config } from '@src/config';
+import { redirectTo, redirectToApi, replaceAndReloadToInternalPath } from '../../../../packages/frontend-host/src/utils/redirect';
 
 describe('redirect utils', () => {
   const assign = vi.fn();
@@ -14,6 +15,7 @@ describe('redirect utils', () => {
     Object.defineProperty(window, 'location', {
       value: {
         origin: 'http://localhost:3000',
+        href: 'http://localhost:3000/login',
         assign,
         reload,
       },
@@ -30,6 +32,25 @@ describe('redirect utils', () => {
       writable: true,
     });
   });
+
+  const originalApiBaseUrl = config.apiBaseUrl;
+  afterEach(() => { config.apiBaseUrl = originalApiBaseUrl; });
+
+  it.each([
+    ['', '/api/t/acme/auth/providers/provider-1/start?returnTo=%2Ft%2Facme'],
+    ['https://api.example.test/', 'https://api.example.test/api/t/acme/auth/providers/provider-1/start?returnTo=%2Ft%2Facme'],
+  ])('starts browser authentication through the configured API base %s', (apiBaseUrl, target) => {
+    config.apiBaseUrl = apiBaseUrl;
+    redirectToApi('/api/t/acme/auth/providers/provider-1/start?returnTo=%2Ft%2Facme');
+    expect(assign).toHaveBeenCalledWith(target);
+  });
+
+  it.each(['https://other.example.test/api/auth/start', '//other.example.test/api/auth/start', '/login'])(
+    'rejects navigation outside local API paths (%s)', (target) => {
+      expect(() => redirectToApi(target)).toThrow('Expected a local API path');
+      expect(assign).not.toHaveBeenCalled();
+    },
+  );
 
   it('allows same-origin internal redirects', () => {
     redirectTo('/api/auth/providers/provider-1/start?tenantSlug=acme');

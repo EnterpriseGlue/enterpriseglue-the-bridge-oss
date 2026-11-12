@@ -7,7 +7,7 @@ import { parseApiError } from '../shared/api/apiErrorUtils';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
 import LoginProviderButton from '../shared/components/LoginProviderButton';
 import { toSafeInternalPath } from '../utils/safeNavigation';
-import { redirectTo } from '../utils/redirect';
+import { redirectTo, redirectToApi } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
 import { getTenancyCapabilities } from '../services/tenancy';
 import type {
@@ -370,7 +370,12 @@ export default function Login() {
     setRedirectingProvider(provider);
     redirectTimerRef.current = window.setTimeout(() => {
       redirectTimerRef.current = null;
-      redirectTo(providerLoginPath(provider, tenantSlug));
+      try {
+        redirectToApi(providerLoginPath(provider, tenantSlug));
+      } catch {
+        setRedirectingProvider(null);
+        setLoginError('Unable to start sign-in. Check the application API configuration.');
+      }
     }, SSO_REDIRECT_TRANSITION_MS);
   }, [tenantSlug]);
 

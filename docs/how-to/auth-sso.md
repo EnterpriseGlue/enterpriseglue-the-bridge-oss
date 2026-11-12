@@ -154,9 +154,9 @@ is omitted, zero, or malformed; the provider's `sync.intervalSeconds` controls
 how often that provider is due. Outside production, set a positive scheduler
 interval explicitly when testing scheduled reconciliation.
 
-Provider callback URLs do not belong in that allowlist. They must match the
-configured `FRONTEND_URL` origin and either the global compatibility path or
-the canonical tenant-scoped path for the same signed tenant:
+The outbound allowlist covers connections to the identity provider. Sign-in
+callbacks use the exact `FRONTEND_URL` origin or the optional
+`EG_PUBLIC_API_ORIGIN` and one of the following canonical paths.
 
 - OIDC: `/api/auth/identity/callback`
 - OIDC managed tenant: `/api/t/{tenantSlug}/auth/identity/callback`
@@ -174,6 +174,45 @@ For a deliberately local emulator, set
 `EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY=true`, allowlist the exact local
 host names, and set the private-host opt-in. This exercises production policy
 without weakening it. See [Configuration](../reference/configuration.md#identity-provider-endpoint-and-pre-authentication-policy).
+
+### Split frontend and API origins
+
+For self-hosted company SSO on same-site HTTPS hosts, keep `FRONTEND_URL` on the
+application host and configure the backend's public API origin.
+
+```dotenv
+FRONTEND_URL=https://app.test.example.com
+EG_PUBLIC_API_ORIGIN=https://api.test.example.com
+EG_XSRF_COOKIE_DOMAIN=test.example.com
+```
+
+Configure the browser API base to that same API origin. The frontend container
+uses `EG_FRONTEND_RUNTIME_API_BASE_URL`. For static hosting, set the API base in
+the frontend build or serve the runtime configuration document on the app's
+origin, and include the API origin in the frontend's CSP `connect-src`. Verify
+the deployed configuration and credentialed CORS with the exact app origin.
+Use a trusted cookie domain per environment and avoid overlapping production
+and test cookie scopes. Session and sign-in cookies are issued to the API
+host. The shared domain is for the readable XSRF cookie only.
+
+Set the saved provider callback to the API origin plus its canonical path and
+register that exact URL with the identity provider. For Entra OIDC, register it
+as a Web redirect URI. For a config-managed provider, update the source
+`identity-providers.json` and preview it on the target backend before apply.
+Sign-in must start and finish on the browser API origin for the host-only
+transaction cookies to be returned. OIDC's post-logout destination is the
+frontend `/login` page. SAML single logout uses its existing frontend-origin
+callback policy.
+
+Keep start and callback responses uncached at the API edge. Forward the full
+callback path and query, form POST bodies, cookies, and redirect responses.
+Redact authorization codes and state from edge request logs. After rolling out
+both components, test from the actual frontend login page and verify an
+authenticated write, refresh, logout, and administrator recovery before
+enforcing SSO. For a rollback, restore the previous frontend settings,
+provider callback and identity-provider registration before removing the
+additional origin or reverting the backend. An in-flight sign-in may need to
+restart during the switch.
 
 ### Mandatory sign-in reconciliation
 

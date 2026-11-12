@@ -15,6 +15,8 @@ import {
 import type { ConfigBundleContractMetadata } from '@enterpriseglue/shared/schemas/platform-admin/config-bundle.js';
 import { PermissionCatalog, SystemRoleDefinitions, rolePermissionDependencyError } from './permissions.js';
 import { hashCanonicalConfig } from './config-bundle-hash.js';
+import { config } from '../../config/index.js';
+import { validateIdentityProviderCallbackUrl } from './IdentityProviderEndpointPolicy.js';
 import { isEngineBackstopNativeAuthorizationEngineType } from '@enterpriseglue/shared/schemas/platform-admin/engine-backstop.js';
 import type {
   EngineTenancyPrincipalType,
@@ -151,6 +153,26 @@ function fileEntries(normalizedFiles: Record<string, unknown>, path: string, pro
   const file = normalizedFiles[path] as Record<string, unknown> | undefined;
   const entries = file?.[property];
   return Array.isArray(entries) ? entries : [];
+}
+
+function validateIdentityProviderCallbacks(normalizedFiles: Record<string, unknown>): RawValidationIssue[] {
+  if (!config.publicApiOrigin) return [];
+  const path = './identity-providers.json';
+  const file = normalizedFiles[path] as z.infer<typeof ConfigIdentityProvidersFileSchema> | undefined;
+  const errors: RawValidationIssue[] = [];
+  file?.identityProviders.forEach((provider, index) => {
+    if (provider.type === 'ldap') return;
+    const callbackUrl = provider.type === 'oidc' ? provider.oidc.callbackUrl : provider.saml.callbackUrl;
+    try {
+      validateIdentityProviderCallbackUrl(callbackUrl, provider.type);
+    } catch (error) {
+      errors.push({
+        path: `${path}.identityProviders.${index}.${provider.type}.callbackUrl`,
+        message: error instanceof Error ? error.message : 'Invalid identity provider callback URL',
+      });
+    }
+  });
+  return errors;
 }
 
 function validateEndpointAuthenticationPolicy(
@@ -495,6 +517,7 @@ class ConfigBundlePreviewService {
     if (errors.length === 0) {
       errors.push(...validateCrossFileReferences(normalizedFiles, policy));
       errors.push(...validateEndpointAuthenticationPolicy(normalizedFiles, policy));
+      errors.push(...validateIdentityProviderCallbacks(normalizedFiles));
       if (errors.length === 0) {
         const expanded = expandRoleTemplates(normalizedFiles);
         errors.push(...expanded.errors);

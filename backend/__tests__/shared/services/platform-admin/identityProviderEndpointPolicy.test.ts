@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import {
   isAllowedIdentityProviderHost,
   readBoundedIdentityProviderResponse,
   validateIdentityProviderCallbackUrl,
   validateIdentityProviderEndpointUrl,
+  validateIdentityProviderLogoutRedirectUrl,
+  validateIdentityProviderSamlLogoutCallbackUrl,
 } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderEndpointPolicy.js';
 
 describe('identity provider endpoint policy', () => {
+  const originalConfig = { frontendUrl: config.frontendUrl, publicApiOrigin: config.publicApiOrigin };
+
   afterEach(() => {
+    Object.assign(config, originalConfig);
     vi.unstubAllEnvs();
     delete process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY;
     delete process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS;
@@ -97,6 +103,43 @@ describe('identity provider endpoint policy', () => {
     expect(() => validateIdentityProviderCallbackUrl('https://attacker.example.test/api/auth/identity/callback', 'oidc')).toThrow('canonical');
     expect(() => validateIdentityProviderCallbackUrl('http://localhost:5173/api/auth/identity/callback?next=evil', 'oidc')).toThrow('query');
     expect(() => validateIdentityProviderCallbackUrl('http://localhost:5173/wrong', 'saml')).toThrow('canonical');
+  });
+
+  it.each([
+    ['oidc', '/auth/identity/callback'],
+    ['saml', '/auth/providers/saml/callback'],
+  ] as const)('opts into one exact API origin for %s sign-in callbacks', (protocol, suffix) => {
+    const frontend = 'https://app.example.test';
+    const api = 'https://api.example.test';
+    config.frontendUrl = frontend;
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(() => validateIdentityProviderCallbackUrl(`${api}/api${suffix}`, protocol)).toThrow('canonical');
+    config.publicApiOrigin = api;
+
+    for (const origin of [frontend, api]) {
+      for (const prefix of ['/api', '/api/t/acme']) {
+        const callback = `${origin}${prefix}${suffix}`;
+        expect(validateIdentityProviderCallbackUrl(callback, protocol).href).toBe(callback);
+      }
+    }
+    for (const origin of ['https://api.example.test:8443', 'https://other.example.test', 'http://api.example.test']) {
+      expect(() => validateIdentityProviderCallbackUrl(`${origin}/api${suffix}`, protocol)).toThrow('canonical');
+    }
+    expect(() => validateIdentityProviderCallbackUrl(`${api}/api/t/Acme${suffix}`, protocol)).toThrow('canonical');
+    expect(() => validateIdentityProviderCallbackUrl(`${api}/api${suffix}?query=1`, protocol)).toThrow('query');
+    expect(() => validateIdentityProviderCallbackUrl(`${api}/api${suffix}#fragment`, protocol)).toThrow('fragment');
+    expect(() => validateIdentityProviderCallbackUrl(`https://user@api.example.test/api${suffix}`, protocol)).toThrow('credentials');
+    expect(() => validateIdentityProviderCallbackUrl(`${api}/api${suffix}/`, protocol)).toThrow('canonical');
+  });
+
+  it('keeps both logout URL policies bound to the frontend', () => {
+    config.frontendUrl = 'https://app.example.test';
+    config.publicApiOrigin = 'https://api.example.test';
+    const samlLogout = '/api/auth/identity/corporate/saml/logout';
+    expect(validateIdentityProviderLogoutRedirectUrl(`${config.frontendUrl}/login`).pathname).toBe('/login');
+    expect(validateIdentityProviderSamlLogoutCallbackUrl(`${config.frontendUrl}${samlLogout}`).pathname).toBe(samlLogout);
+    expect(() => validateIdentityProviderLogoutRedirectUrl(`${config.publicApiOrigin}/login`)).toThrow('canonical');
+    expect(() => validateIdentityProviderSamlLogoutCallbackUrl(`${config.publicApiOrigin}${samlLogout}`)).toThrow('canonical');
   });
 
   it('bounds streamed responses even without a content-length header', async () => {

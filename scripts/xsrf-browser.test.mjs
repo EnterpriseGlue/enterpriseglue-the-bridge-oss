@@ -40,6 +40,8 @@ test('browser echoes one app-issued cookie and rereads it after login, refresh a
     stdin: { contents: `
       import { initRuntimeConfig } from './packages/frontend-host/src/runtimeConfig.ts';
       import { apiClient } from './packages/frontend-host/src/shared/api/client.ts';
+      import { redirectToApi } from './packages/frontend-host/src/utils/redirect.ts';
+      document.querySelector('#sso').addEventListener('click', () => redirectToApi('/api/auth/providers/test/start'));
       import { initializeTenancyCapabilities } from './packages/frontend-host/src/services/tenancy.ts';
       window.apiClient = apiClient;
       window.ready = initRuntimeConfig().then(() => initializeTenancyCapabilities());
@@ -55,7 +57,7 @@ test('browser echoes one app-issued cookie and rereads it after login, refresh a
     if (req.url === '/client.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(bundle.outputFiles[0].text); return; }
     if (req.url === '/config.json') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ apiBaseUrl: apiOrigin })); return; }
     res.setHeader('Content-Type', 'text/html');
-    res.end('<!doctype html><title>Application XSRF transport</title><script type="module" src="/client.js"></script>');
+    res.end('<!doctype html><title>Application XSRF transport</title><button id="sso">Sign in with SSO</button><script type="module" src="/client.js"></script>');
   });
   const frontendOrigin = await listen(frontend, 'app.xsrf.test');
   t.after(() => { frontend.closeAllConnections(); frontend.close(); });
@@ -78,6 +80,30 @@ test('browser echoes one app-issued cookie and rereads it after login, refresh a
     res.cookie('refreshToken', refreshToken, { httpOnly: true, path: '/', sameSite: 'lax' });
     rotateXsrfToken(req, res, refreshToken);
   };
+  // Simulate the IdP round trip. Protocol signatures are covered by the OIDC and SAML suites.
+  const idp = createServer((req, res) => {
+    const redirectUri = new URL(req.url, idpOrigin).searchParams.get('redirect_uri');
+    if (redirectUri !== `${apiOrigin}/api/auth/identity/callback`) {
+      res.writeHead(400).end();
+      return;
+    }
+    res.writeHead(302, { Location: `${redirectUri}?code=fixture&state=browser-state` }).end();
+  });
+  const idpOrigin = await listen(idp, 'idp.sso.test');
+  t.after(() => { idp.closeAllConnections(); idp.close(); });
+  app.get('/api/auth/providers/test/start', (_req, res) => {
+    res.cookie('ssoFixtureState', 'browser-state', { httpOnly: true, sameSite: 'lax', path: '/' });
+    res.redirect(`${idpOrigin}/authorize?redirect_uri=${encodeURIComponent(`${apiOrigin}/api/auth/identity/callback`)}`);
+  });
+  app.get('/api/auth/identity/callback', (req, res) => {
+    if (req.query.code !== 'fixture' || req.query.state !== req.cookies.ssoFixtureState) {
+      res.sendStatus(401);
+      return;
+    }
+    res.clearCookie('ssoFixtureState', { path: '/' });
+    issueSession(req, res, 'session-sso');
+    res.redirect(`${frontendOrigin}/sso-complete`);
+  });
   app.post('/api/auth/login', (req, res) => { issueSession(req, res, 'session-a'); res.json({ loggedIn: true }); });
   app.post('/api/auth/refresh', (req, res) => {
     refreshCount++;
@@ -93,7 +119,7 @@ test('browser echoes one app-issued cookie and rereads it after login, refresh a
     res.clearCookie('accessToken', { path: '/' }); res.clearCookie('refreshToken', { path: '/' }); clearXsrfToken(res); res.sendStatus(204);
   });
   app.get('/api/redirect-test', (_req, res) => res.redirect(`${frontendOrigin}/token-sink`));
-  const browser = await chromium.launch({ headless: true, args: ['--host-resolver-rules=MAP *.xsrf.test 127.0.0.1', '--no-proxy-server'] });
+  const browser = await chromium.launch({ headless: true, args: ['--host-resolver-rules=MAP *.xsrf.test 127.0.0.1, MAP idp.sso.test 127.0.0.1', '--no-proxy-server'] });
   t.after(() => browser.close());
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -150,6 +176,16 @@ test('browser echoes one app-issued cookie and rereads it after login, refresh a
   assert.deepEqual(await post(), { accepted: true });
   await page.evaluate(() => window.apiClient.post('/api/auth/logout', {}));
   assert.equal(await cookieValue(), '');
+
+  await Promise.all([
+    page.waitForURL(`${frontendOrigin}/sso-complete`),
+    page.getByRole('button', { name: 'Sign in with SSO' }).click(),
+  ]);
+  await page.evaluate(() => window.ready);
+  assert.deepEqual(await post(), { accepted: true });
+  assert.ok(observed.some(({ path, cookie }) => path.startsWith('/api/auth/identity/callback?') && cookie?.includes('ssoFixtureState=browser-state')));
+  assert.ok((await context.cookies(apiOrigin)).some(({ name, domain, httpOnly }) => name === 'accessToken' && domain === 'api.xsrf.test' && httpOnly));
+  assert.equal((await context.cookies(frontendOrigin)).some(({ name }) => name === 'accessToken'), false);
   assert.ok(observed.some((req) => req.method === 'OPTIONS' && req.preflight?.includes('x-xsrf-token')));
   assert.ok(observed.every((req) => !req.legacy && !req.preflight?.includes('x-csrf-token')));
   assert.deepEqual(errors, []);

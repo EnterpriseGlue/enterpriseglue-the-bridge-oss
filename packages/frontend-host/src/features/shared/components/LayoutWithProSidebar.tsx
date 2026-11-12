@@ -33,6 +33,7 @@ import { useFeatureFlag } from '../../../shared/hooks/useFeatureFlag'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
+import { redirectToApi } from '../../../utils/redirect'
 import { configuredDocumentationOrigin, documentationAccountLink } from '../../../utils/documentationAccess'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
 import { ExtensionSlot, useFilteredExtensionNavItems } from '../../../enterprise/ExtensionSlot'
@@ -232,7 +233,11 @@ export default function LayoutWithProSidebar() {
 
   const connectIdentityProvider = (providerId: string) => {
     const returnTo = pathname.startsWith('/') ? pathname : toTenantPath('/')
-    window.location.assign(`/api/auth/me/identity-providers/${encodeURIComponent(providerId)}/link?returnTo=${encodeURIComponent(returnTo)}`)
+    try {
+      redirectToApi(`/api/auth/me/identity-providers/${encodeURIComponent(providerId)}/link?returnTo=${encodeURIComponent(returnTo)}`)
+    } catch {
+      setProfileError('Unable to connect the identity provider. Check the application API configuration.')
+    }
   }
 
   const isNotificationsEnabled = useFeatureFlag('notifications')

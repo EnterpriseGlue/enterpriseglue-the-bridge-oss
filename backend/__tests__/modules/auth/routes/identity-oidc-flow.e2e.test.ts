@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import request from 'supertest';
 import identityOidcRoute from '../../../../../packages/backend-host/src/modules/auth/routes/identity-oidc.js';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import { MockOidcProvider } from '../../../../test/identity-mocks/index.js';
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/SsoConnectionService.js',()=>({ssoConnectionService:{resolve:vi.fn(async()=>({version:'a'.repeat(64),profile:null,legacy:true}))}}));
@@ -95,7 +96,43 @@ describe('provider-neutral OIDC browser flow', () => {
     });
   });
 
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    config.publicApiOrigin = undefined;
+    vi.unstubAllGlobals();
+  });
+
+  it('completes OIDC with the registered API callback and returns to the frontend', async () => {
+    config.publicApiOrigin = 'https://api.frontend.test';
+    const callbackUrl = `${config.publicApiOrigin}/api/auth/identity/callback`;
+    const splitProtocol = new MockOidcProvider({ callbackUrl });
+    vi.stubGlobal('fetch', splitProtocol.fetch.bind(splitProtocol));
+    const provider = { ...providerA, configurationJson: JSON.stringify(splitProtocol.configuration()) };
+    identityProviderService.getDirectLoginProviderById.mockResolvedValue(provider);
+    identityProviderService.getByKey.mockResolvedValue(provider);
+
+    const browser = request.agent(app);
+    const start = await browser.get(`/api/auth/providers/${provider.id}/start`).redirects(0);
+    expect(start.status).toBe(302);
+    expect(start.headers['cache-control']).toBe('no-store');
+    const authorization = new URL(start.headers.location);
+    expect(authorization.searchParams.get('redirect_uri')).toBe(callbackUrl);
+    expect(authorization.searchParams.get('code_challenge_method')).toBe('S256');
+    splitProtocol.setTokenClaims({ sub: 'split-user', email: 'split@example.test', email_verified: true, nonce: authorization.searchParams.get('nonce')! });
+
+    const callback = await browser.get(new URL(callbackUrl).pathname)
+      .query({ code: 'split-code', state: authorization.searchParams.get('state') }).redirects(0);
+    expect(callback.status).toBe(302);
+    expect(callback.headers.location).toBe('http://frontend.test/');
+    expect(callback.headers['cache-control']).toBe('no-store');
+    expect(callback.headers['set-cookie']).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^accessToken=.+; HttpOnly/),
+      expect.stringMatching(/^refreshToken=.+; HttpOnly/),
+    ]));
+    expect(identityProviderProvisioningService.reconcileOidcLogin).toHaveBeenCalledWith(
+      expect.objectContaining({ id: provider.id }),
+      expect.objectContaining({ sub: 'split-user' }),
+    );
+  });
 
   it('keeps two OIDC providers isolated by provider id, state, PKCE verifier, provisioning, and session', async () => {
     const browserA = request.agent(app);

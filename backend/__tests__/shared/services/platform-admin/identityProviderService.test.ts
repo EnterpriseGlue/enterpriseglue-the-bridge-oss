@@ -18,6 +18,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({ getDataSource: vi.f
 describe('identityProviderService', () => {
   const find = vi.fn(); const findOne = vi.fn(); const insert = vi.fn(); const update = vi.fn();
   const tenantFindOne = vi.fn(); const transaction = vi.fn();
+  const originalApiOrigin = config.publicApiOrigin;
   beforeEach(() => {
     vi.clearAllMocks(); findOne.mockResolvedValue(null); tenantFindOne.mockResolvedValue(null); find.mockResolvedValue([]); insert.mockResolvedValue(undefined);
     (config as { tenancyCloudRequired: boolean }).tenancyCloudRequired = false;
@@ -30,6 +31,7 @@ describe('identityProviderService', () => {
     (getDataSource as any).mockResolvedValue({ ...manager, transaction });
   });
   afterEach(() => {
+    config.publicApiOrigin = originalApiOrigin;
     (config as { tenancyCloudRequired: boolean }).tenancyCloudRequired = false;
     delete process.env.EG_ENFORCE_IDENTITY_PROVIDER_ENDPOINT_POLICY;
     delete process.env.EG_IDENTITY_PROVIDER_ALLOWED_HOSTS;
@@ -55,15 +57,17 @@ describe('identityProviderService', () => {
     } finally { config.tenancyMode = previousMode; }
   });
 
-  it('requires the exact tenant callback for managed OIDC and SAML providers', async () => {
+  it.each([undefined, 'https://api.example.test'])('requires the exact tenant callback for managed providers with API origin %s', async (apiOrigin) => {
     (config as { tenancyCloudRequired: boolean }).tenancyCloudRequired = true;
+    config.publicApiOrigin = apiOrigin;
+    const callbackOrigin = apiOrigin ?? 'http://localhost:5173';
     tenantFindOne.mockResolvedValue({ slug: 'acme' });
 
     await expect(identityProviderService.upsert({
       tenantId: 'tenant-a', key: 'entra', protocol: 'oidc',
       configuration: {
         issuerUrl: 'https://login.example.test', clientId: 'client',
-        callbackUrl: 'http://localhost:5173/api/t/acme/auth/identity/callback',
+        callbackUrl: `${callbackOrigin}/api/t/acme/auth/identity/callback`,
       },
     })).resolves.toMatchObject({ protocol: 'oidc', tenantId: 'tenant-a' });
 
@@ -71,7 +75,7 @@ describe('identityProviderService', () => {
       tenantId: 'tenant-a', key: 'wrong-tenant', protocol: 'oidc',
       configuration: {
         issuerUrl: 'https://login.example.test', clientId: 'client',
-        callbackUrl: 'http://localhost:5173/api/t/other/auth/identity/callback',
+        callbackUrl: `${callbackOrigin}/api/t/other/auth/identity/callback`,
       },
     })).rejects.toThrow('/api/t/acme/auth/identity/callback');
 
@@ -79,7 +83,7 @@ describe('identityProviderService', () => {
       tenantId: 'tenant-a', key: 'saml', protocol: 'saml',
       configuration: {
         entityId: 'enterpriseglue', idpEntityId: 'https://idp.example.test',
-        callbackUrl: 'http://localhost:5173/api/t/acme/auth/providers/saml/callback',
+        callbackUrl: `${callbackOrigin}/api/t/acme/auth/providers/saml/callback`,
         ssoUrl: 'https://idp.example.test/sso', signingCertificateRef: 'SAML_CERT',
       },
     })).resolves.toMatchObject({ protocol: 'saml', tenantId: 'tenant-a' });

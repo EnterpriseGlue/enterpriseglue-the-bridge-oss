@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "id": "split-origin-sso",
+  "type": "fix",
+  "scope": "sso",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators",
+    "security"
+  ],
+  "summary": "Enable OIDC and SAML sign-in when the browser uses a separate public EnterpriseGlue API origin.",
+  "userImpact": [
+    "Company sign-in, invitation enrollment, and OIDC account linking can start on the configured browser API origin."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": [
+      "For a split deployment, deploy the updated frontend and backend, then align the browser API origin, saved provider callback, and identity-provider registration before enabling SSO enforcement."
+    ]
+  },
+  "configuration": [
+    "Set EG_PUBLIC_API_ORIGIN on the backend to permit canonical sign-in callbacks on one additional exact origin."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "SSO start and callback redirects are non-cacheable. OpenAPI now documents the existing global and tenant OIDC form-post callbacks."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Production callbacks require HTTPS. Canonical paths, tenant bindings, and host-only sign-in and session cookies are retained."
+  ],
+  "documentation": [
+    "docs/how-to/auth-sso.md",
+    "docs/reference/configuration.md",
+    "docs/reference/configuration-matrix.md",
+    "docs/how-to/deploy-static-frontend-cdn.md"
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "Documentation",
+    "pages": [
+      "self-hosted-entra-oidc"
+    ]
+  },
+  "knownLimitations": [
+    "Split-origin sign-in requires same-site browser API access and a trusted shared XSRF cookie domain when the hostnames differ.",
+    "SAML single logout and frontend plugin assets retain their existing routing requirements."
+  ],
+  "rollback": [
+    "Restore the previous frontend settings, saved provider callback and identity-provider registration before removing EG_PUBLIC_API_ORIGIN or reverting the backend."
+  ],
+  "validation": [
+    "Exercise split-origin browser navigation, OIDC and SAML sign-in, bundle preview, same-origin compatibility, and rejected callback URLs.",
+    "Compare registered sign-in routes with generated OpenAPI, including redirect headers and callback parameters."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.24.6",
+      "newVersion": "0.24.7",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.23",
+      "newVersion": "0.20.24",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.18",
+      "newVersion": "0.28.19",
+      "impact": "patch"
+    }
+  ]
+}

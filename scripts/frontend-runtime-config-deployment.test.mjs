@@ -165,10 +165,10 @@ test('operator examples and the configuration matrix expose both runtime control
 });
 
 
-test('OpenShift serializes only a safe optional XSRF cookie domain into the backend ConfigMap', () => {
+test('OpenShift forwards the optional public API origin and shared XSRF domain to the backend ConfigMap', () => {
   const script = new URL('../scripts/deploy-openshift.sh', import.meta.url).pathname;
-  const run = (domain) => spawnSync('bash', ['-c', 'source "$1"; oc() { cat; }; apply_runtime_config', 'xsrf-config-test', script], {
-    encoding: 'utf8', env: { PATH: process.env.PATH, OPENSHIFT_NAMESPACE: 'xsrf-test', OPENSHIFT_ROUTE_HOST: 'app.example.test', DATABASE_TYPE: 'postgres', EG_XSRF_COOKIE_DOMAIN: domain },
+  const run = (domain, apiOrigin = '') => spawnSync('bash', ['-c', 'source "$1"; oc() { cat; }; apply_runtime_config', 'xsrf-config-test', script], {
+    encoding: 'utf8', env: { PATH: process.env.PATH, OPENSHIFT_NAMESPACE: 'xsrf-test', OPENSHIFT_ROUTE_HOST: 'app.example.test', DATABASE_TYPE: 'postgres', EG_XSRF_COOKIE_DOMAIN: domain, EG_PUBLIC_API_ORIGIN: apiOrigin },
   });
   for (const domain of ['', 'example.test']) {
     const result = run(domain);
@@ -176,4 +176,12 @@ test('OpenShift serializes only a safe optional XSRF cookie domain into the back
     assert.ok(result.stdout.includes(`EG_XSRF_COOKIE_DOMAIN: "${domain}"`));
   }
   assert.notEqual(run('example.test"\ninjected: true').status, 0);
+  const split = run('example.test', 'https://api.example.test:8443');
+  assert.equal(split.status, 0, split.stderr);
+  assert.match(split.stdout, /EG_PUBLIC_API_ORIGIN: "https:\/\/api\.example\.test:8443"/);
+  assert.match(split.stdout, /EG_FRONTEND_RUNTIME_API_BASE_URL: "https:\/\/api\.example\.test:8443"/);
+  assert.match(split.stdout, /EG_FRONTEND_RUNTIME_CONFIG_REQUIRED: "true"/);
+  for (const invalid of ['http://api.example.test', 'https://api.example.test/base', 'https://api.example.test"\ninjected: true']) {
+    assert.notEqual(run('example.test', invalid).status, 0);
+  }
 });

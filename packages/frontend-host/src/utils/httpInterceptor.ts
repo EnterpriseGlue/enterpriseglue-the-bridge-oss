@@ -10,8 +10,7 @@
 
 import { USER_KEY } from '../constants/storageKeys.js';
 import { getErrorMessageFromResponse } from '../shared/api/apiErrorUtils.js';
-import { config } from '../config.js';
-import { apiFetch } from './apiFetch.js';
+import { apiFetch, applyApiBaseUrl } from './apiFetch.js';
 import { getTenancyCapabilities } from '../services/tenancy.js';
 import { getPublicAuthRoutePolicy } from './publicAuthRoute.js';
 import { advanceBrowserSessionRevision, getBrowserSessionRevision, BrowserSessionChangedError } from './browserSession.js';
@@ -102,13 +101,6 @@ function addTenantPrefix(url: string): string {
     return `/api/t/${encodeURIComponent(tenantSlug)}${url.slice('/api'.length)}`;
   }
   return `/t/${encodeURIComponent(tenantSlug)}${url}`;
-}
-
-function applyApiBaseUrl(url: string): string {
-  if (!config.apiBaseUrl) return url;
-  if (/^https?:\/\//.test(url)) return url;
-  const base = config.apiBaseUrl.replace(/\/$/, '');
-  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
 function getTenantLoginPath(pathname: string): string {
