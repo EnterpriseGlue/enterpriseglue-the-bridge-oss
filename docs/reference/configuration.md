@@ -204,6 +204,11 @@ rollback qualification gates pass for the intended deployment.
   OIDC/SAML providers and returns the verified session to `/cloud/onboarding`.
   It requires pooled, Cloud-required tenancy and remains disabled for ordinary
   self-hosted deployments.
+- The global Microsoft provider can use the `common/v2.0` issuer for work,
+  school and personal accounts. Use the application’s exact neutral callback
+  URL and the `openid email profile` scopes. A new Microsoft subject verifies
+  its email through the configured outbound mail service in the same browser.
+  Returning users are matched by the linked provider subject and directory.
 - `EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY` and `EG_CLOUD_EMAIL_TURNSTILE_SECRET`:
   Configure the managed email signup widget as a pair on the backend. Mount the
   secret from the deployment's credential store. Register the public app

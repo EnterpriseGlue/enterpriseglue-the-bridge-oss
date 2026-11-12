@@ -16,6 +16,7 @@ import rateLimit from 'express-rate-limit';
 import request from 'supertest';
 import { installBrowserRequestProtection } from '@enterpriseglue/backend-host/middleware/browser-request-protection.js';
 import { XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
+import { genericOidcService, type OidcIdentityClaims } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { MockOidcProvider } from '../identity-mocks/index.js';
 
 // Only connection selection is injected. Repositories, transactions, TypeORM
@@ -81,8 +82,9 @@ const connection={type:'postgres' as const, host:env('POSTGRES_HOST','127.0.0.1'
 const admin=new DataSource({...connection,username:env('POSTGRES_USER','postgres'),password:env('POSTGRES_PASSWORD','postgres')});
 const protocol=new MockOidcProvider({callbackUrl:'http://localhost:5173/api/auth/identity/callback'});
 const original={tenancyMode:config.tenancyMode,tenancyCloudRequired:config.tenancyCloudRequired,cloudAccountIdentityEnabled:config.cloudAccountIdentityEnabled,postgresSchema:config.postgresSchema};
-let owner:DataSource, runtime:DataSource, app:express.Express, providerId:string;
+let owner:DataSource, runtime:DataSource, app:express.Express, providerId:string, microsoftProviderId:string;
 let server:Server;
+const microsoftIssuer = 'https://login.microsoftonline.com/common/v2.0';
 
 describe('verified global OIDC callback and renewable sessions under forced PostgreSQL RLS', () => {
   beforeAll(async () => {
@@ -100,6 +102,11 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     await authzGroupService.seedDefaultPlatformGroups(owner);
     const provider=await identityProviderService.upsert({tenantId:null,key:'identity.oidc.global-fixture',displayName:'Verified fixture',protocol:'oidc',isEnabled:true,authenticationMode:'direct',configuration:protocol.configuration()});
     providerId=provider.id;
+    const microsoft = await identityProviderService.upsert({
+      tenantId: null, key: 'identity.oidc.microsoft-fixture', displayName: 'Microsoft', protocol: 'oidc',
+      isEnabled: true, authenticationMode: 'direct', configuration: { ...protocol.configuration(), issuerUrl: microsoftIssuer + '/' },
+    });
+    microsoftProviderId = microsoft.id;
     const runner=owner.createQueryRunner();try{await applyPostgresTenantPolicies(runner);}finally{await runner.release();}
     await owner.query(`GRANT USAGE ON SCHEMA ${schema} TO ${runtimeName}`);
     await owner.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${runtimeName}`);
@@ -205,7 +212,11 @@ describe('verified global OIDC callback and renewable sessions under forced Post
 
   it('lists only public global choices, exchanges a real signed token, persists identity and renews a tenant-neutral session', async()=>{
     const listed=await request(server).get('/api/auth/cloud-signup/providers');expect(listed.status).toBe(200);
-    expect(listed.body).toEqual([{id:providerId,displayName:'Verified fixture',protocol:'oidc'}]);
+    expect(listed.body).toHaveLength(2);
+    expect(listed.body).toEqual(expect.arrayContaining([
+      { id: providerId, displayName: 'Verified fixture', protocol: 'oidc' },
+      { id: microsoftProviderId, displayName: 'Microsoft', protocol: 'oidc' },
+    ]));
     const {browser,callback}=await signIn('verified-a','verified-a@example.test');
     expect(callback.status,JSON.stringify(callback.body)).toBe(302);
     expect(callback.headers.location).toContain('/cloud/onboarding');
@@ -561,6 +572,55 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect(sessions).not.toHaveLength(0);expect(sessions.every(row=>row.identityProviderId===providerId)).toBe(true);
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
   });
+
+  it('verifies a new Microsoft mailbox and signs the linked subject back in without an email claim', async () => {
+    const directoryTenant = 'e2f91b02-d9ef-4eeb-9921-114020624c73';
+    const subject = 'microsoft-subject';
+    const email = 'verified-mailbox@example.test';
+    const providerHint = 'provider-email-hint@example.test';
+    const start = vi.spyOn(genericOidcService, 'createAuthorizationRequest').mockImplementation(async (_provider, state) => ({
+      url: `${microsoftIssuer}/authorize?state=${encodeURIComponent(state)}`, codeVerifier: 'fixture-verifier',
+    }));
+    const exchange = vi.spyOn(genericOidcService, 'exchangeCode');
+    vi.mocked(sendVerificationEmail).mockResolvedValue({ success: true });
+    const signInMicrosoft = async (claims: OidcIdentityClaims) => {
+      const browser = request.agent(server);
+      const started = await browser.get(`/api/auth/cloud-signup/providers/${microsoftProviderId}/start?returnTo=%2Fcloud%2Fonboarding`).expect(302);
+      exchange.mockResolvedValueOnce(claims);
+      const state = new URL(started.headers.location).searchParams.get('state')!;
+      const callback = await browser.get('/api/auth/identity/callback').query({ state, code: 'verified-fixture-code' }).expect(302);
+      return { browser, callback };
+    };
+    try {
+      const { browser, callback } = await signInMicrosoft({ sub: subject, tid: directoryTenant, email: providerHint, email_verified: true });
+      expect(new URL(callback.headers.location).pathname).toBe('/signup/microsoft/email');
+      expect(await runtime.getRepository(User).countBy({ email: providerHint })).toBe(0);
+      await browser.get('/cloud-probe').expect(401);
+      const prefix = '/api/auth/cloud-signup/microsoft/email';
+      expect((await browserPost(browser, `${prefix}/request`, { email })).status).toBe(202);
+      const link = new URL(vi.mocked(sendVerificationEmail).mock.lastCall![0].verificationUrl);
+      await request(server).get(link.pathname + link.search).expect(401);
+      await browser.get(link.pathname + link.search).expect(302);
+      expect(await runtime.getRepository(User).countBy({ email })).toBe(0);
+      await browser.post(`${prefix}/complete`).send({}).expect(403);
+      const complete = await browserPost(browser, `${prefix}/complete`);
+      expect(complete.status, JSON.stringify(complete.body)).toBe(200);
+      expect(complete.body).toEqual({ destination: '/cloud/onboarding' });
+      const account = await runtime.getRepository(User).findOneByOrFail({ email });
+      expect(account.isEmailVerified).toBe(true);
+      expect((await browser.get('/cloud-probe').expect(200)).body.userId).toBe(account.id);
+      expect((await browserPost(browser, `${prefix}/complete`)).status).toBe(401);
+
+      const returned = await signInMicrosoft({ sub: subject, tid: directoryTenant });
+      expect(new URL(returned.callback.headers.location).pathname).toBe('/cloud/onboarding');
+      expect((await returned.browser.get('/cloud-probe').expect(200)).body.userId).toBe(account.id);
+      expect(await runtime.getRepository(User).countBy({ email: providerHint })).toBe(0);
+    } finally {
+      start.mockRestore();
+      exchange.mockRestore();
+    }
+  });
+
   it('renews an email-link session and binds optional passkey enrollment to that exact session under RLS', async () => {
     vi.mocked(sendVerificationEmail).mockResolvedValue({ success: true });
     vi.mocked(generateRegistrationOptions).mockResolvedValue({ challenge: 'local-fixture-challenge' } as never);
