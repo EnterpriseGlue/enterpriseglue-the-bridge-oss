@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.37.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.36.1...v0.37.0) (2026-11-12)
+
+### Changes
+
+- **cloud-authentication:** Enforce the configured company sign-in policy on managed tenant sessions.
+- **cloud-authentication:** Support Cloud sign-in with a Microsoft application registered for organizational and personal accounts.
+- **cloud-onboarding:** Bind managed Cloud organization requests to a verified account and deliver request notifications through the host email service.
+- **cloud-authentication:** Require a verified second factor for configured managed Cloud platform administrators.
+- **host-dashboard:** Expose a dashboard slot for first-run project and engine setup actions.
+- **documentation:** Let a verified managed Cloud user open documentation through the existing account handoff.
+- **oracle-images:** Retain Oracle publication receipts in GHCR and provide verified inputs for manual documentation catch-up.
+
+Full upgrade, compatibility and verification details: [v0.37.0 release notes](docs/releases/v0.37.0.md).
+
 ## [0.36.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.36.0...v0.36.1) (2026-11-12)
 
 ### Changes
