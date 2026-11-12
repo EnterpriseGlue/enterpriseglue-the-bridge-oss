@@ -3247,7 +3247,18 @@ registry.registerPath({
   method: 'put', path: '/api/t/{tenantSlug}/tenant/login-policy',
   ...authzExtension('tenant.settings.manage', 'PUT', '/api/t/{tenantSlug}/tenant/login-policy'),
   request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
-  responses: { 200: { description: 'Tenant login policy updated', content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
+  responses: { 200: { description: 'Tenant login policy updated', content: { 'application/json': { schema: TenantLoginPolicySchema } } },
+    409: { description: 'Company SSO-only policy requires an enabled direct tenant provider' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/tenant/login-policy/recover',
+  ...authzExtension('platform.tenants.manage', 'POST', '/api/t/{tenantSlug}/tenant/login-policy/recover'),
+  request: { params: TenantPathSchema }, responses: { 200: { description: 'Restores the managed tenant login policy to automatic',
+    content: { 'application/json': { schema: TenantLoginPolicySchema } } },
+    401: { description: 'An authenticated recovery session is required' },
+    403: { description: 'Platform tenant management permission and CSRF proof are required' },
+    404: { description: 'The managed tenant or recovery route is unavailable' },
+  },
 });
 registry.registerPath({
   method: 'get', path: '/api/t/{tenantSlug}/tenant/domains',
@@ -4376,6 +4387,18 @@ registry.registerPath({
   responses: {
     200: { description: 'Canonical platform-administrator recovery login successful', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } },
     401: { description: 'Invalid credentials or recovery is unavailable' },
+  },
+});
+
+registry.registerPath({
+  method: 'post', path: '/api/auth/recovery/session',
+  security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+  ...authzExemption('POST', '/api/auth/recovery/session'),
+  request: { body: { required: true, content: { 'application/json': { schema: z.object({}).strict() } } } },
+  responses: {
+    204: { description: 'Short platform-administrator recovery session issued in browser cookies' },
+    401: { description: 'A recent verified platform-administrator Cloud session is required' },
+    403: { description: 'Valid CSRF proof is required' },
   },
 });
 

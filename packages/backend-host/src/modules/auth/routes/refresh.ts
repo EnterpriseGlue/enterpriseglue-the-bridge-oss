@@ -1,3 +1,4 @@
+import { requireCloudAdministratorMfa } from '@enterpriseglue/shared/services/platform-admin/requireCloudAdministratorMfa.js';
 import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
@@ -13,6 +14,7 @@ import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHan
 import { config, shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { RefreshAccessTokenResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { getActivePlatformAdministratorUserIds, isCloudEmailLinkAccount } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
+import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platform-admin/TenantLoginPolicyService.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
 
@@ -106,6 +108,8 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     throw Errors.unauthorized('Session has been revoked');
   }
 
+  await requireCloudAdministratorMfa(user.id, payload.cloudAdministratorMfaVerified, dataSource);
+
   // Verify refresh token exists and is not revoked
   const tokenResult = await refreshTokenRepo.find({
     where: config.tenancyMode !== 'pooled' ? [{
@@ -127,29 +131,36 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
       expiresAt: MoreThan(Date.now()),
       tenantId: tenantId || IsNull(),
     },
-    select: ['tokenHash', 'tenantId', 'deviceInfo'],
+    select: ['tokenHash', 'tenantId', 'deviceInfo', 'identityProviderId', 'providerSubjectId', 'expiresAt'],
   });
 
   // Check if any of the stored token hashes match the provided token
-  let isValidToken = false;
+  let session: RefreshToken | undefined;
   for (const row of tokenResult) {
     const isMatch = await bcrypt.compare(refreshToken, row.tokenHash);
     if (isMatch && persistedSessionClass(row.deviceInfo) === (payload.sessionClass || null)) {
-      isValidToken = true;
+      if (tenantId && tenantSlug) await tenantLoginPolicyService.requireCompanySso({ tenantId, tenantSlug }, payload, row, dataSource);
+      session = row;
       break;
     }
   }
 
-  if (!isValidToken) {
+  if (!session) {
     throw Errors.unauthorized('Invalid refresh token');
   }
 
   // Generate new access token
+  const recoveryTtl = payload.recovery === 'platform_administrator' && payload.cloudAdministratorMfaVerified === true
+    ? Math.floor((Number(session.expiresAt) - Date.now()) / 1000) : Infinity;
+  if (!(recoveryTtl > 0)) throw Errors.unauthorized('Session has expired');
+  const expiresIn = Math.min(config.jwtAccessTokenExpires, recoveryTtl);
   const accessToken = generateAccessToken(user, {
     ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
     administratorRecovery: payload.recovery === 'platform_administrator',
     authenticationMethod: payload.authenticationMethod,
     mfaVerified: payload.mfaVerified === true,
+    ...(payload.cloudAdministratorMfaVerified === true ? { cloudAdministratorMfaVerified: true } : {}),
+    ...(Number.isFinite(recoveryTtl) ? { maximumTtl: recoveryTtl } : {}),
     ...(payload.sessionClass ? { sessionClass: payload.sessionClass } : {}),
     ...(tenantId ? { tenantId } : {}),
     ...(tenantSlug ? { tenantSlug } : {}),
@@ -160,13 +171,13 @@ router.post('/api/auth/refresh', apiLimiter, asyncHandler(async (req, res) => {
     httpOnly: true,
     secure: shouldUseSecureCookies(),
     sameSite: 'lax',
-    maxAge: config.jwtAccessTokenExpires * 1000,
+    maxAge: expiresIn * 1000,
     path: '/',
   });
   rotateXsrfToken(req, res, req.cookies?.refreshToken ?? accessToken);
 
   res.json(RefreshAccessTokenResponseSchema.parse({
-    expiresIn: config.jwtAccessTokenExpires,
+    expiresIn,
   }));
 }));
 

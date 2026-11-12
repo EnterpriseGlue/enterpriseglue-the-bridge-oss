@@ -23,6 +23,7 @@ const proofSchema = z.object({
   directoryTenantId: z.uuid(),
   providerSessionId: z.string().max(255).nullable(),
   mfaVerified: z.boolean(),
+  cloudAdministratorMfaVerified: z.literal(true).optional(),
   destination: CloudMicrosoftEmailDestinationSchema,
 }).strict();
 

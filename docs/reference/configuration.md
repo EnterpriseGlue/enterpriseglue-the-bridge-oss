@@ -296,6 +296,19 @@ See [Tenant Secret Broker](tenant-secret-broker.md) for its private HTTP
 contract, write-only tenant administration routes, SSO purpose mapping,
 rotation, outage, recovery, and rollback behavior.
 
+### Managed Cloud platform administrator MFA
+
+Set `EG_CLOUD_PLATFORM_ADMIN_MFA_REQUIRED=true` in a managed Cloud account
+runtime after qualifying an operator's MFA sign-in on that deployment. For
+current global platform administrators, the host requires verified second-factor
+evidence when issuing a session, refreshing it, and authenticating requests.
+Use an operator identity provider configured to attest MFA or an enrolled
+user-verifying passkey. For tenant SSO recovery, keep an operator MFA method
+independent of the tenant's provider. After a fresh platform sign-in, open
+`/admin-recovery` and select **Start recovery session**. The host rechecks
+current platform administrator membership and issues recovery authority for up
+to five minutes. Use that browser session for the tenant policy reset.
+
 ### Git & Encryption
 - `GIT_DEFAULT_BRANCH`
 - `ENCRYPTION_KEY`

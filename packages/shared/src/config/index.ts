@@ -38,6 +38,7 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   tenantCloudIdentityAudience: z.string().min(1).max(256).optional(),
   platformCloudIdentityAudience: z.string().min(1).max(256).optional(),
   cloudAccountIdentityEnabled: z.boolean().default(false),
+  cloudPlatformAdminMfaRequired: z.boolean().default(false),
   cloudEmailTurnstileSiteKey: z.string().min(1).max(255).optional(),
   cloudEmailTurnstileSecret: z.string().min(1).max(512).optional(),
   documentationOrigin: z.url().optional(),
@@ -210,6 +211,7 @@ function loadConfig(): Config {
     tenantCloudIdentityAudience: envOrUndefined(process.env.EG_TENANT_CLOUD_IDENTITY_AUDIENCE),
     platformCloudIdentityAudience: envOrUndefined(process.env.EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE),
     cloudAccountIdentityEnabled: process.env.EG_CLOUD_ACCOUNT_IDENTITY_ENABLED === 'true',
+    cloudPlatformAdminMfaRequired: process.env.EG_CLOUD_PLATFORM_ADMIN_MFA_REQUIRED === 'true',
     cloudEmailTurnstileSiteKey: envOrUndefined(process.env.EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY),
     cloudEmailTurnstileSecret: envOrUndefined(process.env.EG_CLOUD_EMAIL_TURNSTILE_SECRET),
     documentationOrigin: process.env.EG_DOCUMENTATION_ORIGIN,
@@ -407,6 +409,9 @@ if (config.tenancyCloudRequired && config.tenancyMode !== 'pooled') {
 }
 if (config.cloudAccountIdentityEnabled && (config.tenancyMode !== 'pooled' || !config.tenancyCloudRequired)) {
   throw new Error('EG_CLOUD_ACCOUNT_IDENTITY_ENABLED=true requires pooled managed Cloud tenancy.');
+}
+if (config.cloudPlatformAdminMfaRequired && !config.cloudAccountIdentityEnabled) {
+  throw new Error('EG_CLOUD_PLATFORM_ADMIN_MFA_REQUIRED=true requires EG_CLOUD_ACCOUNT_IDENTITY_ENABLED=true.');
 }
 if (Boolean(config.cloudEmailTurnstileSiteKey) !== Boolean(config.cloudEmailTurnstileSecret) ||
     (config.cloudEmailTurnstileSiteKey && !config.cloudAccountIdentityEnabled)) {
