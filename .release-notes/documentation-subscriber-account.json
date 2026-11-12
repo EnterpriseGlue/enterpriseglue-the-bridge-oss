@@ -5,25 +5,73 @@
   "type": "feature",
   "scope": "documentation",
   "breaking": false,
-  "audiences": ["users", "operators", "security"],
+  "audiences": [
+    "users",
+    "operators",
+    "security"
+  ],
   "summary": "Let a verified managed Cloud user open documentation through the existing account handoff.",
-  "userImpact": ["Verified users can open documentation from their profile when the account gateway is configured."],
-  "upgrade": { "required": false, "instructions": [] },
-  "configuration": ["Use the same dedicated documentation gateway credential on both services."],
+  "userImpact": [
+    "Verified users can open documentation from their profile when the account gateway is configured."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Use the same dedicated documentation gateway credential on both services."
+  ],
   "api": {
     "compatibility": "additive",
-    "changes": ["A gateway-authenticated documentation session can retrieve the current verified email at GET /api/auth/documentation/subscriber."]
+    "changes": [
+      "A gateway-authenticated documentation session can retrieve the current verified email at GET /api/auth/documentation/subscriber."
+    ]
   },
-  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
-  "security": ["The existing browser proof, single-use grant, exact source session, account eligibility and gateway credential remain required."],
-  "documentation": ["docs/reference/configuration.md"],
-  "knownLimitations": ["The subscriber gateway must support the handoff and have a matching configured account origin."],
-  "rollback": ["Disable the gateway handoff before restoring an earlier host version."],
-  "validation": ["Focused route, frontend and strict authorization contract checks."],
-  "packages": [],
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The existing browser proof, single-use grant, exact source session, account eligibility and gateway credential remain required."
+  ],
+  "documentation": [
+    "docs/reference/configuration.md"
+  ],
+  "knownLimitations": [
+    "The subscriber gateway must support the handoff and have a matching configured account origin."
+  ],
+  "rollback": [
+    "Disable the gateway handoff before restoring an earlier host version."
+  ],
+  "validation": [
+    "Focused route, frontend and strict authorization contract checks."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.24.2",
+      "newVersion": "0.24.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.18",
+      "newVersion": "0.20.19",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.14",
+      "newVersion": "0.28.15",
+      "impact": "patch"
+    }
+  ],
   "customerDocumentation": {
     "impact": "required",
     "owner": "documentation-maintainers",
-    "pages": ["documentation-account-sign-in"]
+    "pages": [
+      "documentation-account-sign-in"
+    ]
   }
 }
