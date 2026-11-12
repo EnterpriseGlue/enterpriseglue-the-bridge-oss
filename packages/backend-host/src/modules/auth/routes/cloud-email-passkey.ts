@@ -1,7 +1,7 @@
 import { rotateXsrfToken } from '../../../utils/xsrf.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
-import { IsNull, LessThan, MoreThan } from 'typeorm';
+import { IsNull, LessThan, MoreThan, type EntityManager } from 'typeorm';
 import { z } from 'zod';
 import {
   generateAuthenticationOptions,
@@ -13,6 +13,7 @@ import {
   type RegistrationResponseJSON,
 } from './cloud-passkey-webauthn.js';
 import { apiLimiter, authLimiter, identityFlowLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
+import { requireCloudAccountOrTenantAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { enforceParsedPayloadLimit } from '@enterpriseglue/shared/middleware/requestSizeLimit.js';
@@ -24,18 +25,24 @@ import { CloudEmailSignup } from '@enterpriseglue/shared/infrastructure/persiste
 import { CloudPasskey } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskey.js';
 import { CloudPasskeyChallenge } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskeyChallenge.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
 import { addCaseInsensitiveEquals } from '@enterpriseglue/shared/infrastructure/persistence/adapters/QueryHelpers.js';
 import { authzGroupService } from '@enterpriseglue/shared/services/platform-admin/AuthzGroupService.js';
+import { isCloudEmailLinkAccount } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { authSessionService, type IssuedAuthSession } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { logAudit, AuditActions } from '@enterpriseglue/shared/services/audit.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
+import { CloudEmailSignupChallengeSchema, CloudEmailSignupRequestSchema } from '@enterpriseglue/shared/schemas/auth/cloud-email-signup.js';
+import { verifyCloudEmailSignup } from './cloud-email-signup-protection.js';
 
 const router = Router();
 const emailCookie = 'cloud_email_signup_proof';
+const emailProofPath = '/api/auth/cloud-signup/email';
 const loginCookie = 'cloud_passkey_login_proof';
+const enrollmentCookie = 'cloud_passkey_enrollment_proof';
+const enrollmentPath = '/api/auth/cloud-passkey/register';
 const proofLifetimeMs = 15 * 60 * 1000;
 const challengeLifetimeMs = 5 * 60 * 1000;
-const emailSchema = z.object({ email: z.email().max(320), intent: z.enum(['cloud', 'documentation']).optional() }).strict();
 const credentialSchema = z.object({
   id: z.string().min(1).max(2048),
   rawId: z.string().min(1).max(2048),
@@ -84,8 +91,8 @@ async function pendingSignup(req: Request): Promise<CloudEmailSignup> {
   return pending;
 }
 
-async function existingUser(email: string): Promise<User | null> {
-  let query = (await getDataSource()).getRepository(User).createQueryBuilder('user');
+async function existingUser(email: string, store?: EntityManager): Promise<User | null> {
+  let query = (store ?? await getDataSource()).getRepository(User).createQueryBuilder('user');
   query = addCaseInsensitiveEquals(query, 'user', 'email', 'email', email);
   return query.getOne();
 }
@@ -96,14 +103,62 @@ function setSessionCookies(req: Request, res: Response, session: IssuedAuthSessi
   rotateXsrfToken(req, res, session.refreshToken);
 }
 
+function registrationOptions(userId: string, email: string) {
+  const rp = relyingParty();
+  return generateRegistrationOptions({
+    rpName: 'EnterpriseGlue', rpID: rp.id,
+    userID: new Uint8Array(Buffer.from(userId)), userName: email, userDisplayName: email,
+    attestationType: 'none', timeout: challengeLifetimeMs,
+    authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+    supportedAlgorithmIDs: [-7, -257],
+  });
+}
+
+async function verifyRegistration(body: RegistrationResponseJSON, challenge: string) {
+  const rp = relyingParty();
+  try {
+    const verification = await verifyRegistrationResponse({
+      response: body, expectedChallenge: challenge, expectedOrigin: rp.origin, expectedRPID: rp.id,
+      requireUserVerification: true,
+    });
+    if (verification.verified && verification.registrationInfo) return verification.registrationInfo.credential;
+  } catch { /* Return the same response for failed or malformed attestations. */ }
+  throw Errors.unauthorized('Passkey registration failed');
+}
+
+async function savePasskey(manager: EntityManager, userId: string, credential: Awaited<ReturnType<typeof verifyRegistration>>, now: number) {
+  await manager.getRepository(CloudPasskey).insert({
+    id: generateId(), userId, credentialId: credential.id, credentialIdHash: tokenHash(credential.id),
+    publicKey: Buffer.from(credential.publicKey).toString('base64url'), counter: credential.counter,
+    transportsJson: JSON.stringify(credential.transports || []), createdAt: now, lastUsedAt: null, revokedAt: null,
+  });
+}
+
+function enrollmentPrincipal(req: Request) {
+  requireCloudEmail();
+  const principal = req.user;
+  if (principal?.sessionClass !== 'cloud_account' || principal.authenticationMethod !== 'email_link' || !principal.sessionId) {
+    throw Errors.unauthorized('Sign in with your email link before adding a passkey');
+  }
+  return { userId: principal.userId, email: principal.email, sessionId: principal.sessionId, authSessionVersion: principal.authSessionVersion ?? 0 };
+}
+
+router.get('/api/auth/cloud-signup/email/challenge', apiLimiter, identityFlowLimiter, asyncHandler(async (_req, res) => {
+  requireCloudEmail();
+  res.setHeader('cache-control', 'no-store');
+  res.json(CloudEmailSignupChallengeSchema.parse({ siteKey: config.cloudEmailTurnstileSiteKey ?? null }));
+}));
+
 /** Requesting a link never creates a user, membership, or identity-provider association. */
 router.post('/api/auth/cloud-signup/email/request', apiLimiter, identityFlowLimiter, authLimiter,
-  validateBody(emailSchema), asyncHandler(async (req, res) => {
+  validateBody(CloudEmailSignupRequestSchema), asyncHandler(async (req, res) => {
     requireCloudEmail();
     relyingParty();
     const email = String(req.body.email).trim().toLowerCase();
+    await verifyCloudEmailSignup(email, req.body.turnstileToken);
     const frontend = config.frontendUrl.replace(/\/$/, '');
-    if (await existingUser(email)) {
+    const user = await existingUser(email);
+    if (user && (req.body.intent === 'documentation' || !await isCloudEmailLinkAccount(user, await getDataSource()))) {
       const signInPath = req.body.intent === 'documentation' ? '/documentation/access' : '/login';
       const sent = await sendEmailWithConfig(undefined, email, 'EnterpriseGlue account sign-in',
         `<p>An EnterpriseGlue account already uses this address. Sign in using its existing method at <a href="${frontend}${signInPath}">EnterpriseGlue</a>.</p>`,
@@ -142,25 +197,62 @@ router.get('/api/auth/cloud-signup/email/verify', apiLimiter, identityFlowLimite
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw Errors.unauthorized('Email signup link is invalid or expired');
   const pending = await (await getDataSource()).getRepository(CloudEmailSignup).findOneBy({ tokenHash: tokenHash(token) });
   if (!pending || Number(pending.expiresAt) <= Date.now()) throw Errors.unauthorized('Email signup link is invalid or expired');
-  cookie(res, emailCookie, token, Math.min(proofLifetimeMs, Number(pending.expiresAt) - Date.now()), '/api/auth/cloud-signup/email');
+  cookie(res, emailCookie, token, Math.min(proofLifetimeMs, Number(pending.expiresAt) - Date.now()), emailProofPath);
   res.setHeader('Referrer-Policy', 'no-referrer');
-  res.redirect(`${config.frontendUrl.replace(/\/$/, '')}/signup/email/passkey${req.query.intent === 'documentation' ? '?intent=documentation' : ''}`);
+  res.setHeader('Cache-Control', 'no-store');
+  const nextPath = req.query.intent === 'documentation' ? '/signup/email/passkey?intent=documentation' : '/signup/email/continue';
+  res.redirect(`${config.frontendUrl.replace(/\/$/, '')}${nextPath}`);
 }));
+
+router.post('/api/auth/cloud-signup/email/complete', apiLimiter, identityFlowLimiter, authLimiter,
+  asyncHandler(async (req, res) => {
+    requireCloudEmail();
+    const pending = await pendingSignup(req);
+    const now = Date.now();
+    const dataSource = await getDataSource();
+    const { user, session, created } = await dataSource.transaction(async manager => {
+      const consumed = await manager.getRepository(CloudEmailSignup).delete({
+        id: pending.id, tokenHash: pending.tokenHash, expiresAt: MoreThan(now),
+      });
+      if (consumed.affected !== 1) throw Errors.unauthorized('Email sign-in link is invalid or expired');
+      const repo = manager.getRepository(User);
+      let user = await existingUser(pending.email, manager);
+      const created = !user;
+      if (user) {
+        if (!await isCloudEmailLinkAccount(user, manager)) throw Errors.unauthorized('Email sign-in link is invalid or expired');
+        const updated = await repo.update({ id: user.id, email: user.email, authProvider: 'email_link', isActive: true,
+          isEmailVerified: true, mustResetPassword: false, authSessionVersion: user.authSessionVersion }, { lastLoginAt: now, updatedAt: now });
+        if (updated.affected !== 1) throw Errors.unauthorized('Email sign-in link is invalid or expired');
+      } else {
+        await repo.insert({
+          id: pending.id, email: pending.email, authProvider: 'email_link', passwordHash: null,
+          firstName: null, lastName: null, platformRole: 'user', isActive: true,
+          mustResetPassword: false, failedLoginAttempts: 0, lockedUntil: null,
+          isEmailVerified: true, emailVerificationToken: null, emailVerificationTokenExpiry: null,
+          createdAt: now, updatedAt: now, lastLoginAt: now, authSessionVersion: 0, createdByUserId: null,
+        });
+        await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, pending.id);
+        user = await repo.findOneByOrFail({ id: pending.id });
+      }
+      const session = await authSessionService.issue(user, {
+        sessionClass: 'cloud_account', authenticationMethod: 'email_link',
+        userAgent: req.headers['user-agent'] || null, ipAddress: req.ip, store: manager,
+      });
+      return { user, session, created };
+    });
+    clearCookie(res, emailCookie, emailProofPath);
+    setSessionCookies(req, res, session);
+    await logAudit({ userId: user.id, action: AuditActions.LOGIN_SUCCESS, details: { method: 'email_link',
+      ...(created ? { event: 'cloud_account_created' } : {}) } });
+    res.status(created ? 201 : 200).json({ success: true });
+  }));
 
 router.post('/api/auth/cloud-signup/email/passkey/options', apiLimiter, identityFlowLimiter, authLimiter,
   asyncHandler(async (req, res) => {
     requireCloudEmail();
     const pending = await pendingSignup(req);
     if (await existingUser(pending.email)) throw Errors.unauthorized('Email signup link is invalid or expired');
-    const rp = relyingParty();
-    const options = await generateRegistrationOptions({
-      rpName: 'EnterpriseGlue', rpID: rp.id,
-      userID: new Uint8Array(Buffer.from(pending.id)),
-      userName: pending.email, userDisplayName: pending.email,
-      attestationType: 'none', timeout: challengeLifetimeMs,
-      authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
-      supportedAlgorithmIDs: [-7, -257],
-    });
+    const options = await registrationOptions(pending.id, pending.email);
     await (await getDataSource()).getRepository(CloudEmailSignup).update({
       id: pending.id, tokenHash: pending.tokenHash, expiresAt: MoreThan(Date.now()),
     }, { challenge: options.challenge, challengeExpiresAt: Date.now() + challengeLifetimeMs, updatedAt: Date.now() });
@@ -175,21 +267,7 @@ router.post('/api/auth/cloud-signup/email/passkey/complete', apiLimiter, identit
       throw Errors.unauthorized('Passkey registration has expired');
     }
     const savedChallenge = pending.challenge;
-    const rp = relyingParty();
-    let verification;
-    try {
-      verification = await verifyRegistrationResponse({
-        response: req.body as RegistrationResponseJSON,
-        expectedChallenge: savedChallenge,
-        expectedOrigin: rp.origin,
-        expectedRPID: rp.id,
-        requireUserVerification: true,
-      });
-    } catch {
-      throw Errors.unauthorized('Passkey registration failed');
-    }
-    if (!verification.verified || !verification.registrationInfo) throw Errors.unauthorized('Passkey registration failed');
-    const credential = verification.registrationInfo.credential;
+    const credential = await verifyRegistration(req.body as RegistrationResponseJSON, savedChallenge);
     const now = Date.now();
     const dataSource = await getDataSource();
     const { user, session } = await dataSource.transaction(async (manager) => {
@@ -198,9 +276,7 @@ router.post('/api/auth/cloud-signup/email/passkey/complete', apiLimiter, identit
         challengeExpiresAt: MoreThan(now), expiresAt: MoreThan(now),
       });
       if (removed.affected !== 1) throw Errors.unauthorized('Passkey registration has already been used');
-      let query = manager.getRepository(User).createQueryBuilder('user');
-      query = addCaseInsensitiveEquals(query, 'user', 'email', 'email', pending.email);
-      if (await query.getOne()) throw Errors.unauthorized('This account already exists');
+      if (await existingUser(pending.email, manager)) throw Errors.unauthorized('This account already exists');
       // The discoverable WebAuthn user handle must remain the eventual account ID.
       const userId = pending.id;
       await manager.getRepository(User).insert({
@@ -210,12 +286,7 @@ router.post('/api/auth/cloud-signup/email/passkey/complete', apiLimiter, identit
         isEmailVerified: true, emailVerificationToken: null, emailVerificationTokenExpiry: null,
         createdAt: now, updatedAt: now, lastLoginAt: now, authSessionVersion: 0, createdByUserId: null,
       });
-      await manager.getRepository(CloudPasskey).insert({
-        id: generateId(), userId, credentialId: credential.id, credentialIdHash: tokenHash(credential.id),
-        publicKey: Buffer.from(credential.publicKey).toString('base64url'), counter: credential.counter,
-        transportsJson: JSON.stringify(credential.transports || []), createdAt: now,
-        lastUsedAt: null, revokedAt: null,
-      });
+      await savePasskey(manager, userId, credential, now);
       await authzGroupService.ensureAuthenticatedUserMembershipWithManager(manager, userId);
       const user = await manager.getRepository(User).findOneByOrFail({ id: userId });
       const session = await authSessionService.issue(user, {
@@ -224,9 +295,49 @@ router.post('/api/auth/cloud-signup/email/passkey/complete', apiLimiter, identit
       });
       return { user, session };
     });
-    clearCookie(res, emailCookie, '/api/auth/cloud-signup/email');
+    clearCookie(res, emailCookie, emailProofPath);
     setSessionCookies(req, res, session);
     await logAudit({ userId: user.id, action: AuditActions.LOGIN_SUCCESS, details: { method: 'passkey', event: 'cloud_account_created' } });
+    res.status(201).json({ success: true });
+  }));
+
+router.post('/api/auth/cloud-passkey/register/options', apiLimiter, identityFlowLimiter, authLimiter, requireCloudAccountOrTenantAuth,
+  asyncHandler(async (req, res) => {
+    const principal = enrollmentPrincipal(req);
+    const options = await registrationOptions(principal.userId, principal.email);
+    const token = randomBytes(32).toString('base64url');
+    const now = Date.now();
+    const repo = (await getDataSource()).getRepository(CloudPasskeyChallenge);
+    await repo.delete({ expiresAt: LessThan(now) });
+    await repo.insert({ id: generateId(), tokenHash: tokenHash(`${principal.userId}:${principal.sessionId}:${token}`),
+      challenge: options.challenge, expiresAt: now + challengeLifetimeMs, createdAt: now });
+    cookie(res, enrollmentCookie, token, challengeLifetimeMs, enrollmentPath);
+    res.json(options);
+  }));
+
+router.post('/api/auth/cloud-passkey/register/complete', apiLimiter, identityFlowLimiter, authLimiter, requireCloudAccountOrTenantAuth,
+  enforceParsedPayloadLimit(128 * 1024), validateBody(credentialSchema), asyncHandler(async (req, res) => {
+    const principal = enrollmentPrincipal(req);
+    const token = browserToken(req, enrollmentCookie);
+    if (!token) throw Errors.unauthorized('Passkey registration has expired');
+    const dataSource = await getDataSource();
+    const proofHash = tokenHash(`${principal.userId}:${principal.sessionId}:${token}`);
+    const proof = await dataSource.getRepository(CloudPasskeyChallenge).findOneBy({ tokenHash: proofHash, expiresAt: MoreThan(Date.now()) });
+    if (!proof) throw Errors.unauthorized('Passkey registration has expired');
+    const credential = await verifyRegistration(req.body as RegistrationResponseJSON, proof.challenge);
+    const now = Date.now();
+    await dataSource.transaction(async manager => {
+      const consumed = await manager.getRepository(CloudPasskeyChallenge).delete({ id: proof.id, tokenHash: proofHash, expiresAt: MoreThan(now) });
+      if (consumed.affected !== 1) throw Errors.unauthorized('Passkey registration has already been used');
+      const user = await manager.getRepository(User).findOneBy({ id: principal.userId, email: principal.email,
+        authSessionVersion: principal.authSessionVersion });
+      if (!user || !await isCloudEmailLinkAccount(user, manager)) throw Errors.unauthorized('This account cannot add a passkey');
+      const session = await manager.getRepository(RefreshToken).findOneBy({ id: principal.sessionId, userId: user.id,
+        tenantId: IsNull(), revokedAt: IsNull(), expiresAt: MoreThan(now) });
+      if (!session) throw Errors.unauthorized('Sign in with your email link before adding a passkey');
+      await savePasskey(manager, user.id, credential, now);
+    });
+    clearCookie(res, enrollmentCookie, enrollmentPath);
     res.status(201).json({ success: true });
   }));
 

@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.36.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.10...v0.36.0) (2026-11-11)
+
+### Changes
+
+- **config-bundles:** Process a directory of configuration bundles in filename order at startup or through the live CLI and CI workflow, and report every bundle even if one fails.
+- **mission-control:** Omits tenant mapping controls and diagnostics from the details dialog for engines registered by a managed workload.
+- **plugin-toolchain:** Rebuild the plugin installer and manager acquisition tools with the fixed Go x/net module.
+- **mission control:** Apply the process start-time range to Mission Control BPMN activity badges.
+- **runtime-images:** Require the patched Wolfi glibc runtime in the backend, frontend, and managed-shard bootstrap images.
+
+Full upgrade, compatibility and verification details: [v0.36.0 release notes](docs/releases/v0.36.0.md).
+
 ## [0.35.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.35.9...v0.35.10) (2026-11-05)
 
 ### Changes

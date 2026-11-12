@@ -13,8 +13,9 @@ import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest';
 import { DataSource } from 'typeorm';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import { installBrowserRequestProtection } from '@enterpriseglue/backend-host/middleware/browser-request-protection.js';
+import { XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
 import { MockOidcProvider } from '../identity-mocks/index.js';
 
 // Only connection selection is injected. Repositories, transactions, TypeORM
@@ -41,6 +42,11 @@ import { runWithPlatformDatabaseCapability, getPlatformDatabaseCapability } from
 import { requireCloudAccountOrTenantAuth, requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import identityRoutes from '@enterpriseglue/backend-host/modules/auth/routes/identity-oidc.js';
 import refreshRoutes from '@enterpriseglue/backend-host/modules/auth/routes/refresh.js';
+import cloudEmailRoutes from '@enterpriseglue/backend-host/modules/auth/routes/cloud-email-passkey.js';
+import { generateRegistrationOptions, verifyRegistrationResponse } from '@enterpriseglue/backend-host/modules/auth/routes/cloud-passkey-webauthn.js';
+import { sendVerificationEmail } from '@enterpriseglue/shared/services/email/auth.js';
+import { mockCloudPasskeyCredential } from '../../__tests__/fixtures/cloudPasskeyCredential.js';
+import { CloudPasskey } from '@enterpriseglue/shared/infrastructure/persistence/entities/CloudPasskey.js';
 import tenantRoutes from '@enterpriseglue/backend-host/modules/tenancy/routes/tenants.js';
 import { tenantService } from '@enterpriseglue/shared/services/platform-admin/TenantService.js';
 import { parseSignedOidcState } from '@enterpriseglue/backend-host/modules/auth/routes/sso-state.js';
@@ -58,6 +64,15 @@ import { AuditLog } from '@enterpriseglue/shared/infrastructure/persistence/enti
 import { RbacRoleAssignment } from '@enterpriseglue/shared/infrastructure/persistence/entities/RbacRoleAssignment.js';
 import { seedGitProviders } from '@enterpriseglue/shared/db/seed/gitProviders.js';
 import { setupStatusService } from '@enterpriseglue/shared/services/admin/SetupStatusService.js';
+
+vi.mock('@enterpriseglue/shared/services/email/auth.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@enterpriseglue/shared/services/email/auth.js')>(),
+  sendVerificationEmail: vi.fn(),
+}));
+vi.mock('@enterpriseglue/backend-host/modules/auth/routes/cloud-passkey-webauthn.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@enterpriseglue/backend-host/modules/auth/routes/cloud-passkey-webauthn.js')>(),
+  generateRegistrationOptions: vi.fn(), verifyRegistrationResponse: vi.fn(),
+}));
 
 const suffix=randomUUID().replace(/-/g,'').slice(0,10);
 const schema=`global_${suffix}`, ownerName=`owner_${suffix}`, runtimeName=`runtime_${suffix}`, password=`fixture_${suffix}`;
@@ -90,10 +105,13 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     await owner.query(`GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA ${schema} TO ${runtimeName}`);
     runtime=build(runtimeName);await runtime.initialize();assertPostgresContextBoundary(runtime);database.current=runtime;
     vi.stubGlobal('fetch',protocol.fetch.bind(protocol));
-    app=express();app.use(express.json());app.use(express.urlencoded({extended:false}));app.use(cookieParser());
-    app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);
+    app = express();
+    app.use(express.json(), express.urlencoded({ extended: false }));
+    installBrowserRequestProtection(app);
+    app.use(identityRoutes);app.use(refreshRoutes);app.use(tenantRoutes);app.use(cloudEmailRoutes);
     app.use(rateLimit({ windowMs: 60_000, limit: 50, standardHeaders: true, legacyHeaders: false }));
-    app.get('/cloud-probe',requireCloudAccountOrTenantAuth,(req,res)=>res.json({userId:req.user!.userId,sessionClass:req.user!.sessionClass,tenantId:req.user!.tenantId}));
+    app.get('/cloud-probe',requireCloudAccountOrTenantAuth,(req,res)=>res.json({userId:req.user!.userId,sessionClass:req.user!.sessionClass,
+      tenantId:req.user!.tenantId, authenticationMethod:req.user!.authenticationMethod, mfaVerified:req.user!.mfaVerified}));
     app.get('/tenant-only-probe',requireAuth,(_req,res)=>res.json({ok:true}));
     app.get('/tenant-permissions-probe',requireAuth,(req,res,next)=>{
       permissionService.getCurrentUserPermissions(req.user!.userId,req.tenant!.tenantId)
@@ -125,6 +143,10 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     protocol.setTokenClaims({sub:subject,email,email_verified:true,nonce:parsed.nonce});
     const callback=await browser.get('/api/auth/identity/callback').query({state,code:'verified-code'});
     return {browser,callback};
+  }
+  async function browserPost(browser: ReturnType<typeof request.agent>, path: string, body: object = {}) {
+    const csrf = await browser.get('/api/csrf-token').expect(200);
+    return browser.post(path).set(XSRF_HEADER_NAME, csrf.body.csrfToken).send(body);
   }
   it('preserves and repairs global administrator authority under forced RLS without promoting tenant administrators', async () => {
     const administrator = await userService.createPendingUser({ email: 'ownership-admin@example.test', platformRole: 'admin', createdByUserId: 'fixture-operator' });
@@ -206,7 +228,7 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     Object.assign(config, { tenantPlacementV2ShardId: 'fixture-shard', tenantWorkloadReceiptPrivateKey: signer.privateKey.export({ format: 'pem', type: 'pkcs8' }),
       tenantWorkloadReceiptKeyId: 'fixture-key', tenantWorkloadReceiptIssuer: 'fixture-issuer', platformCloudIdentityAudience: 'fixture-audience' });
     try {
-      const identity = await browser.post('/api/platform/cloud-identity').send({ action: 'platform.tenants.self_create', includeRequester: true });
+      const identity = await browserPost(browser, '/api/platform/cloud-identity', { action: 'platform.tenants.self_create', includeRequester: true });
       expect(identity.status, JSON.stringify(identity.body)).toBe(200);
       const payload = JSON.parse(Buffer.from(identity.body.token.split('.')[1], 'base64url').toString());
       expect(payload).toMatchObject({ schemaVersion: 'platform-cloud-identity.enterpriseglue.io/v2',
@@ -453,17 +475,26 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     expect(audits).toHaveLength(1);
     expect(audits[0]).toMatchObject({ userId: target.id, resourceId: assignments[0].id });
     expect(await runtime.getRepository(AuditLog).findBy({ tenantId: created.id })).toEqual([]);
+    const providers = runtime.getRepository(GitProvider);
+    const tenantProviders = await runWithTenantDatabaseContext({ tenantId: created.id, tenantSlug: created.slug }, () => providers.find());
+    expect(tenantProviders).toEqual([expect.objectContaining({ tenantId: created.id, type: 'github', isActive: true })]);
+    expect(await providers.find()).toEqual([]);
+    expect(await runWithTenantDatabaseContext({ tenantId: 'tenant-default', tenantSlug: 'default' }, () =>
+      providers.findBy({ tenantId: created.id }))).toEqual([]);
     expect(logger.error).not.toHaveBeenCalled();
   });
 
-  it('rolls back tenant creation and owner assignment together when the tenant audit fails', async () => {
+  it('rolls back tenant creation, GitHub defaults and owner assignment when the tenant audit fails', async () => {
     const target = await userService.createPendingUser({ email: 'tenant-rollback@example.test', createdByUserId: 'fixture-operator' });
+    const readProviderCount = async () => (await admin.query(`SELECT COUNT(*)::int AS count FROM ${schema}.git_providers`))[0].count;
+    const providerCount = await readProviderCount();
     await admin.query(`CREATE FUNCTION ${schema}.reject_tenant_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='authz.role_assignment.create' THEN RAISE EXCEPTION 'fixture tenant audit failure'; END IF; RETURN NEW; END $$`);
     await admin.query(`CREATE TRIGGER reject_tenant_audit BEFORE INSERT ON ${schema}.audit_logs FOR EACH ROW EXECUTE FUNCTION ${schema}.reject_tenant_audit()`);
     try {
       await expect(tenantService.create({ name: 'Rollback tenant', slug: 'rollback-tenant', ownerUserId: target.id })).rejects.toThrow('fixture tenant audit failure');
       expect(await runtime.getRepository(Tenant).countBy({ slug: 'rollback-tenant' })).toBe(0);
       expect(await runtime.getRepository(RbacRoleAssignment).countBy({ principalId: target.id, scopeType: 'tenant' })).toBe(0);
+      expect(await readProviderCount()).toBe(providerCount);
       expect(getTenantDatabaseContext()).toBeUndefined();
     } finally {
       await admin.query(`DROP TRIGGER reject_tenant_audit ON ${schema}.audit_logs`);
@@ -524,9 +555,9 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     await runtime.getRepository(Tenant).insert({...target,id:'tenant-session-b',slug:'tenant-session-b'});
     await runWithTenantDatabaseContext({tenantId:target.id,tenantSlug:target.slug},()=>tenantService.addMember(target.id,user.id,'member','fixture-operator'));
     vi.mocked(logger.error).mockClear();vi.mocked(logger.warn).mockClear();
-    const refused=await browser.post('/api/auth/switch-tenant').send({tenantSlug:'tenant-session-b'});
+    const refused=await browserPost(browser, '/api/auth/switch-tenant', {tenantSlug:'tenant-session-b'});
     expect(refused.status,JSON.stringify(refused.body)).toBe(403);
-    const switched=await browser.post('/api/auth/switch-tenant').send({tenantSlug:target.slug});
+    const switched=await browserPost(browser, '/api/auth/switch-tenant', {tenantSlug:target.slug});
     expect(switched.status,JSON.stringify(switched.body)).toBe(200);
     expect(switched.body).toEqual({tenantId:target.id,tenantSlug:target.slug});
     const probe=await browser.get('/tenant-permissions-probe');
@@ -542,5 +573,36 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     const sessions=await runtime.getRepository(RefreshToken).findBy({userId:user.id,tenantId:target.id});
     expect(sessions).not.toHaveLength(0);expect(sessions.every(row=>row.identityProviderId===providerId)).toBe(true);
     expect(logger.error).not.toHaveBeenCalled();expect(logger.warn).not.toHaveBeenCalled();
+  });
+  it('renews an email-link session and binds optional passkey enrollment to that exact session under RLS', async () => {
+    vi.mocked(sendVerificationEmail).mockResolvedValue({ success: true });
+    vi.mocked(generateRegistrationOptions).mockResolvedValue({ challenge: 'local-fixture-challenge' } as never);
+    vi.mocked(verifyRegistrationResponse).mockResolvedValue({ verified: true, registrationInfo: { credential: {
+      id: 'optional-fixture-passkey', publicKey: new Uint8Array([1, 2, 3]), counter: 0, transports: ['internal'],
+    } } } as never);
+    const browser = request.agent(server);
+    expect((await browser.post('/api/auth/cloud-passkey/register/options').send({})).status).toBe(401);
+    const email = 'link-and-passkey@example.test';
+    const sent = await browser.post('/api/auth/cloud-signup/email/request').send({ email });
+    expect(sent.status, sent.body.error).toBe(202);
+    const url = new URL(vi.mocked(sendVerificationEmail).mock.lastCall![0].verificationUrl);
+    expect((await browser.get(`${url.pathname}${url.search}`)).status).toBe(302);
+    expect((await browser.post('/api/auth/cloud-signup/email/complete').send({})).status).toBe(403);
+    const signedIn = await browserPost(browser, '/api/auth/cloud-signup/email/complete');
+    expect(signedIn.status, signedIn.body.error).toBe(201);
+    const probe = await browser.get('/cloud-probe');
+    expect(probe.status, probe.body.error).toBe(200);
+    expect(probe.body).toMatchObject({ sessionClass: 'cloud_account', authenticationMethod: 'email_link' });
+    expect(probe.body.mfaVerified).toBeUndefined();
+    expect((await browser.get('/tenant-only-probe')).status).toBe(401);
+    expect((await browser.post('/api/auth/refresh').send({})).status).toBe(200);
+    expect((await browserPost(browser, '/api/auth/cloud-passkey/register/options')).status).toBe(200);
+    const enrolled = await browserPost(browser, '/api/auth/cloud-passkey/register/complete', mockCloudPasskeyCredential);
+    expect(enrolled.status, enrolled.body.error).toBe(201);
+    expect((await browserPost(browser, '/api/auth/cloud-passkey/register/complete', mockCloudPasskeyCredential)).status).toBe(401);
+    expect(await runtime.getRepository(CloudPasskey).countBy({ userId: probe.body.userId })).toBe(1);
+    await runtime.transaction(manager => authzGroupService.ensureLegacyPlatformAdministratorMembershipWithManager(manager, probe.body.userId));
+    expect((await browser.get('/cloud-probe')).status).toBe(401);
+    expect((await browser.post('/api/auth/refresh').send({})).status).toBe(401);
   });
 });

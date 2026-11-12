@@ -39,6 +39,8 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   platformCloudIdentityAudience: z.string().min(1).max(256).optional(),
   cloudAccountIdentityEnabled: z.boolean().default(false),
   cloudOrganizationReviewEmail: z.email().max(320).optional(),
+  cloudEmailTurnstileSiteKey: z.string().min(1).max(255).optional(),
+  cloudEmailTurnstileSecret: z.string().min(1).max(512).optional(),
   documentationOrigin: z.url().optional(),
   documentationGatewaySecret: z.string().min(32).max(512).optional(),
   documentationWorkspacesJson: z.string().max(262144).optional(),
@@ -210,6 +212,8 @@ function loadConfig(): Config {
     platformCloudIdentityAudience: envOrUndefined(process.env.EG_PLATFORM_CLOUD_IDENTITY_AUDIENCE),
     cloudAccountIdentityEnabled: process.env.EG_CLOUD_ACCOUNT_IDENTITY_ENABLED === 'true',
     cloudOrganizationReviewEmail: envOrUndefined(process.env.EG_CLOUD_ORGANIZATION_REVIEW_EMAIL),
+    cloudEmailTurnstileSiteKey: envOrUndefined(process.env.EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY),
+    cloudEmailTurnstileSecret: envOrUndefined(process.env.EG_CLOUD_EMAIL_TURNSTILE_SECRET),
     documentationOrigin: process.env.EG_DOCUMENTATION_ORIGIN,
     documentationGatewaySecret: process.env.EG_DOCUMENTATION_GATEWAY_SECRET,
     documentationWorkspacesJson: process.env.EG_DOCUMENTATION_WORKSPACES_JSON,
@@ -405,6 +409,10 @@ if (config.tenancyCloudRequired && config.tenancyMode !== 'pooled') {
 }
 if (config.cloudAccountIdentityEnabled && (config.tenancyMode !== 'pooled' || !config.tenancyCloudRequired)) {
   throw new Error('EG_CLOUD_ACCOUNT_IDENTITY_ENABLED=true requires pooled managed Cloud tenancy.');
+}
+if (Boolean(config.cloudEmailTurnstileSiteKey) !== Boolean(config.cloudEmailTurnstileSecret) ||
+    (config.cloudEmailTurnstileSiteKey && !config.cloudAccountIdentityEnabled)) {
+  throw new Error('Cloud email Turnstile requires both widget keys and managed Cloud account identity.');
 }
 if (config.tenantReleaseEffectCohortEpoch && !config.tenantPlacementReleaseId) {
   throw new Error('EG_TENANT_RELEASE_EFFECT_COHORT_EPOCH requires EG_TENANT_PLACEMENT_RELEASE_ID.');
