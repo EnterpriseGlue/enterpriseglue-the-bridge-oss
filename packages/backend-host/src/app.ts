@@ -121,8 +121,13 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     exposedHeaders: [XSRF_HEADER_NAME], // Expose the same token to non-cookie API clients
   }));
 
-  // Logging
-  app.use(morgan('dev', {
+  // Keep one-time proofs and provider callback parameters out of request logs.
+  morgan.token('eg-url', (req) => {
+    const url = req.url ?? '';
+    const [path] = url.split('?', 1);
+    return /^\/api\/(?:t\/[^/]+\/)?auth\/(?:identity\/callback|cloud-signup\/(?:microsoft\/)?email\/verify)\/?$/i.test(path) ? path : url;
+  });
+  app.use(morgan(':method :eg-url :status :response-time ms - :res[content-length]', {
     stream: {
       write: (message: string) => {
         const line = String(message || '').trim();

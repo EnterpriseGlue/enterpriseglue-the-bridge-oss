@@ -5,7 +5,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: "30 3 * * *"
+    - cron: "30 3 * * 3"
   workflow_dispatch:
     inputs:
       prepare_replacement:

@@ -28,6 +28,7 @@ export interface JwtPayload {
   authenticationMethod?: 'local' | 'recovery' | 'oidc' | 'saml' | 'ldap' | 'passkey' | 'email_link';
   /** True only when a trusted authenticator/IdP supplied configured MFA evidence. */
   mfaVerified?: boolean;
+  cloudAdministratorMfaVerified?: boolean;
   /**
    * A deliberately tenant-neutral managed-Cloud onboarding session. This is
    * not a tenant session and must be admitted only by the small account
@@ -45,7 +46,9 @@ export interface SessionAssuranceOptions {
   administratorRecovery?: boolean;
   authenticationMethod?: JwtPayload['authenticationMethod'];
   mfaVerified?: boolean;
+  cloudAdministratorMfaVerified?: boolean;
   sessionClass?: JwtPayload['sessionClass'];
+  maximumTtl?: number;
   tenantId?: string;
   tenantSlug?: string;
 }
@@ -112,6 +115,7 @@ export function generateAccessToken(user: User | any, options: SessionAssuranceO
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
     ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
+    ...(options.cloudAdministratorMfaVerified === true ? { cloudAdministratorMfaVerified: true } : {}),
     ...(options.sessionClass ? { sessionClass: options.sessionClass } : {}),
     ...(options.tenantId ? { tenantId: options.tenantId } : {}),
     ...(options.tenantSlug ? { tenantSlug: options.tenantSlug } : {}),
@@ -119,7 +123,7 @@ export function generateAccessToken(user: User | any, options: SessionAssuranceO
   };
 
   return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: config.jwtAccessTokenExpires,
+    expiresIn: Math.min(config.jwtAccessTokenExpires, options.maximumTtl ?? Infinity),
   });
 }
 
@@ -135,6 +139,7 @@ export function generateRefreshToken(user: User | any, options: SessionAssurance
     ...(options.administratorRecovery ? { recovery: 'platform_administrator' as const } : {}),
     ...(options.authenticationMethod ? { authenticationMethod: options.authenticationMethod } : {}),
     ...(options.mfaVerified === true ? { mfaVerified: true } : {}),
+    ...(options.cloudAdministratorMfaVerified === true ? { cloudAdministratorMfaVerified: true } : {}),
     ...(options.sessionClass ? { sessionClass: options.sessionClass } : {}),
     ...(options.tenantId ? { tenantId: options.tenantId } : {}),
     ...(options.tenantSlug ? { tenantSlug: options.tenantSlug } : {}),
@@ -142,7 +147,7 @@ export function generateRefreshToken(user: User | any, options: SessionAssurance
   };
 
   return jwt.sign(payload, config.jwtSecret, {
-    expiresIn: config.jwtRefreshTokenExpires,
+    expiresIn: Math.min(config.jwtRefreshTokenExpires, options.maximumTtl ?? Infinity),
   });
 }
 

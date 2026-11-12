@@ -3000,12 +3000,16 @@ registry.register('TenantReleaseWorkAssignmentResponse', TenantReleaseWorkAssign
 registry.register('SignedTenantReleaseActivationReceipt', SignedTenantReleaseActivationReceiptSchema);
 registry.register('ReleaseEffectSettlementStatus', ReleaseEffectSettlementStatusSchema);
 const { CloudOrganizationNotificationSchema } = await import('./platform-admin/cloud-organization-notification.js');
+registry.registerComponent('securitySchemes', 'ReleaseControllerBearer', {
+  type: 'http', scheme: 'bearer', description: 'Private credential for the release controller',
+});
 registry.registerPath({
   method: 'post', path: '/api/workloads/cloud/organization-notifications',
   ...authzExemption('POST', '/api/workloads/cloud/organization-notifications'),
+  security: [{ ReleaseControllerBearer: [] }],
   request: {
-    headers: z.object({ 'x-enterpriseglue-release-id': z.string().min(1) }),
-    body: { content: { 'application/json': { schema: CloudOrganizationNotificationSchema } } },
+    headers: z.object({ 'x-enterpriseglue-release-id': z.string().min(1).max(256) }),
+    body: { required: true, content: { 'application/json': { schema: CloudOrganizationNotificationSchema } } },
   },
   responses: {
     204: { description: 'The configured transport accepted the fixed notification' },
@@ -3265,7 +3269,18 @@ registry.registerPath({
   method: 'put', path: '/api/t/{tenantSlug}/tenant/login-policy',
   ...authzExtension('tenant.settings.manage', 'PUT', '/api/t/{tenantSlug}/tenant/login-policy'),
   request: { params: TenantPathSchema, body: { content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
-  responses: { 200: { description: 'Tenant login policy updated', content: { 'application/json': { schema: TenantLoginPolicySchema } } } },
+  responses: { 200: { description: 'Tenant login policy updated', content: { 'application/json': { schema: TenantLoginPolicySchema } } },
+    409: { description: 'Company SSO-only policy requires an enabled direct tenant provider' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/tenant/login-policy/recover',
+  ...authzExtension('platform.tenants.manage', 'POST', '/api/t/{tenantSlug}/tenant/login-policy/recover'),
+  request: { params: TenantPathSchema }, responses: { 200: { description: 'Restores the managed tenant login policy to automatic',
+    content: { 'application/json': { schema: TenantLoginPolicySchema } } },
+    401: { description: 'An authenticated recovery session is required' },
+    403: { description: 'Platform tenant management permission and CSRF proof are required' },
+    404: { description: 'The managed tenant or recovery route is unavailable' },
+  },
 });
 registry.registerPath({
   method: 'get', path: '/api/t/{tenantSlug}/tenant/domains',
@@ -4281,6 +4296,35 @@ registry.registerPath({
   request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.enum(['/cloud/onboarding', '/login', '/documentation/access']) }).strict() },
   responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding, organization login or documentation access' }, 404: { description: 'Cloud account identity or provider unavailable' } },
 });
+const { CloudMicrosoftEmailRequestSchema, CloudMicrosoftEmailCompleteSchema } = await import('./auth/cloud-microsoft-email.js');
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-signup/microsoft/email/request',
+  ...authzExemption('POST', '/api/auth/cloud-signup/microsoft/email/request'),
+  request: { body: { content: { 'application/json': { schema: CloudMicrosoftEmailRequestSchema } } } },
+  responses: {
+    202: { description: 'Verification message accepted for delivery', content: { 'application/json': { schema: z.object({ success: z.literal(true) }) } } },
+    400: { description: 'Invalid email address' }, 401: { description: 'Missing or expired Microsoft browser proof' },
+    403: { description: 'Missing or invalid browser CSRF token' }, 404: { description: 'Cloud signup is disabled' },
+    503: { description: 'Outbound email is unavailable' },
+  },
+});
+registry.registerPath({
+  method: 'get', path: '/api/auth/cloud-signup/microsoft/email/verify',
+  ...authzExemption('GET', '/api/auth/cloud-signup/microsoft/email/verify'),
+  request: { query: z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/) }) },
+  responses: { 302: { description: 'Sets a short-lived mailbox proof cookie on the initiating browser' },
+    401: { description: 'Invalid, replaced or expired proof' }, 404: { description: 'Cloud signup is disabled' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/cloud-signup/microsoft/email/complete',
+  ...authzExemption('POST', '/api/auth/cloud-signup/microsoft/email/complete'),
+  responses: {
+    200: { description: 'Consumes the proofs and issues a Cloud session', content: { 'application/json': { schema: CloudMicrosoftEmailCompleteSchema } } },
+    401: { description: 'Missing, invalid, expired or consumed proof, or provider changed' },
+    403: { description: 'Invalid browser CSRF token or deactivated account' }, 404: { description: 'Cloud signup or the provider is unavailable' },
+    409: { description: 'An existing account must link Microsoft from a signed-in session' },
+  },
+});
 const { CloudEmailSignupChallengeSchema, CloudEmailSignupRequestSchema } = await import('./auth/cloud-email-signup.js');
 registry.registerPath({
   method: 'get', path: '/api/auth/cloud-signup/email/challenge',
@@ -4365,6 +4409,18 @@ registry.registerPath({
   responses: {
     200: { description: 'Canonical platform-administrator recovery login successful', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } },
     401: { description: 'Invalid credentials or recovery is unavailable' },
+  },
+});
+
+registry.registerPath({
+  method: 'post', path: '/api/auth/recovery/session',
+  security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
+  ...authzExemption('POST', '/api/auth/recovery/session'),
+  request: { body: { required: true, content: { 'application/json': { schema: z.object({}).strict() } } } },
+  responses: {
+    204: { description: 'Short platform-administrator recovery session issued in browser cookies' },
+    401: { description: 'A recent verified platform-administrator Cloud session is required' },
+    403: { description: 'Valid CSRF proof is required' },
   },
 });
 

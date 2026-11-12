@@ -1,0 +1,59 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-company-sso-enforcement",
+  "type": "fix",
+  "scope": "cloud-authentication",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "security",
+    "administrators"
+  ],
+  "summary": "Enforce the configured company sign-in policy on managed tenant sessions.",
+  "userImpact": [
+    "After a tenant enables company-only sign-in, users must use an enabled company identity provider to enter that organization."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Enable a company identity provider and verify the administrator's linked identity before disabling other sign-in methods."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds a tenant sign-in policy reset for an authorized platform administrator recovery session."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Tenant entry and session refresh recheck that company-only sessions still use an enabled company provider.",
+    "The recovery endpoint checks platform tenancy management permission and the administrator recovery session and writes an audit event."
+  ],
+  "documentation": [
+    "docs/architecture/tenant-sso-connections.md"
+  ],
+  "knownLimitations": [
+    "Staging company identity provider and operator recovery acceptance require an actual configured provider."
+  ],
+  "rollback": [
+    "Restore the previous compatible host version using the deployment's normal release rollback procedure."
+  ],
+  "validation": [
+    "Restricted PostgreSQL tests verified profile linking, one user identity, tenant enforcement, refresh and authorized policy recovery."
+  ],
+  "packages": [],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": [
+      "tenant-company-sign-in"
+    ]
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "cloud-microsoft-account-verification",
+  "type": "feature",
+  "scope": "cloud-authentication",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators",
+    "security"
+  ],
+  "summary": "Support Cloud sign-in with a Microsoft application registered for organizational and personal accounts.",
+  "userImpact": [
+    "A first-time Microsoft sign-in confirms the account email by opening a one-time link.",
+    "Returning users sign in with the same Microsoft account and keep their existing Cloud identity."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Use the Microsoft common v2.0 issuer for a managed Cloud provider registered for work, school and personal accounts.",
+    "Configure the exact Web callback and a working email sender before enabling the provider."
+  ],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Adds browser-bound Microsoft email verification request, link and completion routes."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Uses the existing Cloud email proof store with a separate proof purpose."
+    ]
+  },
+  "security": [
+    "The common discovery issuer is resolved from the signed directory claim and the signing key's issuer is checked.",
+    "A mutable email claim cannot create a Microsoft-backed session or attach a subject to an existing account."
+  ],
+  "documentation": [
+    "docs/reference/configuration.md"
+  ],
+  "knownLimitations": [
+    "The Microsoft registration and email delivery must be configured on the deployed environment."
+  ],
+  "rollback": [
+    "Restore the previous compatible host and frontend release together."
+  ],
+  "validation": [
+    "Focused OpenID Connect, route contract, frontend and restricted PostgreSQL checks passed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.24.2",
+      "newVersion": "0.24.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.18",
+      "newVersion": "0.20.19",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.14",
+      "newVersion": "0.28.15",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": [
+      "cloud-microsoft-sign-in"
+    ]
+  }
+}

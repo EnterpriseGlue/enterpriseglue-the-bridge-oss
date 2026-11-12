@@ -210,6 +210,11 @@ rollback qualification gates pass for the intended deployment.
   The private notification endpoint accepts only the release controller token
   and the exact serving release ID. Requester emails go to the verified
   account on the request.
+- The global Microsoft provider can use the `common/v2.0` issuer for work,
+  school and personal accounts. Use the application’s exact neutral callback
+  URL and the `openid email profile` scopes. A new Microsoft subject verifies
+  its email through the configured outbound mail service in the same browser.
+  Returning users are matched by the linked provider subject and directory.
 - `EG_CLOUD_EMAIL_TURNSTILE_SITE_KEY` and `EG_CLOUD_EMAIL_TURNSTILE_SECRET`:
   Configure the managed email signup widget as a pair on the backend. Mount the
   secret from the deployment's credential store. Register the public app
@@ -296,6 +301,19 @@ receipts. They never issue a browser or tenant session.
 See [Tenant Secret Broker](tenant-secret-broker.md) for its private HTTP
 contract, write-only tenant administration routes, SSO purpose mapping,
 rotation, outage, recovery, and rollback behavior.
+
+### Managed Cloud platform administrator MFA
+
+Set `EG_CLOUD_PLATFORM_ADMIN_MFA_REQUIRED=true` in a managed Cloud account
+runtime after qualifying an operator's MFA sign-in on that deployment. For
+current global platform administrators, the host requires verified second-factor
+evidence when issuing a session, refreshing it, and authenticating requests.
+Use an operator identity provider configured to attest MFA or an enrolled
+user-verifying passkey. For tenant SSO recovery, keep an operator MFA method
+independent of the tenant's provider. After a fresh platform sign-in, open
+`/admin-recovery` and select **Start recovery session**. The host rechecks
+current platform administrator membership and issues recovery authority for up
+to five minutes. Use that browser session for the tenant policy reset.
 
 ### Git & Encryption
 - `GIT_DEFAULT_BRANCH`

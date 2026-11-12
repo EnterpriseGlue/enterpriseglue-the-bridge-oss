@@ -55,6 +55,8 @@ export const PLATFORM_AUTHZ_ACTIONS = [
       routes: [
         { method: 'POST', route: '/api/platform/tenants', resourceResolver: 'platform.self' },
         { method: 'PATCH', route: '/api/platform/tenants/{tenantId}', resourceResolver: 'platform.self' },
+        { method: 'POST', route: '/api/t/{tenantSlug}/tenant/login-policy/recover', resourceResolver: 'platform.self',
+          additionalChecks: ['Requires an active platform administrator recovery session'] },
         {
           method: 'POST',
           route: '/api/platform/cloud-identity',

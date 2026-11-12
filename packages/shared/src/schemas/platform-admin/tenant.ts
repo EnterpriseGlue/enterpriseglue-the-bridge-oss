@@ -342,6 +342,7 @@ export const TenancyCapabilitiesSchema = z.object({
   databaseIsolation: z.enum(['application', 'postgres_rls']),
   customDomainsEnabled: z.boolean(),
   organizationDiscoveryEnabled: z.boolean().default(false),
+  cloudPlatformAdminMfaRequired: z.boolean().optional(),
   signedPlacementAssertionsEnabled: z.boolean(),
   placementAssertionVersions: z.array(z.enum(['v1', 'v2', 'v3'])).default([]),
   placementV2Required: z.boolean().default(false),

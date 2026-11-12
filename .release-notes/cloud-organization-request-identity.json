@@ -52,20 +52,20 @@
   "packages": [
     {
       "name": "@enterpriseglue/backend-host",
-      "previousVersion": "0.24.2",
-      "newVersion": "0.24.3",
+      "previousVersion": "0.24.4",
+      "newVersion": "0.24.5",
       "impact": "patch"
     },
     {
       "name": "@enterpriseglue/frontend-host",
-      "previousVersion": "0.20.18",
-      "newVersion": "0.20.19",
+      "previousVersion": "0.20.20",
+      "newVersion": "0.20.21",
       "impact": "patch"
     },
     {
       "name": "@enterpriseglue/shared",
-      "previousVersion": "0.28.14",
-      "newVersion": "0.28.15",
+      "previousVersion": "0.28.16",
+      "newVersion": "0.28.17",
       "impact": "patch"
     }
   ],
