@@ -15,7 +15,7 @@ import type { InvitationEnrollmentContext } from '@enterpriseglue/shared/service
 import { identityProviderService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderService.js';
 import { runWithPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 import { loginMethodService } from '@enterpriseglue/shared/services/platform-admin/LoginMethodService.js';
-import { genericOidcService } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
+import { genericOidcService, isMicrosoftCommonOidcIssuer } from '@enterpriseglue/shared/services/platform-admin/GenericOidcService.js';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
 import { samlAssertionReplayService } from '@enterpriseglue/shared/services/platform-admin/SamlAssertionReplayService.js';
 import { IdentityProviderAccountLinkRequiredError, identityProviderProvisioningService } from '@enterpriseglue/shared/services/platform-admin/IdentityProviderProvisioningService.js';
@@ -38,7 +38,7 @@ import { PublicLoginMethodsResponseSchema } from '@enterpriseglue/shared/schemas
 import { recordLoginExperienceMetric, type LoginExperienceMethod } from '@enterpriseglue/shared/auth/login-experience-metrics.js';
 import { runWithTenantDatabaseContext } from '@enterpriseglue/shared/services/tenant-database-context.js';
 import { buildSignedOidcState, buildSignedSamlState, createSamlRequestId, getSsoRedirectUrl, parseSignedOidcState, parseSignedSamlState, parseInvitationEnrollmentContext, type AccountLinkContext, type SsoState } from './sso-state.js';
-import { beginMicrosoftEmailProof, consumeMicrosoftEmailProof, microsoftCloudIssuer, microsoftProviderRevision, requestMicrosoftEmailProof, verifyMicrosoftEmailProof } from './cloud-microsoft-email-proof.js';
+import { beginMicrosoftEmailProof, consumeMicrosoftEmailProof, microsoftProviderRevision, requestMicrosoftEmailProof, verifyMicrosoftEmailProof } from './cloud-microsoft-email-proof.js';
 
 const router = Router();
 const stateCookie = 'identity_oidc_state';
@@ -616,7 +616,7 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
         sessionId: typeof claims.sid === 'string' ? claims.sid : null,
       };
       if (config.tenancyMode === 'pooled' && config.tenancyCloudRequired && config.cloudAccountIdentityEnabled &&
-          !provider.tenantId && !parsed.accountLink && !parsed.enrollment && rawConfiguration.issuerUrl === microsoftCloudIssuer) {
+          !provider.tenantId && !parsed.accountLink && !parsed.enrollment && isMicrosoftCommonOidcIssuer(rawConfiguration.issuerUrl)) {
         const linked = await runWithPlatformDatabaseCapability({ kind: 'provider-proof', providerId: provider.id, subjectId: claims.sub }, async () =>
           (await getDataSource()).getRepository(ExternalIdentity).findOneBy({
             providerId: provider.id, tenantId: IsNull(), subjectId: claims.sub, status: 'active',
@@ -694,7 +694,7 @@ router.post('/api/auth/cloud-signup/microsoft/email/complete', apiLimiter, ident
     const proof = await consumeMicrosoftEmailProof(req, res);
     const provider = await runWithPlatformDatabaseCapability({ kind: 'provider-lookup', providerId: proof.providerId }, () => directProviderById(proof.providerId));
     requireDirectOidc(provider);
-    if (provider.tenantId || configuration(provider).issuerUrl !== microsoftCloudIssuer ||
+    if (provider.tenantId || !isMicrosoftCommonOidcIssuer(configuration(provider).issuerUrl) ||
         microsoftProviderRevision(provider.configurationJson, Number(provider.updatedAt)) !== proof.providerRevision) {
       throw Errors.unauthorized('Microsoft sign-in settings changed. Sign in again.');
     }

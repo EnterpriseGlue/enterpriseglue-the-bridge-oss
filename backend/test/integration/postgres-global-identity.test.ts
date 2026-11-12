@@ -104,7 +104,7 @@ describe('verified global OIDC callback and renewable sessions under forced Post
     providerId=provider.id;
     const microsoft = await identityProviderService.upsert({
       tenantId: null, key: 'identity.oidc.microsoft-fixture', displayName: 'Microsoft', protocol: 'oidc',
-      isEnabled: true, authenticationMode: 'direct', configuration: { ...protocol.configuration(), issuerUrl: microsoftIssuer },
+      isEnabled: true, authenticationMode: 'direct', configuration: { ...protocol.configuration(), issuerUrl: microsoftIssuer + '/' },
     });
     microsoftProviderId = microsoft.id;
     const runner=owner.createQueryRunner();try{await applyPostgresTenantPolicies(runner);}finally{await runner.release();}

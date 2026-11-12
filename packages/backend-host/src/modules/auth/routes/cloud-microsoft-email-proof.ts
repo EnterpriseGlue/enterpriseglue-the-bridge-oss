@@ -10,7 +10,6 @@ import { sendVerificationEmail } from '@enterpriseglue/shared/services/email/aut
 import { CloudMicrosoftEmailDestinationSchema } from '@enterpriseglue/shared/schemas/auth/cloud-microsoft-email.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
 
-export const microsoftCloudIssuer = 'https://login.microsoftonline.com/common/v2.0';
 const proofPath = '/api/auth/cloud-signup/microsoft/email';
 const pagePath = '/signup/microsoft/email';
 const browserCookie = 'cloud_microsoft_signup';

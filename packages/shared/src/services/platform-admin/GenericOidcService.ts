@@ -58,9 +58,10 @@ export interface OidcBackChannelLogoutClaims extends JwtPayload {
 }
 
 const BACK_CHANNEL_LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';
+const MICROSOFT_COMMON_ISSUER = 'https://login.microsoftonline.com/common/v2.0';
 const ENTRA_TENANT_INDEPENDENT_ISSUERS = new Set([
   'https://login.microsoftonline.com/organizations/v2.0',
-  'https://login.microsoftonline.com/common/v2.0',
+  MICROSOFT_COMMON_ISSUER,
 ]);
 const ENTRA_TENANT_ISSUER_TEMPLATE = 'https://login.microsoftonline.com/{tenantid}/v2.0';
 const ENTRA_TENANT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -71,6 +72,10 @@ function base64Url(value: Buffer): string {
 
 function normalizeIssuer(value: string): string {
   return value.replace(/\/$/, '');
+}
+
+export function isMicrosoftCommonOidcIssuer(value: unknown): boolean {
+  return typeof value === 'string' && normalizeIssuer(value) === MICROSOFT_COMMON_ISSUER;
 }
 
 function config(input: Record<string, unknown>): GenericOidcProviderConfiguration {
