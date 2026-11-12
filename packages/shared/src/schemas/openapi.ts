@@ -4278,7 +4278,6 @@ for (const [method, path, requestSchema, responseSchema] of [
   ['post', '/api/auth/documentation/grant', DocumentationGrantRequestSchema, DocumentationGrantResponseSchema],
   ['post', '/api/auth/documentation/exchange', DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema],
   ['get', '/api/auth/documentation/session', null, DocumentationAccessResponseSchema],
-  ['get', '/api/auth/documentation/subscriber', null, DocumentationSubscriberIdentitySchema],
   ['get', '/api/auth/documentation/workspaces', null, DocumentationWorkspacesResponseSchema],
   ['post', '/api/auth/documentation/logout', null, DocumentationLogoutResponseSchema],
 ] as const) {
@@ -4288,6 +4287,28 @@ for (const [method, path, requestSchema, responseSchema] of [
     responses: { 200: { description: 'Documentation-only account access without tenant provisioning', content: { 'application/json': { schema: responseSchema } } }, 401: { description: 'Invalid, expired, revoked or reused credential' }, 403: { description: 'Account or browser proof is not eligible' }, 404: { description: 'Documentation integration is disabled' } },
   });
 }
+
+registry.registerPath({
+  method: 'get',
+  path: '/api/auth/documentation/subscriber',
+  description: 'Returns the current verified email to the documentation gateway. The bearer must be an active documentation session.',
+  ...authzExemption('GET', '/api/auth/documentation/subscriber'),
+  security: [{ BearerAuth: [] }],
+  request: { headers: z.object({
+    'x-enterpriseglue-documentation-key': z.string().min(1).describe('Dedicated documentation gateway credential'),
+  }) },
+  responses: {
+    200: {
+      description: 'Verified email for subscriber matching',
+      headers: { 'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } } },
+      content: { 'application/json': { schema: DocumentationSubscriberIdentitySchema } },
+    },
+    401: { description: 'Invalid gateway credential or invalid, expired or revoked documentation session' },
+    403: { description: 'The account is no longer eligible' },
+    404: { description: 'Documentation integration is disabled' },
+    429: { description: 'Request rate limit exceeded' },
+  },
+});
 
 // POST /api/auth/login
 registry.registerPath({
