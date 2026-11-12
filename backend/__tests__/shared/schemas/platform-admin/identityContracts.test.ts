@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { scanBackendAuthzRoutes } from '@enterpriseglue/shared/authz/backend-route-scanner.js';
+import { useOpenApiFixture } from '../../../../test/utils/openapi-fixture.js';
 import {
   ExternalIdentitySchema,
   ExternalIdentitySnapshotSchema,
@@ -227,5 +230,60 @@ describe('provider-neutral identity shared contracts', () => {
     expect(() => AuthzPolicyResponseSchema.parse({
       id: 'policy-1', tenantId: null, name: 'Deny', effect: 'deny', priority: 10, conditions: {}, isActive: true, createdAt: 1,
     })).toThrow();
+  });
+});
+
+
+describe('SSO redirect OpenAPI contracts', () => {
+  const generateOpenApi = useOpenApiFixture();
+  const filePath = 'packages/backend-host/src/modules/auth/routes/identity-oidc.ts';
+  const content = readFileSync(new URL(`../../../../../${filePath}`, import.meta.url), 'utf8');
+  const routes = scanBackendAuthzRoutes([{ filePath, content }]).routes.filter(({ route }) =>
+    /\/auth\/(?:identity\/(?:[^/]+\/start|callback)|(?:onboarding\/|cloud-signup\/)?providers\/(?:[^/]+\/start|saml\/callback)|me\/identity-providers\/[^/]+\/link)$/.test(route));
+
+  it('discovers all seven starts and six callbacks', () => {
+    expect(routes.filter(({ route }) => route.endsWith('/callback'))).toHaveLength(6);
+    expect(routes).toHaveLength(13);
+  });
+
+  it.each(routes)('documents $method $route with its cache and authentication contract', ({ method, route, normalizedRoute, authenticated }) => {
+    const operation = generateOpenApi().paths[normalizedRoute]?.[method.toLowerCase()];
+    expect(operation, `${method} ${normalizedRoute}`).toBeDefined();
+    expect(operation['x-enterpriseglue-authz-exemption'].kind).toBe(authenticated ? 'auth-only' : 'public');
+    expect(operation.responses['302'].headers).toMatchObject({
+      'Cache-Control': { schema: { enum: ['no-store'] } },
+      Location: { schema: { type: 'string', format: 'uri' } },
+    });
+    for (const [, name] of route.matchAll(/:([A-Za-z]+)/g)) {
+      expect(operation.parameters).toContainEqual(expect.objectContaining({ in: 'path', name, required: true }));
+    }
+    if (route.includes('/onboarding/')) expect(operation.security).toEqual([{ OnboardingTokenCookie: [] }]);
+    if (route.endsWith('/link')) expect(operation.security).toEqual([{ BearerAuth: [] }, { AccessTokenCookie: [] }]);
+
+    if (!route.endsWith('/callback')) {
+      expect(operation.parameters).toContainEqual(expect.objectContaining({ in: 'query', name: 'returnTo' }));
+      return;
+    }
+
+    expect(operation.responses).toHaveProperty('400');
+    expect(operation.responses).toHaveProperty('401');
+    if (method === 'GET') {
+      expect(operation.parameters).toEqual(expect.arrayContaining(
+        ['code', 'state', 'error'].map(name => expect.objectContaining({ in: 'query', name })),
+      ));
+      return;
+    }
+
+    const form = operation.requestBody.content['application/x-www-form-urlencoded'].schema;
+    expect(operation.requestBody.required).toBe(true);
+    if (route.endsWith('/saml/callback')) {
+      expect(form.required).toEqual(['SAMLResponse', 'RelayState']);
+    } else {
+      expect(form.anyOf).toEqual(expect.arrayContaining([
+        expect.objectContaining({ required: ['code', 'state'], properties: expect.objectContaining({ user: expect.any(Object) }) }),
+        expect.objectContaining({ required: ['error'] }),
+      ]));
+      expect(operation.responses).toHaveProperty('413');
+    }
   });
 });

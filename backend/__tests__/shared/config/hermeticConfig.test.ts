@@ -55,6 +55,7 @@ describe('hermetic test configuration', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubEnv('EG_XSRF_COOKIE_DOMAIN', '');
+    vi.stubEnv('EG_PUBLIC_API_ORIGIN', '');
     dotenvConfig.mockClear();
     process.env.NODE_ENV = 'test';
     process.env.EG_LOAD_ENV_IN_TESTS = 'false';
@@ -116,6 +117,40 @@ describe('hermetic test configuration', () => {
       await expect(import('@enterpriseglue/shared/config/index.js')).rejects.toThrow();
     },
   );
+
+  it('normalizes the configured public API origin and accepts the shared XSRF domain', async () => {
+    vi.stubEnv('FRONTEND_URL', 'https://app.example.test');
+    vi.stubEnv('EG_PUBLIC_API_ORIGIN', 'https://API.example.test:443/');
+    vi.stubEnv('EG_XSRF_COOKIE_DOMAIN', 'example.test');
+    const { config } = await import('@enterpriseglue/shared/config/index.js');
+    expect(config.publicApiOrigin).toBe('https://api.example.test');
+  });
+
+  it.each([
+    'api.example.test', 'ftp://api.example.test', 'https://api.example.test/base',
+    'https://user:password@api.example.test', 'https://api.example.test/?',
+    'https://api.example.test/#', 'https://api.example.test:99999',
+  ])('rejects an invalid public API origin %s', async (origin) => {
+    vi.stubEnv('EG_PUBLIC_API_ORIGIN', origin);
+    await expect(import('@enterpriseglue/shared/config/index.js')).rejects.toThrow();
+  });
+
+  it('rejects a configured shared XSRF domain that excludes the API hostname', async () => {
+    vi.stubEnv('FRONTEND_URL', 'https://app.example.test');
+    vi.stubEnv('EG_PUBLIC_API_ORIGIN', 'https://api.other.test');
+    vi.stubEnv('EG_XSRF_COOKIE_DOMAIN', 'example.test');
+    await expect(import('@enterpriseglue/shared/config/index.js')).rejects.toThrow('must include the configured EG_PUBLIC_API_ORIGIN host');
+  });
+
+  it.each([
+    ['https://app.example.test', 'http://api.example.test', 'EG_PUBLIC_API_ORIGIN'],
+    ['http://app.example.test', 'https://api.example.test', 'FRONTEND_URL'],
+  ])('requires HTTPS on both split origins in production', async (frontend, api, key) => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('FRONTEND_URL', frontend);
+    vi.stubEnv('EG_PUBLIC_API_ORIGIN', api);
+    await expect(import('@enterpriseglue/shared/config/index.js')).rejects.toThrow(`${key} must use HTTPS`);
+  });
 
   it('does not read developer environment files in the unit-test lane', async () => {
     await import('@enterpriseglue/shared/config/index.js');

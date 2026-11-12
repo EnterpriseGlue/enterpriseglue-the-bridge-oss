@@ -24,7 +24,8 @@ in `engine-tenant-mappings.json`. See
 | JWT_SECRET | Yes | dev value | Must be strong in production |
 | ADMIN_EMAIL | Yes | admin@enterpriseglue.ai | Bootstrap admin user |
 | ADMIN_PASSWORD | Yes | dev value | Change in production |
-| FRONTEND_URL | Yes | http://localhost:5173 (dev), http://localhost:8080 (prod) | Frontend origin used by backend auth links |
+| FRONTEND_URL | Yes | http://localhost:5173 (dev), http://localhost:8080 (prod) | Frontend origin used by backend auth links, browser redirects and credentialed CORS |
+| EG_PUBLIC_API_ORIGIN | No | unset | Backend-only additional exact origin for OIDC and SAML sign-in callbacks. An HTTP(S) origin with no credentials, non-root path, query or fragment. Requires HTTPS on both origins in production. |
 | ENCRYPTION_KEY | Yes | dev value | 64-char hex key |
 | ENTERPRISE_SCHEMA | No | enterprise | Must be non-public and distinct from active main schema |
 
@@ -201,7 +202,7 @@ Tenant-scoped login pages pass tenant context through OAuth `state` or SAML
 | API_UPSTREAM | No | `backend:${API_PORT}` | Frontend Nginx runtime upstream override |
 | EG_FRONTEND_RUNTIME_API_BASE_URL | No | empty | Container-start browser API origin override; absolute HTTP(S), no credentials/query/fragment; generated into the same-origin runtime configuration document |
 | EG_FRONTEND_RUNTIME_CONFIG_REQUIRED | No | `false` | Fail frontend startup when the generated runtime document does not provide a usable API base URL |
-| EG_XSRF_COOKIE_DOMAIN | No | host-only | Backend-only explicit shared parent domain for the application XSRF-TOKEN cookie on split frontend/API subdomains; must contain FRONTEND_URL. Names are fixed: XSRF-TOKEN and X-XSRF-TOKEN. |
+| EG_XSRF_COOKIE_DOMAIN | No | host-only | Backend-only explicit shared parent domain for the application XSRF-TOKEN cookie on split frontend/API subdomains; must contain the FRONTEND_URL and configured EG_PUBLIC_API_ORIGIN hosts. Names are fixed: XSRF-TOKEN and X-XSRF-TOKEN. |
 | VITE_RUNTIME_CONFIG_URL | No | Docker default `/.well-known/enterpriseglue/runtime-config.json` | Build-time pointer for custom static deployments; the standard image uses the stable same-origin endpoint |
 | VITE_RUNTIME_CONFIG_REQUIRED | No | `false` | Build-time fail-closed policy; runtime `required: true` can strengthen it but never weaken it |
 | VITE_FEATURE_* | No | true | Feature flags per module |

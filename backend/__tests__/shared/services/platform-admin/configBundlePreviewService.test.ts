@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import { configBundlePreviewService } from '@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js';
 import { SystemRoleDefinitions } from '@enterpriseglue/shared/services/platform-admin/permissions.js';
 
@@ -11,6 +12,36 @@ describe('configBundlePreviewService', () => {
     expect(configBundlePreviewService.compile({bundle:{...bundle,imports:Object.keys(files)},files}).files?.['./sso-connection.json']).toMatchObject({ssoConnection:{ownershipMode:'config_locked'}});
     expect(configBundlePreviewService.preview({bundle:{...bundle,imports:['./sso-connection.json']},files:{'./sso-connection.json':{ssoConnection:{connection:{mode:'proxy',proxyProfileKey:'corporate'},proxyUrl:'http://unapproved'}}}}).valid).toBe(false);
   });
+  it('checks split-origin provider callbacks before applying a bundle', () => {
+    const originalOrigin = config.publicApiOrigin;
+    const path = './identity-providers.json';
+    const provider = {
+      key: 'identity.entra', type: 'oidc', authenticationMode: 'direct',
+      sync: { triggers: ['login'], requiredForLogin: true, incompleteEntitlements: 'fail_closed' },
+      oidc: {
+        issuerUrl: 'https://idp.example.test',
+        clientId: 'enterpriseglue',
+        scopes: ['openid'],
+        callbackUrl: 'https://api.example.test/api/auth/identity/callback',
+      },
+    };
+    const input = { bundle: { ...bundle, imports: [path] }, files: { [path]: { identityProviders: [provider] } } };
+    config.publicApiOrigin = 'https://api.example.test';
+    try {
+      expect(configBundlePreviewService.preview(input)).toMatchObject({ valid: true });
+      provider.oidc.callbackUrl = 'https://other.example.test/api/auth/identity/callback';
+      expect(configBundlePreviewService.preview(input)).toMatchObject({
+        valid: false,
+        errors: [expect.objectContaining({
+          path: './identity-providers.json.identityProviders.0.oidc.callbackUrl',
+          message: expect.stringContaining('canonical'),
+        })],
+      });
+    } finally {
+      config.publicApiOrigin = originalOrigin;
+    }
+  });
+
   it('validates declared files and produces a deterministic canonical hash', () => {
     const input = { bundle, files: { './groups.json': { groups: [{ key: 'group.ops', name: 'Ops' }] } } };
     const first = configBundlePreviewService.preview(input);

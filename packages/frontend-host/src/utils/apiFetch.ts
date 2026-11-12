@@ -1,6 +1,13 @@
 import { config } from '../config.js';
 import { XSRF_COOKIE_NAME, XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
 
+export function applyApiBaseUrl(url: string): string {
+  if (!config.apiBaseUrl) return url;
+  if (/^https?:\/\//.test(url)) return url;
+  const base = config.apiBaseUrl.replace(/\/$/, '');
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
 export function assertApiRequestUrl(url: string): void {
   const resolved = new URL(url, window.location.href);
   const allowedOrigin = config.apiBaseUrl ? new URL(config.apiBaseUrl).origin : window.location.origin;

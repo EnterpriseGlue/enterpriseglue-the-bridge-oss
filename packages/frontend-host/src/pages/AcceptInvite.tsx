@@ -18,7 +18,7 @@ import type {
   VerifyInvitationOtpRequest,
 } from '@enterpriseglue/shared/schemas/platform-admin/invitation.js';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
-import { redirectTo, replaceAndReloadToInternalPath } from '../utils/redirect';
+import { redirectToApi, replaceAndReloadToInternalPath } from '../utils/redirect';
 import type { PublicLoginMethodsResponse, PublicLoginProvider } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 
 const PASSWORD_REQUIREMENTS = 'Use at least 8 characters with an uppercase letter, lowercase letter, number, and symbol (!@#$%^&*_+=).';
@@ -98,7 +98,7 @@ export default function AcceptInvite() {
     }
     try {
       setCompleting(true);
-      redirectTo(`${apiRoot}/auth/onboarding/providers/${encodeURIComponent(provider.id)}/start`);
+      redirectToApi(`${apiRoot}/auth/onboarding/providers/${encodeURIComponent(provider.id)}/start`);
     } catch {
       setCompleting(false);
       setFeedback({ title: 'Unable to start SSO', subtitle: 'Please retry the organization sign-in method.' });

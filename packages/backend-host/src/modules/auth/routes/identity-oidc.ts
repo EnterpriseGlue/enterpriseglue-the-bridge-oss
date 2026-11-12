@@ -223,6 +223,7 @@ async function startOidcLogin(
   enrollment?: InvitationEnrollmentContext,
   accountLink?: AccountLinkContext,
 ): Promise<void> {
+  res.setHeader('Cache-Control', 'no-store');
   requireDirectOidc(provider);
   const network = await ssoConnectionService.resolve(provider.tenantId);
   const state = buildSignedOidcState(req, provider.id, { key: provider.key, tenantId: provider.tenantId, ssoConnectionVersion:network.version }, enrollment, accountLink);
@@ -243,6 +244,7 @@ async function startOidcLogin(
 }
 
 async function startSamlLogin(req: Request, res: Response, provider: IdentityProvider, enrollment?: InvitationEnrollmentContext): Promise<void> {
+  res.setHeader('Cache-Control', 'no-store');
   requireDirectSaml(provider);
   const requestId = createSamlRequestId();
   const relayState = buildSignedSamlState(req, provider.id, { key: provider.key, tenantId: provider.tenantId }, requestId, enrollment);
@@ -584,6 +586,7 @@ function redirectForAdministratorMfa(error: unknown, res: Response): boolean {
 }
 
 async function completeOidcLogin(req: Request, res: Response): Promise<void> {
+  res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'POST' && !req.is('application/x-www-form-urlencoded')) {
     throw Errors.validation('OIDC POST callback requires form-urlencoded content');
   }
@@ -735,6 +738,7 @@ router.post('/api/auth/cloud-signup/microsoft/email/complete', apiLimiter, ident
   }));
 
 async function completeSamlLogin(req: Request, res: Response): Promise<void> {
+  res.setHeader('Cache-Control', 'no-store');
   const samlResponse = typeof req.body?.SAMLResponse === 'string' ? req.body.SAMLResponse : '';
   const relayState = typeof req.body?.RelayState === 'string' ? req.body.RelayState : '';
   const parsed = parseSignedSamlState(relayState);

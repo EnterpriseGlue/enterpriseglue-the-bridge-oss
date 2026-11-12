@@ -32,7 +32,9 @@ EG_XSRF_COOKIE_DOMAIN=example.test
 ```
 
 The domain must contain the configured `FRONTEND_URL` host and be valid for the
-API host that sets the cookie. Compose reads this from the backend env file;
+API host that sets the cookie. When `EG_PUBLIC_API_ORIGIN` is configured, the
+backend also validates that an explicit cookie domain includes the API host.
+Compose reads this from the backend env file;
 OpenShift forwards it from the deployment environment to the application
 ConfigMap. Helm deployments can add it to their backend ConfigMap.
 Use only domains whose relevant subdomains are
@@ -113,7 +115,19 @@ Launcher and validation scripts:
 - `EG_RUNTIME_ROLE`: `all` (default), `api`, or `worker`. `all` preserves the
   existing combined process. `api` serves HTTP without pollers; `worker` runs
   durable/background pollers without opening an HTTP listener.
-- `FRONTEND_URL`: frontend origin for auth links
+- `FRONTEND_URL`: frontend origin for auth links, browser redirects and credentialed CORS
+- `EG_PUBLIC_API_ORIGIN`: optional backend-only origin for OIDC and SAML sign-in callbacks.
+  Use one absolute HTTP(S) origin with an optional port and trailing slash.
+  Credentials, non-root paths, queries and fragments are rejected. Both
+  `FRONTEND_URL` and `EG_PUBLIC_API_ORIGIN` must use HTTPS in production when
+  this option is configured. Unset or empty permits only the frontend origin.
+  In a split deployment, use the same API origin for the browser API base and
+  register the exact callback with the identity provider. Compose reads this
+  from the backend env file. The OpenShift deploy script sets the backend
+  origin and requires the frontend runtime configuration to use it. Supply a
+  separate public API route in the deployment. Helm deployments can add the
+  backend value to the ConfigMap referenced by the backend and configure the
+  frontend runtime separately.
 
 ### Database Required Variables (by `DATABASE_TYPE`)
 - `postgres`: either `POSTGRES_URL` (connection string) **or** `POSTGRES_HOST` + `POSTGRES_USER` + `POSTGRES_PASSWORD` + `POSTGRES_DATABASE` + `POSTGRES_SCHEMA` (non-public)
@@ -486,9 +500,11 @@ entry; wildcards never authorize a private provider.
   deduplicated and every budget failure is fail closed. The per-identity limits
   apply inside the aggregate reconciliation limits.
 
-OIDC and SAML callback URLs are not outbound allowlist targets. They must use
-the exact `FRONTEND_URL` origin and canonical protocol path:
-`/api/auth/identity/callback` or `/api/auth/providers/saml/callback`.
+OIDC and SAML sign-in callbacks use the exact `FRONTEND_URL` origin or the
+optional `EG_PUBLIC_API_ORIGIN`, with a canonical global or tenant-scoped path.
+The outbound provider host allowlist applies separately. See
+[split frontend and API origins](../how-to/auth-sso.md#split-frontend-and-api-origins)
+for deployment and rollback steps.
 
 `/health` exposes sanitized bootstrap state for diagnostics. `/ready` returns
 `503` after a non-fail-closed bootstrap error. Successful apply receipts report

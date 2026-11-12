@@ -53,6 +53,15 @@ existing entry-file allowlist still applies: this routing change does not add
 arbitrary or code-split chunk serving. Qualify simultaneous release transitions
 separately and keep plugin output within the supported manifest asset contract.
 
+## Split-origin company sign-in
+
+For company SSO with the browser calling a separate same-site API, use the
+[split-origin SSO settings](./auth-sso.md#split-frontend-and-api-origins).
+Serve the frontend runtime configuration from the application origin and
+configure the frontend CSP for the API origin. Native frontend plugin imports
+still require the frontend-origin asset routes above. Verify any installed
+frontend plugin from a real tenant page before cutting over.
+
 ## Preflight
 
 After deploying the route, run the packaged probe against the same public origin customers use:

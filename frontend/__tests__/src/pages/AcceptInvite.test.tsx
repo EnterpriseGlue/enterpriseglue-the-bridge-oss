@@ -5,8 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import AcceptInvite from '@src/pages/AcceptInvite';
 import { apiClient } from '@src/shared/api/client';
-import { redirectTo, replaceAndReloadToInternalPath } from '@src/utils/redirect';
-vi.mock('@src/utils/redirect', () => ({ redirectTo: vi.fn(), replaceAndReloadToInternalPath: vi.fn() }));
+import { redirectToApi, replaceAndReloadToInternalPath } from '@src/utils/redirect';
+vi.mock('@src/utils/redirect', () => ({ redirectToApi: vi.fn(), replaceAndReloadToInternalPath: vi.fn() }));
 
 const navigateMock = vi.fn();
 const notifyMock = vi.fn();
@@ -81,7 +81,7 @@ describe('AcceptInvite', () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: `Continue with ${provider.displayName}` }));
-    expect(redirectTo).toHaveBeenCalledWith(`/api/t/default/auth/onboarding/providers/${provider.id}/start`);
+    expect(redirectToApi).toHaveBeenCalledWith(`/api/t/default/auth/onboarding/providers/${provider.id}/start`);
     expect(screen.queryByLabelText('New password')).not.toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
   });

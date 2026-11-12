@@ -142,6 +142,15 @@ const schemaName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
   emailSmtpUser: z.string().optional(),
   
   frontendUrl: z.string().url().default('http://localhost:5173'),
+  publicApiOrigin: z.string().optional().transform((value, ctx) => {
+    if (!value) return undefined;
+    const url = URL.parse(value);
+    if (!/^https?:\/\/[^/\s?#@\\]+\/?$/i.test(value) || !url) {
+      ctx.addIssue({ code: 'custom', message: 'EG_PUBLIC_API_ORIGIN must be an absolute HTTP(S) origin without credentials, path, query or fragment.' });
+      return z.NEVER;
+    }
+    return url.origin;
+  }),
   
   // Camunda configuration (optional - can use persisted engines instead)
   camundaBaseUrl: z.string().url().optional(),
@@ -258,6 +267,7 @@ function loadConfig(): Config {
     emailSmtpSecure: envOrUndefined(process.env.EMAIL_SMTP_SECURE) ? process.env.EMAIL_SMTP_SECURE === 'true' : undefined,
     emailSmtpUser: envOrUndefined(process.env.EMAIL_SMTP_USER),
     frontendUrl: process.env.FRONTEND_URL,
+    publicApiOrigin: process.env.EG_PUBLIC_API_ORIGIN,
     camundaBaseUrl: process.env.CAMUNDA_BASE_URL,
     camundaUsername: process.env.CAMUNDA_USERNAME,
     camundaPassword: process.env.CAMUNDA_PASSWORD,
@@ -291,10 +301,24 @@ function loadConfig(): Config {
 
   try {
     const parsed = configSchema.parse(raw);
+    if (parsed.publicApiOrigin && inferredNodeEnv === 'production') {
+      if (!parsed.publicApiOrigin.startsWith('https:')) {
+        throw new Error('EG_PUBLIC_API_ORIGIN must use HTTPS in production.');
+      }
+      if (new URL(parsed.frontendUrl).protocol !== 'https:') {
+        throw new Error('FRONTEND_URL must use HTTPS in production when EG_PUBLIC_API_ORIGIN is configured.');
+      }
+    }
     if (parsed.xsrfCookieDomain) {
       const frontendHost = new URL(parsed.frontendUrl).hostname;
       if (frontendHost !== parsed.xsrfCookieDomain && !frontendHost.endsWith(`.${parsed.xsrfCookieDomain}`)) {
         throw new Error('EG_XSRF_COOKIE_DOMAIN must include the configured FRONTEND_URL host.');
+      }
+      if (parsed.publicApiOrigin) {
+        const apiHost = new URL(parsed.publicApiOrigin).hostname;
+        if (apiHost !== parsed.xsrfCookieDomain && !apiHost.endsWith(`.${parsed.xsrfCookieDomain}`)) {
+          throw new Error('EG_XSRF_COOKIE_DOMAIN must include the configured EG_PUBLIC_API_ORIGIN host.');
+        }
       }
     }
     return Object.assign(databaseConfig, parsed);

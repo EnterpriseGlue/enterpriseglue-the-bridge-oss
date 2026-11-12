@@ -1,7 +1,7 @@
 import { SsoConnectionViewSchema, SsoConnectionUpdateSchema, SsoConnectionTestSchema, SsoConnectionTestResultSchema, SsoProxyCatalogueViewSchema, SsoProxyCatalogueUpdateSchema } from './platform-admin/sso-connection.js';
 import { DocumentationLogoutResponseSchema, DocumentationConfigurationResponseSchema, DocumentationGrantRequestSchema, DocumentationGrantResponseSchema, DocumentationExchangeRequestSchema, DocumentationExchangeResponseSchema, DocumentationAccessResponseSchema, DocumentationSubscriberIdentitySchema, DocumentationWorkspacesResponseSchema, DocumentationWorkspaceQuerySchema } from './auth/documentation.js';
 import { z } from 'zod';
-import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3 } from '@asteasolutions/zod-to-openapi';
+import { extendZodWithOpenApi, OpenAPIRegistry, OpenApiGeneratorV3, type ResponseConfig } from '@asteasolutions/zod-to-openapi';
 
 // Extend zod BEFORE loading schema modules — zod 4 requires this to run
 // before any schema is created so that .openapi() is available on instances.
@@ -398,6 +398,53 @@ function authzExemption(method: string, path: string): Record<string, unknown> {
   return { [AUTHZ_OPENAPI_EXEMPTION_KEY]: toOpenApiAuthzExemption(exemption) };
 }
 
+const ssoRedirectHeaders = {
+  'Cache-Control': { schema: { type: 'string', enum: ['no-store'] } },
+  Location: { schema: { type: 'string', format: 'uri' } },
+} satisfies NonNullable<ResponseConfig['headers']>;
+
+const ssoReturnQuery = z.object({
+  returnTo: z.string().optional().describe('Internal frontend path after sign-in'),
+  tenantSlug: z.string().optional().describe('Tenant routing hint for global compatibility URLs'),
+});
+
+const oidcCallbackQuery = z.object({
+  code: z.string().optional().describe('Authorization code on success'),
+  state: z.string().optional().describe('Browser-bound state required on success'),
+  error: z.string().optional().describe('Identity provider error when authorization is declined'),
+});
+
+const oidcCallbackForm = z.union([
+  z.object({ code: z.string(), state: z.string(), user: z.string().optional().describe('Serialized Apple profile, when supplied') }),
+  z.object({ error: z.string(), state: z.string().optional() }),
+]);
+
+const oidcCallbackResponses = {
+  302: { description: 'Redirect to the frontend after processing the provider response bound to the initiating browser cookies', headers: ssoRedirectHeaders },
+  400: { description: 'Missing authorization code or invalid callback input' },
+  401: { description: 'Authorization rejected, browser state invalid or expired, or session binding failed' },
+  403: { description: 'Account or enrollment is forbidden' },
+  404: { description: 'Identity provider or tenant unavailable' },
+};
+
+const oidcCallbackFormBody = {
+  required: true,
+  content: { 'application/x-www-form-urlencoded': { schema: oidcCallbackForm } },
+};
+
+const samlCallbackBody = {
+  required: true,
+  content: { 'application/x-www-form-urlencoded': { schema: z.object({ SAMLResponse: z.string(), RelayState: z.string() }) } },
+};
+
+const samlCallbackResponses = {
+  302: { description: 'Redirect to the frontend after verifying the SAML assertion and initiating browser cookie', headers: ssoRedirectHeaders },
+  400: { description: 'Missing SAML response' },
+  401: { description: 'Invalid, expired, or cross-tenant assertion or browser state' },
+  403: { description: 'Account or enrollment is forbidden' },
+  404: { description: 'Identity provider or tenant unavailable' },
+};
+
 const PluginControlErrorResponseSchema = z.object({
   code: z.enum([
     'plugin_not_found',
@@ -662,14 +709,16 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: '/api/auth/me/identity-providers/{providerId}/link',
+  security: [{ BearerAuth: [] }, { AccessTokenCookie: [] }],
   ...authzExemption('GET', '/api/auth/me/identity-providers/:providerId/link'),
   request: {
     params: z.object({ providerId: z.string() }),
     query: z.object({ returnTo: z.string().optional() }),
   },
   responses: {
-    302: { description: 'Redirect to the selected tenant or global Cloud OIDC provider for authenticated account linking' },
-    401: { description: 'Not authenticated' },
+    302: { description: 'Redirect to the selected tenant or global Cloud OIDC provider for authenticated account linking', headers: ssoRedirectHeaders },
+    401: { description: 'No active account-linking session' },
+    403: { description: 'Tenant-scoped session required' },
     404: { description: 'Identity provider not found' },
   },
 });
@@ -4322,7 +4371,7 @@ registry.registerPath({
   path: '/api/auth/cloud-signup/providers/{providerId}/start',
   ...authzExemption('GET', '/api/auth/cloud-signup/providers/:providerId/start'),
   request: { params: z.object({ providerId: z.string() }), query: z.object({ returnTo: z.enum(['/cloud/onboarding', '/login', '/documentation/access']) }).strict() },
-  responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding, organization login or documentation access' }, 404: { description: 'Cloud account identity or provider unavailable' } },
+  responses: { 302: { description: 'Start a signed provider flow returning to Cloud onboarding, organization login or documentation access', headers: ssoRedirectHeaders }, 400: { description: 'Invalid account return path' }, 404: { description: 'Cloud account identity or provider unavailable' } },
 });
 const { CloudMicrosoftEmailRequestSchema, CloudMicrosoftEmailCompleteSchema } = await import('./auth/cloud-microsoft-email.js');
 registry.registerPath({
@@ -4452,13 +4501,18 @@ registry.registerPath({
   },
 });
 
+registry.registerComponent('securitySchemes', 'OnboardingTokenCookie', {
+  type: 'apiKey', in: 'cookie', name: 'onboardingToken',
+  description: 'Browser-bound token from a verified invitation.',
+});
+
 // POST /api/auth/complete-onboarding
 registry.registerPath({ method: 'get', path: '/api/auth/onboarding/login-methods', ...authzExemption('GET', '/api/auth/onboarding/login-methods'), responses: {
   200: { description: 'Enrollment methods for the verified invitation tenant; requires the onboarding cookie', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } },
   401: { description: 'Missing, stale or invalid onboarding context' },
 } });
-registry.registerPath({ method: 'get', path: '/api/auth/onboarding/providers/{providerId}/start', ...authzExemption('GET', '/api/auth/onboarding/providers/:providerId/start'), request: { params: z.object({ providerId: z.string() }) }, responses: {
-  302: { description: 'Start invitation-bound OIDC or SAML enrollment using the onboarding cookie; no account ID or invitation credential is accepted as input' },
+registry.registerPath({ method: 'get', path: '/api/auth/onboarding/providers/{providerId}/start', security: [{ OnboardingTokenCookie: [] }], ...authzExemption('GET', '/api/auth/onboarding/providers/:providerId/start'), request: { params: z.object({ providerId: z.string() }), query: ssoReturnQuery }, responses: {
+  302: { description: 'Start invitation-bound OIDC or SAML enrollment using the onboarding cookie', headers: ssoRedirectHeaders },
   401: { description: 'Missing, stale or invalid onboarding context' }, 404: { description: 'Provider unavailable in the invitation tenant' },
 } });
 registry.registerPath({ method: 'post', path: '/api/auth/onboarding/providers/{providerId}/login', ...authzExemption('POST', '/api/auth/onboarding/providers/:providerId/login'), request: {
@@ -4513,8 +4567,8 @@ registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/onboardin
   200: { description: 'Enrollment methods for the verified invitation tenant; requires the onboarding cookie', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } },
   401: { description: 'Missing, stale or invalid onboarding context' },
 } });
-registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/onboarding/providers/{providerId}/start', ...authzExemption('GET', '/api/t/:tenantSlug/auth/onboarding/providers/:providerId/start'), request: { params: z.object({ tenantSlug: TenantSlugSchema, providerId: z.string() }) }, responses: {
-  302: { description: 'Start invitation-bound OIDC or SAML enrollment using the onboarding cookie; no account ID or invitation credential is accepted as input' },
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/onboarding/providers/{providerId}/start', security: [{ OnboardingTokenCookie: [] }], ...authzExemption('GET', '/api/t/:tenantSlug/auth/onboarding/providers/:providerId/start'), request: { params: z.object({ tenantSlug: TenantSlugSchema, providerId: z.string() }), query: ssoReturnQuery }, responses: {
+  302: { description: 'Start invitation-bound OIDC or SAML enrollment using the onboarding cookie', headers: ssoRedirectHeaders },
   401: { description: 'Missing, stale or invalid onboarding context' }, 404: { description: 'Provider unavailable in the invitation tenant' },
 } });
 registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/auth/onboarding/providers/{providerId}/login', ...authzExemption('POST', '/api/t/:tenantSlug/auth/onboarding/providers/:providerId/login'), request: {
@@ -4662,14 +4716,30 @@ registry.registerPath({
   responses: { 200: { description: 'Public platform settings', content: { 'application/json': { schema: PublicPlatformSettingsSchema } } } },
 });
 
-registry.registerPath({ method: 'get', path: '/api/auth/identity/{key}/start', ...authzExemption('GET', '/api/auth/identity/{key}/start'), request: { params: z.object({ key: z.string() }) }, responses: { 302: { description: 'Redirect to the selected OIDC identity provider' } } });
-registry.registerPath({ method: 'get', path: '/api/auth/identity/callback', ...authzExemption('GET', '/api/auth/identity/callback'), responses: { 302: { description: 'Provider-neutral OIDC callback redirect' } } });
+registry.registerPath({ method: 'get', path: '/api/auth/identity/{key}/start', ...authzExemption('GET', '/api/auth/identity/{key}/start'), request: { params: z.object({ key: z.string() }), query: ssoReturnQuery }, responses: { 302: { description: 'Redirect to the selected OIDC or SAML identity provider', headers: ssoRedirectHeaders }, 404: { description: 'Identity provider not found' } } });
+registry.registerPath({
+  method: 'get', path: '/api/auth/identity/callback',
+  ...authzExemption('GET', '/api/auth/identity/callback'),
+  request: { query: oidcCallbackQuery },
+  responses: oidcCallbackResponses,
+});
+registry.registerPath({
+  method: 'post', path: '/api/auth/identity/callback',
+  ...authzExemption('POST', '/api/auth/identity/callback'),
+  request: { body: oidcCallbackFormBody },
+  responses: { ...oidcCallbackResponses, 413: { description: 'Callback form exceeds the supported size' } },
+});
 registry.registerPath({ method: 'post', path: '/api/auth/identity/{key}/ldap/login', ...authzExemption('POST', '/api/auth/identity/{key}/ldap/login'), request: { params: z.object({ key: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
 registry.registerPath({ method: 'get', path: '/api/auth/providers/enabled', ...authzExemption('GET', '/api/auth/providers/enabled'), responses: { 200: { description: 'Compatibility response for enabled provider-neutral direct-login options. New clients use /api/auth/login-methods.', content: { 'application/json': { schema: z.array(z.object({ id: z.string(), key: z.string(), displayName: z.string(), organization: z.string().nullable(), protocol: z.enum(['oidc', 'saml', 'ldap']), loginMethod: z.enum(['redirect', 'password']) })) } } } } });
 registry.registerPath({ method: 'get', path: '/api/auth/login-methods', ...authzExemption('GET', '/api/auth/login-methods'), responses: { 200: { description: 'Policy-resolved login methods safe to show before authentication', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } } } });
-registry.registerPath({ method: 'get', path: '/api/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/auth/providers/{providerId}/start'), request: { params: z.object({ providerId: z.string() }) }, responses: { 302: { description: 'Redirect to the selected provider-neutral OIDC or SAML identity provider' }, 404: { description: 'Identity provider not found' } } });
+registry.registerPath({ method: 'get', path: '/api/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/auth/providers/{providerId}/start'), request: { params: z.object({ providerId: z.string() }), query: ssoReturnQuery }, responses: { 302: { description: 'Redirect to the selected provider-neutral OIDC or SAML identity provider', headers: ssoRedirectHeaders }, 404: { description: 'Identity provider not found' } } });
 registry.registerPath({ method: 'post', path: '/api/auth/providers/{providerId}/login', ...authzExemption('POST', '/api/auth/providers/{providerId}/login'), request: { params: z.object({ providerId: z.string() }), body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'Provider-neutral LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
-registry.registerPath({ method: 'post', path: '/api/auth/providers/saml/callback', ...authzExemption('POST', '/api/auth/providers/saml/callback'), request: { body: { content: { 'application/x-www-form-urlencoded': { schema: z.object({ SAMLResponse: z.string(), RelayState: z.string() }) } } } }, responses: { 302: { description: 'Provider-neutral SAML callback redirect' }, 401: { description: 'Invalid identity provider state' } } });
+registry.registerPath({
+  method: 'post', path: '/api/auth/providers/saml/callback',
+  ...authzExemption('POST', '/api/auth/providers/saml/callback'),
+  request: { body: samlCallbackBody },
+  responses: samlCallbackResponses,
+});
 registry.registerPath({
   method: 'post',
   path: '/api/auth/providers/{providerId}/oidc/backchannel-logout',
@@ -4700,10 +4770,26 @@ registry.registerPath({
 
 const TenantProviderParamsSchema = z.object({ tenantSlug: z.string(), providerId: z.string() });
 registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/login-methods', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/login-methods'), request: { params: z.object({ tenantSlug: z.string() }) }, responses: { 200: { description: 'Tenant-scoped policy-resolved login methods safe to show before authentication', content: { 'application/json': { schema: identityProviderMigrationSchemas.PublicLoginMethodsResponseSchema } } } } });
-registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/providers/{providerId}/start'), request: { params: TenantProviderParamsSchema }, responses: { 302: { description: 'Redirect to the selected tenant-scoped OIDC or SAML identity provider' }, 404: { description: 'Identity provider not found in the resolved tenant scope' } } });
+registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/providers/{providerId}/start', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/providers/{providerId}/start'), request: { params: TenantProviderParamsSchema, query: ssoReturnQuery }, responses: { 302: { description: 'Redirect to the selected tenant-scoped OIDC or SAML identity provider', headers: ssoRedirectHeaders }, 404: { description: 'Identity provider not found in the resolved tenant scope' } } });
 registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/auth/providers/{providerId}/login', ...authzExemption('POST', '/api/t/{tenantSlug}/auth/providers/{providerId}/login'), request: { params: TenantProviderParamsSchema, body: { content: { 'application/json': { schema: z.object({ username: z.string(), password: z.string() }) } } } }, responses: { 200: { description: 'Tenant-scoped provider-neutral LDAP identity login', content: { 'application/json': { schema: AuthenticatedSessionLoginResponseSchema } } }, 401: { description: 'Invalid directory credentials' } } });
-registry.registerPath({ method: 'get', path: '/api/t/{tenantSlug}/auth/identity/callback', ...authzExemption('GET', '/api/t/{tenantSlug}/auth/identity/callback'), request: { params: TenantPathSchema }, responses: { 302: { description: 'Release-aware tenant-scoped OIDC callback redirect' }, 401: { description: 'Invalid, expired, or cross-tenant state' } } });
-registry.registerPath({ method: 'post', path: '/api/t/{tenantSlug}/auth/providers/saml/callback', ...authzExemption('POST', '/api/t/{tenantSlug}/auth/providers/saml/callback'), request: { params: TenantPathSchema, body: { content: { 'application/x-www-form-urlencoded': { schema: z.object({ SAMLResponse: z.string(), RelayState: z.string() }) } } } }, responses: { 302: { description: 'Release-aware tenant-scoped SAML callback redirect' }, 401: { description: 'Invalid, expired, or cross-tenant assertion state' } } });
+registry.registerPath({
+  method: 'get', path: '/api/t/{tenantSlug}/auth/identity/callback',
+  ...authzExemption('GET', '/api/t/{tenantSlug}/auth/identity/callback'),
+  request: { params: TenantPathSchema, query: oidcCallbackQuery },
+  responses: oidcCallbackResponses,
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/auth/identity/callback',
+  ...authzExemption('POST', '/api/t/{tenantSlug}/auth/identity/callback'),
+  request: { params: TenantPathSchema, body: oidcCallbackFormBody },
+  responses: { ...oidcCallbackResponses, 413: { description: 'Callback form exceeds the supported size' } },
+});
+registry.registerPath({
+  method: 'post', path: '/api/t/{tenantSlug}/auth/providers/saml/callback',
+  ...authzExemption('POST', '/api/t/{tenantSlug}/auth/providers/saml/callback'),
+  request: { params: TenantPathSchema, body: samlCallbackBody },
+  responses: samlCallbackResponses,
+});
 
 // Tenant SSO config
 const TenantSsoConfigResponseSchema = z.object({

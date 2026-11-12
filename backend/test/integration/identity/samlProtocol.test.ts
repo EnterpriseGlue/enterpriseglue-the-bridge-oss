@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { config } from '@enterpriseglue/shared/config/index.js';
 import { genericSamlService } from '@enterpriseglue/shared/services/platform-admin/GenericSamlService.js';
 import { MOCK_SAML_REQUEST_ID, MockSamlHttpsServer, MockSamlIdentityProvider } from '../../identity-mocks/index.js';
 
@@ -15,8 +16,10 @@ const configuration = {
 
 describe('loopback SAML protocol mock', () => {
   let transport: MockSamlHttpsServer | null = null;
+  const originalApiOrigin = config.publicApiOrigin;
 
   afterEach(async () => {
+    config.publicApiOrigin = originalApiOrigin;
     delete process.env.EG_SAML_PROTOCOL_CERT;
     await transport?.stop();
     transport = null;
@@ -42,6 +45,19 @@ describe('loopback SAML protocol mock', () => {
       ssoUrl: `${transport.issuer}/sso`,
       idpEntityId: transport.issuer,
     }, response!, MOCK_SAML_REQUEST_ID)).resolves.toMatchObject({ nameID: 'person@example.test', role: 'operator' });
+  });
+
+  it('accepts a signed assertion addressed to the configured API origin', async () => {
+    config.publicApiOrigin = 'https://api.example.test';
+    const callbackUrl = `${config.publicApiOrigin}/api/auth/providers/saml/callback`;
+    const provider = new MockSamlIdentityProvider();
+    process.env.EG_SAML_PROTOCOL_CERT = provider.certificate();
+    const apiConfiguration = { ...configuration, callbackUrl };
+
+    await expect(genericSamlService.validatePostResponse(apiConfiguration, provider.signedResponse({ callbackUrl }), MOCK_SAML_REQUEST_ID))
+      .resolves.toMatchObject({ nameID: 'person@example.test' });
+    await expect(genericSamlService.validatePostResponse(apiConfiguration, provider.signedResponse(), MOCK_SAML_REQUEST_ID))
+      .rejects.toThrow();
   });
 
   it('applies in-process subject and multi-valued group changes to the next browser-post assertion', async () => {
