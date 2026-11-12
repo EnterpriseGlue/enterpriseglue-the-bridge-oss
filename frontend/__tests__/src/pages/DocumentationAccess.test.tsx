@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DocumentationAccess from '@src/pages/DocumentationAccess';
@@ -43,10 +43,13 @@ describe('documentation-only account entry', () => {
     expect(screen.queryByText(/then create your EnterpriseGlue organization/)).not.toBeInTheDocument();
   });
   it('carries documentation intent into email verification without a provisioning request', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ siteKey: null });
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={['/signup/email?intent=documentation']}><CloudEmailAuth /></MemoryRouter>);
+    const submit = screen.getByRole('button', { name: 'Email me a verification link' });
     await user.type(screen.getByRole('textbox', { name: 'Email address' }), 'reader@example.test');
-    await user.click(screen.getByRole('button', { name: 'Email me a verification link' }));
+    await waitFor(() => expect(submit).toBeEnabled());
+    await user.click(submit);
     expect(apiClient.post).toHaveBeenCalledExactlyOnceWith('/api/auth/cloud-signup/email/request', { email: 'reader@example.test', intent: 'documentation' });
   });
 });

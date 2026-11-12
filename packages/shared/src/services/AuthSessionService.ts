@@ -6,7 +6,7 @@ import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/
 import { IdentityProvider } from '@enterpriseglue/shared/infrastructure/persistence/entities/IdentityProvider.js';
 import { Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { generateId } from '@enterpriseglue/shared/utils/id.js';
-import { generateAccessToken, generateRefreshToken, normalizeUserJwtPayload, verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
+import { generateAccessToken, generateRefreshToken, hasCloudAccountAuthentication, normalizeUserJwtPayload, verifyToken } from '@enterpriseglue/shared/utils/jwt.js';
 import type { JwtPayload, UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
 import { IsNull, MoreThan, type EntityManager } from 'typeorm';
 import { OSS_DEFAULT_TENANT_ID, OSS_DEFAULT_TENANT_SLUG } from '@enterpriseglue/shared/authz/tenant-scope.js';
@@ -87,8 +87,7 @@ class AuthSessionService {
     if (source.sessionClass === 'cloud_account' && (config.tenancyMode !== 'pooled'
       || !config.tenancyCloudRequired
       || !config.cloudAccountIdentityEnabled
-      || !['oidc', 'saml', 'passkey'].includes(source.authenticationMethod || '')
-      || (source.authenticationMethod === 'passkey' && source.mfaVerified !== true))) throw denied();
+      || !hasCloudAccountAuthentication(source))) throw denied();
     const dataSource = await getDataSource();
     const session = await dataSource.getRepository(RefreshToken).findOneBy({
       id: source.sessionId, userId: source.userId, tenantId: source.tenantId || IsNull(),
@@ -131,13 +130,13 @@ class AuthSessionService {
     if (input.sessionClass !== undefined && input.sessionClass !== 'cloud_account') {
       throw Errors.unauthorized('Invalid session class');
     }
-    const isPasskey = input.authenticationMethod === 'passkey';
+    const isNativeCloudAuthentication = input.authenticationMethod === 'passkey' || input.authenticationMethod === 'email_link';
     if (isCloudAccountSession && (!cloudAccountSessionsEnabled
       || input.administratorRecovery
       || Boolean(input.tenantId?.trim())
       || Boolean(input.tenantSlug?.trim())
-      || (isPasskey
-        ? input.mfaVerified !== true
+      || (isNativeCloudAuthentication
+        ? !hasCloudAccountAuthentication(input)
           || Boolean(input.identityProviderId)
           || input.identityProviderUpdatedAt != null
           || Boolean(input.identityProviderProtocol)

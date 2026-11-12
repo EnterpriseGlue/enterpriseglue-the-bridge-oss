@@ -6,6 +6,37 @@ import { encrypt } from '@enterpriseglue/shared/services/encryption.js';
 import { config } from '../../config/index.js';
 import { Tenant } from '../../infrastructure/persistence/entities/Tenant.js';
 import { runWithTenantDatabaseContext } from '../../services/tenant-database-context.js';
+import type { EntityManager } from 'typeorm';
+
+function gitHubDefaults(tenantId: string | null) {
+  const now = Date.now();
+  return {
+    id: generateId(),
+    tenantId,
+    name: 'GitHub',
+    type: 'github',
+    baseUrl: 'https://github.com',
+    apiUrl: 'https://api.github.com',
+    customBaseUrl: null,
+    customApiUrl: null,
+    oauthClientId: process.env.GITHUB_CLIENT_ID || null,
+    oauthClientSecret: process.env.GITHUB_CLIENT_SECRET ? encrypt(process.env.GITHUB_CLIENT_SECRET) : null,
+    oauthScopes: 'repo,read:user,user:email',
+    oauthAuthUrl: 'https://github.com/login/oauth/authorize',
+    oauthTokenUrl: 'https://github.com/login/oauth/access_token',
+    supportsOAuth: true,
+    supportsPAT: true,
+    isActive: true,
+    displayOrder: 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** Run as part of the tenant-creation transaction in the new tenant's scope. */
+export async function seedCloudGitHubProvider(manager: EntityManager, tenantId: string): Promise<void> {
+  await manager.getRepository(GitProvider).insert(gitHubDefaults(tenantId));
+}
 
 /**
  * Seed default Git providers (GitHub, GitLab, Azure DevOps, Bitbucket)
@@ -28,28 +59,7 @@ async function seedGitProvidersScoped(tenantId: string|null) {
     logger.info('Seeding Git providers...');
 
     const providers = [
-      {
-        id: generateId(),
-        tenantId,
-        name: 'GitHub',
-        type: 'github',
-        baseUrl: 'https://github.com',
-        apiUrl: 'https://api.github.com',
-        customBaseUrl: null,
-        customApiUrl: null,
-        // OAuth config - set via env vars: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
-        oauthClientId: process.env.GITHUB_CLIENT_ID || null,
-        oauthClientSecret: process.env.GITHUB_CLIENT_SECRET ? encrypt(process.env.GITHUB_CLIENT_SECRET) : null,
-        oauthScopes: 'repo,read:user,user:email',
-        oauthAuthUrl: 'https://github.com/login/oauth/authorize',
-        oauthTokenUrl: 'https://github.com/login/oauth/access_token',
-        supportsOAuth: true,
-        supportsPAT: true,
-        isActive: true,
-        displayOrder: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
+      gitHubDefaults(tenantId),
       {
         id: generateId(),
         tenantId,
