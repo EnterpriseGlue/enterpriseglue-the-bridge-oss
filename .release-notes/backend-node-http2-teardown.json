@@ -9,9 +9,9 @@
     "operators",
     "security"
   ],
-  "summary": "Update the backend runtime to Node.js 24.22.3 to fix CVE-2026-123863, a denial of service caused by improper HTTP/2 session teardown.",
+  "summary": "Update the backend runtime to Node.js 24.22.3 and the managed-shard bootstrap runtime to Node.js 26.13.1 to fix CVE-2026-123863, a denial of service caused by improper HTTP/2 session teardown.",
   "userImpact": [
-    "No behavior change. The backend keeps the Node.js 24 major and its existing configuration."
+    "No behavior change. The backend keeps the Node.js 24 major, the bootstrap keeps the Node.js 26 major, and both keep their existing configuration."
   ],
   "upgrade": {
     "required": true,
@@ -34,17 +34,17 @@
     ]
   },
   "security": [
-    "Pin the Wolfi backend runtime to nodejs-24 24.22.3-r2, which contains the fix for CVE-2026-123863 (HIGH)."
+    "Pin the Wolfi backend runtime to nodejs-24 24.22.3-r2 and the managed-shard bootstrap runtime to nodejs-26 26.13.1-r1, both of which contain the fix for CVE-2026-123863 (HIGH)."
   ],
   "documentation": [
-    "docs/runbooks/security-dependency-updates.md records the new backend Node.js pin."
+    "docs/runbooks/security-dependency-updates.md records the new backend and bootstrap Node.js pins."
   ],
   "knownLimitations": [],
   "rollback": [
     "Restore the previous image only after independently checking its current security acceptance."
   ],
   "validation": [
-    "Dependency-security override tests, the backend production image build and an exact-image vulnerability scan."
+    "Dependency-security override and managed-shard bootstrap tests, both runtime image builds and exact-image vulnerability scans."
   ],
   "packages": [],
   "customerDocumentation": {
