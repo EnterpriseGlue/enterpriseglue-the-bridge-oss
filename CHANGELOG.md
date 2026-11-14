@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.38.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.37.0...v0.38.0) (2026-11-14)
+
+### Changes
+
+- **runtime-dependencies:** Update the backend runtime to Node.js 24.22.3 and the managed-shard bootstrap runtime to Node.js 26.13.1 to fix CVE-2026-123863, a denial of service caused by improper HTTP/2 session teardown.
+- **frontend-deployment:** Adds verified HTTPS and optional client certificate authentication to the frontend NGINX connection to a deployment-provided backend gateway.
+- **sso:** Enable OIDC and SAML sign-in when the browser uses a separate public EnterpriseGlue API origin.
+
+Full upgrade, compatibility and verification details: [v0.38.0 release notes](docs/releases/v0.38.0.md).
+
 ## [0.37.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.36.1...v0.37.0) (2026-11-12)
 
 ### Changes
