@@ -1,0 +1,56 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "backend-node-http2-teardown",
+  "type": "security",
+  "scope": "runtime-dependencies",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "security"
+  ],
+  "summary": "Update the backend runtime to Node.js 24.22.3 to fix CVE-2026-123863, a denial of service caused by improper HTTP/2 session teardown.",
+  "userImpact": [
+    "No behavior change. The backend keeps the Node.js 24 major and its existing configuration."
+  ],
+  "upgrade": {
+    "required": true,
+    "instructions": [
+      "Deploy the new backend image. No configuration or data changes are needed."
+    ]
+  },
+  "configuration": [
+    "No new runtime configuration is required."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": [
+      "Migration inventories and schema-plan identities remain unchanged."
+    ]
+  },
+  "security": [
+    "Pin the Wolfi backend runtime to nodejs-24 24.22.3-r2, which contains the fix for CVE-2026-123863 (HIGH)."
+  ],
+  "documentation": [
+    "docs/runbooks/security-dependency-updates.md records the new backend Node.js pin."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Restore the previous image only after independently checking its current security acceptance."
+  ],
+  "validation": [
+    "Dependency-security override tests, the backend production image build and an exact-image vulnerability scan."
+  ],
+  "packages": [],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "The runtime patch keeps existing behavior and needs no configuration change."
+  }
+}
