@@ -380,7 +380,7 @@ test('runtime OS floors invalidate stale zlib and glibc layers and application N
   }
   const backend = await readFile(new URL('backend/Dockerfile.prod', root), 'utf8');
   assert.match(backend, /glibc-2\.44-dev>=2\.44-r16/);
-  assert.match(backend, /nodejs-24=24\.22\.1-r2/);
+  assert.match(backend, /nodejs-24=24\.22\.3-r2/);
   assert.ok(backend.includes('c-ares>=1.34.9-r0'));
   const bootstrap = await readFile(new URL('infra/docker/managed-shard-bootstrap/Dockerfile', root), 'utf8');
   assert.ok(bootstrap.includes('nodejs-26=26.12.1-r2'));

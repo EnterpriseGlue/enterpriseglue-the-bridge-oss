@@ -78,7 +78,7 @@ RUN set -eux; \
     apk --no-network info --installed 'libexpat1=2.10.0-r0'; \
     runtime_tools="$(apk info | awk '/^(nodejs|npm|node-gyp|corepack)(-|$)/')"; \
     apk del --no-network ${runtime_tools}; \
-    apk add --no-cache 'nodejs-24=24.22.1-r2' 'c-ares>=1.34.9-r0' \
+    apk add --no-cache 'nodejs-24=24.22.3-r2' 'c-ares>=1.34.9-r0' \
       'zlib>=1.3.2.1_rc20260921-r0' \
       'glibc-2.44>=2.44-r16' 'glibc-2.44-dev>=2.44-r16' \
       'glibc-2.44-locale-posix>=2.44-r16' 'ld-linux-2.44>=2.44-r16' 'libcrypt1-2.44>=2.44-r16'; \
