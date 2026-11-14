@@ -156,7 +156,7 @@ test('runner never invokes TypeORM synchronize and executes only the signed sche
   assert.match(dockerfile, /^FROM ghcr\.io\/enterpriseglue\/enterpriseglue-the-bridge-oss-backend@sha256:21b196a9/m)
   const upgradedPackages = dockerfile.match(/^RUN apk add --no-cache --upgrade \\\n((?:[ \t]+[^\n]*\\\n)*[ \t]+[^\n]*)(?:\n|$)/m)?.[1]
   assert.deepEqual(upgradedPackages?.split(/\\\n/).map((line) => line.trim()), [
-    "'nodejs-26=26.12.1-r2' 'c-ares>=1.34.9-r0'",
+    "'nodejs-26=26.13.1-r1' 'c-ares>=1.34.9-r0'",
     "'ca-certificates-bundle>=20260909-r3'",
     "'libexpat1=2.10.0-r0'",
     "'zlib>=1.3.2.1_rc20260921-r0'",
