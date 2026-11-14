@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.38.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.37.0...v0.38.0) (2026-11-14)
+
+
+### Features
+
+* **frontend:** support TLS for the backend upstream ([517e7ef](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/517e7ef850cdea4067c80d9f7eaa0a556af0b5c8))
+* **frontend:** support TLS for the backend upstream ([0203715](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0203715ea0287ef9850cfa4bbc190ecb47c78287))
+
+
+### Bug Fixes
+
+* **security:** update backend runtime to Node.js 24.22.3 ([ce6a54f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ce6a54f15274c1d4a36ba277a1e54fd8500c93bc))
+* **security:** update backend runtime to Node.js 24.22.3 ([c8bbf3c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c8bbf3c8a58fbc8dd49336ef2c00f0337ea38e48))
+* **security:** update managed-shard bootstrap runtime to Node.js 26.13.1 ([1083a28](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/1083a28f7f14d3400efaf432445ae705ea931bb9))
+* **security:** update managed-shard bootstrap runtime to Node.js 26.13.1 ([e401b64](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e401b642b680fe05a988dc6197e92c151be0112c))
+* **sso:** support split frontend and API origins ([623f3c1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/623f3c1935b7f4a9c19ee439d5dcaedff7a8fe0f))
+* **sso:** support split frontend and API origins ([6acc452](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6acc4525aecc74c23fb00f6cb21b9cdbe4e31255))
+
 ## [0.37.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.36.1...v0.37.0) (2026-11-12)
 
 ### Changes
