@@ -44,30 +44,44 @@ interface ProjectGitSettingsProps {
   manageConnectionUnavailableReason?: string | null
 }
 
-function TokenInfoPanel() {
+const tokenInstructions = new Map<string, React.ReactNode>([
+  ['github', <>
+    In <strong>GitHub</strong>, go to{' '}
+    <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener noreferrer">
+      Fine-grained tokens
+    </a>
+    {' → '} Generate new token → Select the target repo → Set <em>Contents</em> to "Read and write".
+  </>],
+  ['gitlab', <>
+    In <strong>GitLab</strong>, go to Project → Settings → Access Tokens and create a token with the <code>write_repository</code> scope.
+  </>],
+  ['bitbucket', <>
+    In <strong>Bitbucket</strong>, create a service token with repository write access.
+  </>],
+  ['azure-devops', <>
+    In <strong>Azure DevOps</strong>, go to User settings → Personal access tokens and create a token with the <em>Code: Read &amp; Write</em> scope.
+  </>],
+])
+
+function TokenSetupGuide({ providerType }: { providerType?: string }) {
+  const instructions = tokenInstructions.get(providerType ?? '')
+  if (!instructions) return null
+
   return (
-    <div style={{ fontSize: '13px', lineHeight: 1.5, maxWidth: 400 }}>
-      <p style={{ fontWeight: 600, marginBottom: 8 }}>How to create a service token:</p>
-      <p style={{ marginBottom: 8 }}>
-        <strong>GitHub (recommended):</strong> Go to{' '}
-        <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener noreferrer">
-          Fine-grained tokens
-        </a>
-        {' → '} Generate new token → Select the target repo → Set <em>Contents</em> to "Read and write".
-      </p>
-      <p style={{ marginBottom: 8 }}>
-        <strong>GitLab:</strong> Project → Settings → Access Tokens → Create with <code>write_repository</code> scope.
-      </p>
-      <p style={{ marginBottom: 8 }}>
-        <strong>Bitbucket:</strong> Personal settings → App passwords → Create with <em>Repositories: Write</em>.
-      </p>
-      <p style={{ marginBottom: 0 }}>
-        <strong>Azure DevOps:</strong> User settings → Personal access tokens → <em>Code: Read & Write</em> scope.
-      </p>
-      <p style={{ marginTop: 8, color: 'var(--color-text-secondary)' }}>
-        Tip: Use a service/bot account so the token isn't tied to a personal account.
-      </p>
-    </div>
+    <Toggletip align="bottom">
+      <ToggletipButton label="Token setup guide">
+        <Information size={16} />
+      </ToggletipButton>
+      <ToggletipContent>
+        <div style={{ fontSize: '13px', lineHeight: 1.5, maxWidth: 400 }}>
+          <p style={{ fontWeight: 600, marginBottom: 8 }}>How to create a service token</p>
+          <p>{instructions}</p>
+          <p style={{ marginTop: 8, color: 'var(--color-text-secondary)' }}>
+            Use a service account so the token is independent of a personal account.
+          </p>
+        </div>
+      </ToggletipContent>
+    </Toggletip>
   )
 }
 
@@ -141,11 +155,12 @@ function ProjectGitSettingsForm({
 
   const providersQ = useQuery({ queryKey: ['git', 'providers', authority], queryFn: listGitCredentialProviders,
     enabled: open && !readConnectionUnavailableReason })
-  const providerOptions = (providersQ.data || []).filter(row => row.supportsPAT).map(row => ({ id: row.id, text: row.name }))
+  const providerOptions = (providersQ.data || []).filter(row => row.supportsPAT).map(row => ({ id: row.id, text: row.name, type: row.type }))
   const selectedProvider = providerOptions.find(row => row.id === providerId)
   useEffect(() => { if (open && !providerId && providersQ.data?.length) setProviderId(providersQ.data.find(row => row.supportsPAT)?.id || '') }, [open, providerId, providersQ.data])
 
   const conn = connectionQ.data
+  const connectedProvider = conn?.connected ? providerOptions.find(row => row.id === conn.providerId) : undefined
   const cleanManageConnectionUnavailableReason = hasPermissionSnapshot && !manageConnectionDecision.allowed
     ? manageConnectionDecision.reason
     : null
@@ -346,18 +361,11 @@ function ProjectGitSettingsForm({
                     type="password"
                     value={updateToken}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUpdateToken(e.target.value)}
-                    placeholder="ghp_... or glpat-..."
+                    placeholder="Paste your service token"
                     disabled={!canMutateConnection || isBusy || closedRef.current}
                     style={{ flex: 1 }}
                   />
-                  <Toggletip align="bottom">
-                    <ToggletipButton label="Token setup guide">
-                      <Information size={16} />
-                    </ToggletipButton>
-                    <ToggletipContent>
-                      <TokenInfoPanel />
-                    </ToggletipContent>
-                  </Toggletip>
+                  <TokenSetupGuide providerType={connectedProvider?.type} />
                 </div>
                 <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
                   <Button
@@ -458,20 +466,13 @@ function ProjectGitSettingsForm({
                 type="password"
                 value={token}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setToken(e.target.value)}
-                placeholder="ghp_... or glpat-..."
+                placeholder="Paste your service token"
                 disabled={!canMutateConnection || isBusy || closedRef.current}
                 style={{ flex: 1 }}
                 invalid={!token.trim() && token !== ''}
                 invalidText="Required"
               />
-              <Toggletip align="bottom">
-                <ToggletipButton label="Token setup guide">
-                  <Information size={16} />
-                </ToggletipButton>
-                <ToggletipContent>
-                  <TokenInfoPanel />
-                </ToggletipContent>
-              </Toggletip>
+              <TokenSetupGuide providerType={selectedProvider?.type} />
             </div>
 
             <Button
