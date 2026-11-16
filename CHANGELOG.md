@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.38.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.0...v0.38.1) (2026-11-16)
 
+### Changes
 
-### Bug Fixes
+- **platform-signup-bootstrap:** The pooled platform signup bootstrap can now disable a sign-in provider it manages, as long as at least one provider stays enabled.
 
-* **config-bundle:** let the pooled signup bootstrap disable a managed provider ([21771d8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/21771d886ef933a0bd773dca17cc880ba3e66373))
-* **config-bundle:** let the pooled signup bootstrap disable a managed provider ([8ea28b5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8ea28b5510cb9c832dc295aead8ff8126640b69c))
+Full upgrade, compatibility and verification details: [v0.38.1 release notes](docs/releases/v0.38.1.md).
 
 ## [0.38.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.37.0...v0.38.0) (2026-11-14)
 
