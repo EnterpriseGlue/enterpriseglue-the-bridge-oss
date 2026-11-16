@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.38.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.0...v0.38.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **config-bundle:** let the pooled signup bootstrap disable a managed provider ([21771d8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/21771d886ef933a0bd773dca17cc880ba3e66373))
+* **config-bundle:** let the pooled signup bootstrap disable a managed provider ([8ea28b5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/8ea28b5510cb9c832dc295aead8ff8126640b69c))
+
 ## [0.38.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.37.0...v0.38.0) (2026-11-14)
 
 ### Changes
