@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.38.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.0...v0.38.1) (2026-11-16)
+
+### Changes
+
+- **platform-signup-bootstrap:** The pooled platform signup bootstrap can now disable a sign-in provider it manages, as long as at least one provider stays enabled.
+
+Full upgrade, compatibility and verification details: [v0.38.1 release notes](docs/releases/v0.38.1.md).
+
 ## [0.38.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.37.0...v0.38.0) (2026-11-14)
 
 ### Changes
