@@ -455,11 +455,26 @@ describe('configBundleBootstrap', () => {
     ['empty owner', (p: any) => { p.bundle.metadata.owner = ''; }],
     ['ownership acknowledgement', (p: any) => { p.acknowledgements = ['config.ownership_adoption:platform_settings:general']; }],
     ['duplicate provider', (p: any) => { p.files['./identity-providers.json'].identityProviders.push(p.files['./identity-providers.json'].identityProviders[0]); }],
+    ['only disabled providers', (p: any) => { p.files['./identity-providers.json'].identityProviders[0].enabled = false; }],
   ])('rejects pooled %s before importer authority', async (_, mutate) => {
     const payload = providerPayload(); mutate(payload); mountPooled(payload);
     await expect(runConfigBundleBootstrap()).rejects.toThrow('validation failed');
     expect(apply).not.toHaveBeenCalled();
     expect(getPlatformDatabaseCapability()).toBeUndefined();
+  });
+
+  it('grants the provider lease for a bundle that disables one provider and keeps another enabled', async () => {
+    const payload = providerPayload(), providers = payload.files['./identity-providers.json'].identityProviders;
+    providers.push({ ...structuredClone(providers[0]), key: 'withdrawn-oidc', enabled: false });
+    mountPooled(payload);
+    apply.mockImplementation(async () => {
+      expect(getPlatformDatabaseCapability()).toEqual({ kind: 'config-bootstrap', bundleKey: 'platform.signup', providerKeys: ['signup-oidc', 'withdrawn-oidc'] });
+      return { applyRunId: 'apply-run-1', reconciliation: { identitySnapshot: { status: 'not_needed' }, runtimeReconciliation: { status: 'not_needed' } } };
+    });
+    updateApplyRun.mockResolvedValue({ affected: 1 });
+    preview.mockReturnValue({ valid: true, canonicalHash: 'preview-hash' });
+    await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'applied' });
+    expect(apply).toHaveBeenCalledTimes(1);
   });
 
   it('validates pooled bundles without granting mutation authority', async () => {

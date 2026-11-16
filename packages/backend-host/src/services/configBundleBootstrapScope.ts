@@ -28,8 +28,11 @@ export function providerBootstrapCapability(payload: ProviderBootstrapInput): Ex
   const providers = ConfigIdentityProvidersFileSchema.safeParse(payload.files['./identity-providers.json']);
   if (!providers.success) return reject();
   if (!providers.data.identityProviders.length || providers.data.identityProviders.length > 100
-    || providers.data.identityProviders.some(provider => provider.type === 'ldap' || !provider.enabled
-      || provider.authenticationMode !== 'direct' || provider.allowVerifiedEmailLinking)) reject();
+    || providers.data.identityProviders.some(provider => provider.type === 'ldap'
+      || provider.authenticationMode !== 'direct' || provider.allowVerifiedEmailLinking)
+    // A provider may be disabled (for example to withdraw a sign-in method the
+    // bundle manages), but the bundle must keep at least one enabled provider.
+    || !providers.data.identityProviders.some(provider => provider.enabled)) reject();
   return { kind: 'config-bootstrap', bundleKey: bundle.metadata.key,
     providerKeys: providers.data.identityProviders.map(provider => provider.key) };
 }

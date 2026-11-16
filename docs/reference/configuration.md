@@ -376,6 +376,7 @@ round-trip, and authoritative-removal procedure.
 - `EG_CONFIG_EXPECTED_TENANT_SCOPE`: Required `platform` target assertion for
   an OSS `apply` bootstrap. It does not select or route to a native pooled
   tenant.
+- Pooled-mode bootstrap accepts only an additive `platform` bundle that imports `./identity-providers.json` with direct, non-LDAP providers without verified email linking. A provider in that bundle may set `enabled: false` to withdraw a sign-in method it manages; at least one provider must stay enabled, otherwise the bundle is rejected before any import authority is granted.
 - `EG_CONFIG_FAIL_CLOSED`: `true` or `false`; defaults to `true` in production and controls whether a configured bootstrap failure stops startup.
 - `EG_CONFIG_REQUIRE_SECRET_PREFLIGHT`: `true` or `false`; default `false`. When enabled, validation and apply bootstrap modes require every referenced `env://`, `file://`, or `docker://` secret to be available, and apply is bound to that availability check.
 - `EG_CONFIG_MAX_BYTES`: Maximum size per bundle; defaults to `1048576`.

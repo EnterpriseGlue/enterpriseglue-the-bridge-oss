@@ -1,0 +1,58 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "signup-bundle-disable-provider",
+  "type": "fix",
+  "scope": "platform-signup-bootstrap",
+  "breaking": false,
+  "audiences": [
+    "operators"
+  ],
+  "summary": "The pooled platform signup bootstrap can now disable a sign-in provider it manages, as long as at least one provider stays enabled.",
+  "userImpact": [
+    "Operators can withdraw a platform sign-in method (for example Apple) by setting it to disabled in the startup identity-provider bundle; it then no longer appears on the cloud signup page."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "An identity provider in the pooled startup bundle may set enabled to false. A bundle in which every provider is disabled is still rejected before any import authority is granted."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The bootstrap capability is unchanged in kind: it still covers only the bundle's listed platform providers, rejects LDAP, non-direct authentication and verified email linking, and is revoked after the receipt is written."
+  ],
+  "documentation": [
+    "The configuration reference describes the pooled-mode bootstrap limits, including disabling a managed provider."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Re-enable the provider in the bundle, or roll back to the previous host release; a disabled provider row is re-enabled by the next bundle that marks it enabled."
+  ],
+  "validation": [
+    "The configuration bootstrap suite covers a bundle that disables one provider while keeping another enabled, and rejects a bundle whose only provider is disabled."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.24.7",
+      "newVersion": "0.24.8",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "Only operators who mount a pooled startup signup bundle are affected, and the configuration reference covers it."
+  }
+}
