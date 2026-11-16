@@ -22,10 +22,10 @@ vi.mock('@carbon/react', () => ({
       <button onClick={onRequestClose}>Close settings</button>
     </div>
   ) : null),
-  TextInput: ({ id, labelText, value, onChange, disabled, type = 'text', invalidText }: any) => (
+  TextInput: ({ id, labelText, value, onChange, disabled, type = 'text', invalidText, placeholder }: any) => (
     <label htmlFor={id}>
       {labelText}
-      <input id={id} type={type} value={value || ''} onChange={onChange} disabled={Boolean(disabled)} />
+      <input id={id} type={type} value={value || ''} onChange={onChange} disabled={Boolean(disabled)} placeholder={placeholder} />
       {invalidText ? <span>{invalidText}</span> : null}
     </label>
   ),
@@ -178,6 +178,25 @@ describe('ProjectGitSettings', () => {
     await userEvent.type(screen.getByLabelText(/Service Token \(PAT\)/i), 'synthetic-token');
     await userEvent.click(screen.getByRole('button', { name: 'Test & Connect' }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/git-api/project-connection', expect.objectContaining({ providerId })));
+  });
+
+  it.each(['connect', 'rotate'])('only offers GitHub guidance when GitHub is the enabled provider (%s)', async operation => {
+    renderSettings(operation === 'rotate' ? { connected: true, providerId: gitProviderFixture.id } : { connected: false });
+    if (operation === 'rotate') {
+      await userEvent.click(await screen.findByRole('button', { name: 'Update Token' }));
+    }
+    expect(await screen.findByText('GitHub', { selector: 'strong', exact: true })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Paste your service token')).toBeInTheDocument();
+    expect(screen.queryByText(/GitLab|Bitbucket|Azure DevOps/i)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/glpat-/i)).not.toBeInTheDocument();
+  });
+
+  it('shows guidance for the connected provider when multiple providers are enabled', async () => {
+    const gitlab = { ...gitProviderFixture, id: 'gitlab', name: 'GitLab', type: 'gitlab' };
+    renderSettings({ connected: true, providerId: gitlab.id }, {}, basePermissions, false, [gitProviderFixture, gitlab]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Update Token' }));
+    expect(await screen.findByText('GitLab', { selector: 'strong', exact: true })).toBeInTheDocument();
+    expect(screen.queryByText('GitHub', { selector: 'strong', exact: true })).not.toBeInTheDocument();
   });
 
   it('keeps disconnected Git settings read-only without project git connect permission', async () => {
