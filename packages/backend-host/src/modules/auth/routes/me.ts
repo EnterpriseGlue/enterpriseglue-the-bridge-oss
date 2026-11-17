@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { createLogger } from '@enterpriseglue/shared/utils/structuredLogger.js';
 import { z } from 'zod';
 import { requireAuth, requireCloudAccountOrTenantAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
@@ -25,6 +25,8 @@ import { config } from '@enterpriseglue/shared/config/index.js';
 import { createAuthenticatedSessionContext } from '@enterpriseglue/shared/utils/session-identity.js';
 import { getActivePlatformAdministratorUserIds } from '@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMembershipService.js';
 import { AuthenticatedSessionUserSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
+
+const logger = createLogger('auth');
 
 const router = Router();
 

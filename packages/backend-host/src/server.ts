@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { createApp, registerBaseRoutes, registerFinalMiddleware } from './app.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { ensureSchemaExists, initializeDatabase } from '@enterpriseglue/shared/db/run-migrations.js';
@@ -12,7 +13,7 @@ import { startRuntimeInventoryPollerIfEnabled } from './poller/runtimeInventoryP
 import { startConfigBundleIdentityReplayPollerIfEnabled } from './poller/configBundleIdentityReplayPoller.js';
 import { startConfigBundleRuntimeReconciliationPollerIfEnabled } from './poller/configBundleRuntimeReconciliationPoller.js';
 import { startCamundaNativeGrantSnapshotRetentionPoller } from './poller/camundaNativeGrantSnapshotRetentionPoller.js';
-import { getConfigBootstrapStatus, runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
+import { runConfigBundleBootstrap } from './services/configBundleBootstrap.js';
 import { createLazyConnectionPool } from '@enterpriseglue/shared/db/db-pool.js';
 import type { EnterpriseBackendContext } from '@enterpriseglue/enterprise-plugin-api/backend';
 import { createEnterpriseDatabaseContext } from './services/enterpriseDatabaseContext.js';
@@ -63,7 +64,7 @@ export async function startServer() {
       || enterprisePlugin.getEngineTenantReferenceResolver
     )
   );
-  console.log(
+  logger.info(
     `[Enterprise] Backend plugin status: loaded=${app.locals.enterprisePluginLoaded}, ` +
       `registerRoutes=${Boolean(enterprisePlugin.registerRoutes)}, ` +
       `migrateEnterpriseDatabase=${Boolean(enterprisePlugin.migrateEnterpriseDatabase)}, ` +
@@ -76,7 +77,7 @@ export async function startServer() {
     // compatibility path to the enterprise plugin.
     await enterprisePlugin.registerRoutes?.(app as any, enterpriseContext);
   } catch (error) {
-    console.error('Failed to register enterprise routes:', error);
+    logger.error('Failed to register enterprise routes:', error);
     throw error;
   }
 
@@ -104,7 +105,7 @@ export async function startServer() {
             ...enterpriseContext,
           } as any);
         } catch (error) {
-          console.error('Failed to run enterprise migrations:', error);
+          logger.error('Failed to run enterprise migrations:', error);
           throw error;
         }
       }
@@ -115,7 +116,6 @@ export async function startServer() {
       try {
         await runConfigBundleBootstrap({ tenantReferenceResolver: engineTenantReferenceResolver });
       } catch {
-        console.error('Configuration bundle bootstrap failed:', getConfigBootstrapStatus());
         if (config.configFailClosed) throw new Error('Configuration bundle bootstrap failed');
       }
     },
@@ -124,7 +124,7 @@ export async function startServer() {
         const { seedGitProviders } = await import('@enterpriseglue/shared/db/seed/gitProviders.js');
         await seedGitProviders();
       } catch (error) {
-        console.error('Failed to seed Git providers:', error);
+        logger.error('Failed to seed Git providers:', error);
       }
     },
     seedEnvironmentTags: async () => {
@@ -132,7 +132,7 @@ export async function startServer() {
         const { environmentTagService } = await import('@enterpriseglue/shared/services/platform-admin/EnvironmentTagService.js');
         await environmentTagService.seedDefaults();
       } catch (error) {
-        console.error('Failed to seed environment tags:', error);
+        logger.error('Failed to seed environment tags:', error);
       }
     },
   });
@@ -148,11 +148,11 @@ export async function startServer() {
 
   if (servesHttp) {
     app.listen(config.port, () => {
-      console.log(`Voyager API listening on http://localhost:${config.port}`);
-      console.log(`API docs: http://localhost:${config.port}/api/docs`);
+      logger.info(`Voyager API listening on http://localhost:${config.port}`);
+      logger.info(`API docs: http://localhost:${config.port}/api/docs`);
     });
   } else {
-    console.log('EnterpriseGlue worker runtime started without a public HTTP listener');
+    logger.info('EnterpriseGlue worker runtime started without a public HTTP listener');
   }
 
   // Start background pollers

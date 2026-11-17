@@ -3,7 +3,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { createLogger } from '@enterpriseglue/shared/utils/structuredLogger.js';
 import { z } from 'zod';
 import { requireCloudAccountOrTenantAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
@@ -20,6 +20,8 @@ import { signFederatedLogoutState } from '@enterpriseglue/shared/utils/samlRelay
 import { LogoutResponseSchema } from '@enterpriseglue/shared/schemas/auth/session.js';
 import { auditFromRequest, AuditActions, logAudit } from '@enterpriseglue/shared/services/audit.js';
 import { normalizeUserJwtPayload, verifyToken, type UserJwtPayload } from '@enterpriseglue/shared/utils/jwt.js';
+
+const logger = createLogger('auth');
 
 const router = Router();
 

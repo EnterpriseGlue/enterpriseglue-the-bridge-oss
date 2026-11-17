@@ -100,7 +100,9 @@ describe('mission-control-service', () => {
   ] as const) it(`rejects opaque definition ${name} drift instead of guessing metadata`, async () => {
     vi.mocked(camundaGet).mockImplementation(async (_engine, path) => {
       if (path === '/process-instance') return [{ id: 'instance-1', definitionId: 'opaque', tenantId: 'runtime-blue' }] as any;
-      if (path === '/process-definition/opaque') return { id: 'opaque', key: 'expected', version: 1, tenantId: 'runtime-blue', ...change } as any;
+      if (path === '/process-definition/opaque') {
+        return Object.assign({ id: 'opaque', key: 'expected', version: 1, tenantId: 'runtime-blue' }, change);
+      }
       throw new Error('unexpected engine path');
     });
     await expect(listProcessInstancesDetailed('engine-1', { active: 'true', processDefinitionKey: 'expected', tenantIdIn: ['runtime-blue'] })).rejects.toThrow('Process definition identity');
