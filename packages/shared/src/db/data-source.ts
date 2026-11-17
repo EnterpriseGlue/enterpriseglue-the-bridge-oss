@@ -1,18 +1,18 @@
 import 'reflect-metadata';
 import { DataSource, Repository, EntityTarget, ObjectLiteral } from 'typeorm';
 import { getAdapter, DatabaseAdapter } from './adapters/index.js';
-import { TimestampedTypeOrmLogger } from './TimestampedTypeOrmLogger.js';
-import { logger } from '../utils/logger.js';
+import { createLogger } from '../utils/structuredLogger.js';
+import { getTypeOrmLoggingOptions } from './TimestampedTypeOrmLogger.js';
 import { installPostgresContextBoundary, assertPostgresContextBoundary } from '../infrastructure/persistence/subscribers/TenantRlsSubscriber.js';
 
 // Get the database adapter based on configuration
 const adapter: DatabaseAdapter = getAdapter();
 
-const dataSourceOptions = adapter.getDataSourceOptions();
+const logger = createLogger('db');
 
 export const AppDataSource = new DataSource({
-  ...dataSourceOptions,
-  logger: new TimestampedTypeOrmLogger(),
+  ...adapter.getDataSourceOptions(),
+  ...getTypeOrmLoggingOptions(),
 });
 installPostgresContextBoundary(AppDataSource);
 

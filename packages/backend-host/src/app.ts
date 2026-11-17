@@ -1,15 +1,13 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import morgan from 'morgan';
 import swaggerUi from 'swagger-ui-express';
 import { XSRF_HEADER_NAME } from '@enterpriseglue/shared/utils/xsrf.js';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
 import { errorHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { apiLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
-import { runWithBpmnEngineRequestContext } from '@enterpriseglue/shared/services/bpmn-engine-request-context.js';
+import { requestLogging } from './middleware/requestLogging.js';
 import { installBrowserRequestProtection } from './middleware/browser-request-protection.js';
 import { registerRoutes } from './routes/index.js';
 import { registerPluginPlatformRoutes } from './plugins/pluginRuntime.js';
@@ -121,32 +119,11 @@ export function createApp(options: CreateAppOptions = {}): express.Express {
     exposedHeaders: [XSRF_HEADER_NAME], // Expose the same token to non-cookie API clients
   }));
 
-  // Keep one-time proofs and provider callback parameters out of request logs.
-  morgan.token('eg-url', (req) => {
-    const url = req.url ?? '';
-    const [path] = url.split('?', 1);
-    return /^\/api\/(?:t\/[^/]+\/)?auth\/(?:identity\/callback|cloud-signup\/(?:microsoft\/)?email\/verify)\/?$/i.test(path) ? path : url;
-  });
-  app.use(morgan(':method :eg-url :status :response-time ms - :res[content-length]', {
-    stream: {
-      write: (message: string) => {
-        const line = String(message || '').trim();
-        if (line) logger.info(line);
-      },
-    },
-  }));
+  app.use(requestLogging);
   // SCIM and other standards-based JSON protocols use structured syntax
   // suffix media types such as application/scim+json.
   app.use(express.json({ limit: '2mb', type: ['application/json', 'application/*+json'] }));
   app.use(express.urlencoded({ extended: false, limit: '2mb' }));
-  app.use((req, _res, next) => {
-    const headerRequestId = req.headers['x-request-id'] || req.headers['x-correlation-id'];
-    const requestId = Array.isArray(headerRequestId) ? headerRequestId[0] : headerRequestId;
-    runWithBpmnEngineRequestContext(
-      { requestId: typeof requestId === 'string' && requestId.trim() ? requestId.trim() : undefined },
-      next
-    );
-  });
   installBrowserRequestProtection(app);
 
   // Apply global rate limiting (100000 requests per 15 minutes per user/IP)

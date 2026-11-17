@@ -1,52 +1,65 @@
-import type { Logger as TypeOrmLogger, QueryRunner } from 'typeorm'
-import { logger } from '../utils/logger.js'
+import type { DataSourceOptions, Logger as TypeOrmLogger, QueryRunner } from 'typeorm';
+import { getLoggingConfig } from '../config/logging.js';
+import { createLogger } from '../utils/structuredLogger.js';
 
-function formatParameters(parameters?: unknown[]): string {
-  if (!Array.isArray(parameters) || parameters.length === 0) return ''
-  try {
-    return ` -- PARAMETERS: ${JSON.stringify(parameters)}`
-  } catch {
-    return ` -- PARAMETERS: ${String(parameters)}`
-  }
-}
+const logger = createLogger('db');
+const SQL_OPERATIONS = new Set([
+  'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'MERGE', 'WITH', 'CREATE', 'ALTER',
+  'DROP', 'TRUNCATE', 'BEGIN', 'START', 'COMMIT', 'ROLLBACK', 'SAVEPOINT', 'SET',
+]);
 
-function formatMessage(message: unknown): string {
-  if (typeof message === 'string') return message
-  try {
-    return JSON.stringify(message)
-  } catch {
-    return String(message)
-  }
+function dbFields(query: string, parameters?: unknown[]) {
+  // Only emit a fixed verb. SQL and driver errors can contain literal values.
+  const verb = /^\s*([a-z]+)\b/i.exec(query)?.[1].toUpperCase() ?? '';
+  return {
+    operation: SQL_OPERATIONS.has(verb) ? verb : 'OTHER',
+    parameter_count: parameters?.length ?? 0,
+  };
 }
 
 export class TimestampedTypeOrmLogger implements TypeOrmLogger {
   logQuery(query: string, parameters?: unknown[], _queryRunner?: QueryRunner): void {
-    logger.info(`query: ${query}${formatParameters(parameters)}`)
+    if (getLoggingConfig().dbMode !== 'all') return;
+    logger.event('info', 'Executing database query', {
+      event: { action: 'db_query' },
+      db: dbFields(query, parameters),
+    });
   }
 
-  logQueryError(error: string | Error, query: string, parameters?: unknown[], _queryRunner?: QueryRunner): void {
-    logger.error(`query failed: ${query}${formatParameters(parameters)}`)
-    logger.error(`error: ${formatMessage(error instanceof Error ? error.message : error)}`)
+  logQueryError(_error: string | Error, query: string, parameters?: unknown[], _queryRunner?: QueryRunner): void {
+    if (getLoggingConfig().dbMode === 'off') return;
+    logger.event('error', 'Database query failed', {
+      event: { action: 'db_query_error', outcome: 'failure' },
+      db: dbFields(query, parameters),
+    });
   }
 
   logQuerySlow(time: number, query: string, parameters?: unknown[], _queryRunner?: QueryRunner): void {
-    logger.warn(`query is slow: ${time} ms: ${query}${formatParameters(parameters)}`)
+    const { slowQueryMs } = getLoggingConfig();
+    if (slowQueryMs === undefined || time <= slowQueryMs) return;
+    logger.event('warn', 'Slow database query', {
+      event: { action: 'db_query_slow', duration: time * 1_000_000 },
+      db: dbFields(query, parameters),
+    });
   }
 
   logSchemaBuild(message: string, _queryRunner?: QueryRunner): void {
-    logger.info(`schema build: ${message}`)
+    logger.info(`schema build: ${message}`);
   }
 
   logMigration(message: string, _queryRunner?: QueryRunner): void {
-    logger.info(`migration: ${message}`)
+    logger.info(`migration: ${message}`);
   }
 
   log(level: 'log' | 'info' | 'warn', message: unknown, _queryRunner?: QueryRunner): void {
-    const formatted = formatMessage(message)
-    if (level === 'warn') {
-      logger.warn(formatted)
-      return
-    }
-    logger.info(formatted)
+    logger[level === 'warn' ? 'warn' : 'info'](message);
   }
+}
+
+export function getTypeOrmLoggingOptions(): Pick<DataSourceOptions, 'logger' | 'logging' | 'maxQueryExecutionTime'> {
+  return {
+    logger: new TimestampedTypeOrmLogger(),
+    logging: false, // TypeORM delegates to the custom logger, which enforces policy itself.
+    maxQueryExecutionTime: getLoggingConfig().slowQueryMs,
+  };
 }

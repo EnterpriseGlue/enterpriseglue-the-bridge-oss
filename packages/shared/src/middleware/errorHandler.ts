@@ -2,6 +2,9 @@ import type { Request, Response, NextFunction } from 'express';
 import type { ParamsFlatDictionary, RequestHandler } from 'express-serve-static-core';
 import type { ParsedQs } from 'qs';
 import { z, ZodError } from 'zod';
+import { createLogger } from '../utils/structuredLogger.js';
+
+const logger = createLogger('http');
 
 /**
  * Standard error codes for the application
@@ -175,8 +178,10 @@ export function errorHandler(
     });
   }
 
-  // Log unexpected errors
-  console.error('❌ Unexpected error:', err);
+  // Raw errors can embed request bodies, SQL and driver parameters.
+  logger.event('error', 'Unexpected request error', {
+    event: { action: 'http_request_error', outcome: 'failure', code: ErrorCode.INTERNAL_ERROR },
+  });
 
   // Don't leak error details in production
   const isDevelopment = process.env.NODE_ENV === 'development';

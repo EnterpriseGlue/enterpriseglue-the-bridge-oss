@@ -1,0 +1,78 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "configurable-structured-logging",
+  "type": "feature",
+  "scope": "runtime-logging",
+  "breaking": false,
+  "audiences": [
+    "operators",
+    "developers"
+  ],
+  "summary": "Adds runtime log level and category controls, ECS-aligned JSON output, and safe TypeORM query diagnostics.",
+  "userImpact": [
+    "Local startup no longer logs every database query. Operators can filter request, database, authentication, and configuration bundle logs by category."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [
+    "Set EG_LOG_LEVEL, EG_LOGGER_LEVELS and EG_LOG_FORMAT to configure application output. Set EG_DB_LOGGING and EG_DB_SLOW_QUERY_MS to configure query diagnostics separately.",
+    "Existing environments keep pretty output unless they opt into JSON. The production Compose example enables JSON. The default database policy emits query failures only."
+  ],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Query events omit SQL text, bound values, and raw driver errors. Configuration bundle events contain fixed status and issue codes."
+  ],
+  "documentation": [
+    "docs/reference/observability-logs.md",
+    "docs/reference/configuration-matrix.md"
+  ],
+  "knownLimitations": [
+    "JSON formatting applies to the EnterpriseGlue runtime logger. Independent CLI, proxy and third-party diagnostics can use their own format."
+  ],
+  "rollback": [
+    "Revert the application image and remove the logging environment overrides if needed. No database rollback is required."
+  ],
+  "validation": [
+    "Focused regressions cover level precedence, JSON shape, request correlation, configuration bundle outcomes, diagnostic log collection, and the four database policies.",
+    "All four policies passed against the compiled application data source on PostgreSQL 17. The checks confirmed that SQL text, bind values, and raw driver errors were omitted and application logs stayed active.",
+    "Compiled PostgreSQL migration upgrades passed with historical rows retained.",
+    "Compiled HTTP smoke verified request and trace correlation with SQL logging disabled. PostgreSQL configuration bundle apply, restart, export, and idempotent reapply passed."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.24.8",
+      "newVersion": "0.25.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.25",
+      "newVersion": "0.20.26",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.28.19",
+      "newVersion": "0.29.0",
+      "impact": "minor"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The runtime environment settings and log record schema are deployment and operator reference material covered by the existing source documentation."
+  }
+}

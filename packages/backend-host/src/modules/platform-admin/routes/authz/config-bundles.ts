@@ -1,3 +1,4 @@
+import { logConfigBundleResponse } from '../../../../services/configBundleLogging.js';
 import { raw, type Request, type RequestHandler, type Response, type Router } from 'express';
 import { z } from 'zod';
 import { Not } from 'typeorm';
@@ -110,7 +111,7 @@ export function registerConfigBundleRoutes(
     res.json(result.payload);
   }));
 
-  router.post('/api/authz/config-bundles/preview', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), configBundleJsonPayloadLimit, validateBody(ConfigBundleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/preview', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.preview'), logConfigBundleResponse('validate'), configBundleJsonPayloadLimit, validateBody(ConfigBundleRequestSchema), asyncHandler(async (req: Request, res: Response) => {
     const settings = await platformSettingsService.get();
     const preview = configBundlePreviewService.preview(req.body, settings);
     res.status(preview.valid ? 200 : 422).json(preview);
@@ -151,7 +152,7 @@ export function registerConfigBundleRoutes(
     res.status(diff.valid ? 200 : 422).json(diff);
   }));
 
-  router.post('/api/authz/config-bundles/apply', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.apply'), configBundleJsonPayloadLimit, validateBody(ConfigBundleApplyRequestSchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
+  router.post('/api/authz/config-bundles/apply', configBundleLimiter, requireConfigBundleAccess('platform.config-bundles.apply'), logConfigBundleResponse('apply'), configBundleJsonPayloadLimit, validateBody(ConfigBundleApplyRequestSchema), requireTargetTransferAccess, asyncHandler(async (req: Request, res: Response) => {
     const actorId = configBundleActorId(req);
     const settings = await platformSettingsService.get();
     const result = await configBundleApplyService.apply({

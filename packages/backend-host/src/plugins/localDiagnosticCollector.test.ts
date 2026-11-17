@@ -362,63 +362,74 @@ describe('LocalSanitizedDiagnosticCollectorV1', () => {
     },
   );
 
-  it('never expands a customer-confirmed diagnostic time window', async () => {
-    let received: PluginSanitizedDiagnosticBundleV1 | undefined;
-    const fetchMock = vi.fn(
-      async (_url: string, init?: { body?: unknown }) => {
-        received = pluginSanitizedDiagnosticBundleV1Schema.parse(
-          JSON.parse(String(init?.body)),
-        );
-        return new Response(
-          JSON.stringify({
-            apiVersion:
-              'sanitized-diagnostic-bundle-receipt.plugin.enterpriseglue.io/v1',
-            bundleRef: received.bundleRef,
-            status: 'accepted',
-            consumerContextRef: received.consumerContextRef,
-            artifactRef: 'artifact-windowed',
-          }),
-          {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          },
-        );
-      },
-    );
-    const collector = await collectorForSource(
-      'kubernetes_cri_file_tail',
-      [
-        '2026-08-19T09:00:00.000Z stdout F before-window',
-        '2026-08-19T09:45:00.000Z stderr F inside-window password=secret-value',
-        '2026-08-19T09:46:00.000Z stderr F followup-inside-window',
-        '2026-08-19T10:15:00.000Z stdout F after-window',
-      ].join('\n'),
-      fetchMock,
-    );
-
-    await expect(
-      collector.collect({
-        pluginId,
-        claims: claims(),
-        request: {
-          ...request(),
-          timeRange: {
-            startAt: '2026-08-19T09:30:00.000Z',
-            endAt: '2026-08-19T10:00:00.000Z',
-          },
+  it.each(['kubernetes_cri_file_tail', 'file_tail'] as const)(
+    'never expands a customer-confirmed diagnostic time window in %s',
+    async (kind) => {
+      let received: PluginSanitizedDiagnosticBundleV1 | undefined;
+      const fetchMock = vi.fn(
+        async (_url: string, init?: { body?: unknown }) => {
+          received = pluginSanitizedDiagnosticBundleV1Schema.parse(
+            JSON.parse(String(init?.body)),
+          );
+          return new Response(
+            JSON.stringify({
+              apiVersion:
+                'sanitized-diagnostic-bundle-receipt.plugin.enterpriseglue.io/v1',
+              bundleRef: received.bundleRef,
+              status: 'accepted',
+              consumerContextRef: received.consumerContextRef,
+              artifactRef: 'artifact-windowed',
+            }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
         },
-      }),
-    ).resolves.toMatchObject({
-      status: 'sanitized_bundle_ready',
-      artifactRef: 'artifact-windowed',
-    });
-    expect(received?.sanitizedContent).toContain('inside-window');
-    expect(received?.sanitizedContent).toContain('followup-inside-window');
-    expect(received?.sanitizedContent).toContain('password=<SECRET>');
-    expect(received?.sanitizedContent).not.toContain('before-window');
-    expect(received?.sanitizedContent).not.toContain('after-window');
-    expect(JSON.stringify(received)).not.toContain('secret-value');
-  });
+      );
+      const collector = await collectorForSource(
+        kind,
+        [
+          ['2026-08-19T09:00:00.000Z', 'before-window'],
+          ['2026-08-19T09:45:00.000Z', 'inside-window password=secret-value'],
+          ['2026-08-19T09:46:00.000Z', 'followup-inside-window'],
+          ['2026-08-19T10:15:00.000Z', 'after-window'],
+        ].map(([time, message]) => kind === 'kubernetes_cri_file_tail'
+          ? `${time} stdout F ${message}`
+          : JSON.stringify({
+              '@timestamp': time,
+              message,
+              request: { id: 'private-correlation-id' },
+              trace: { id: '4bf92f3577b34da6a3ce929d0e0e4736' },
+            }),
+        ).join('\n'),
+        fetchMock,
+      );
+
+      await expect(
+        collector.collect({
+          pluginId,
+          claims: claims(),
+          request: {
+            ...request(),
+            timeRange: {
+              startAt: '2026-08-19T09:30:00.000Z',
+              endAt: '2026-08-19T10:00:00.000Z',
+            },
+          },
+        }),
+      ).resolves.toMatchObject({
+        status: 'sanitized_bundle_ready',
+        artifactRef: 'artifact-windowed',
+      });
+      expect(received?.sanitizedContent).toContain('inside-window');
+      expect(received?.sanitizedContent).toContain('followup-inside-window');
+      expect(received?.sanitizedContent).toContain('password=<SECRET>');
+      expect(received?.sanitizedContent).not.toContain('before-window');
+      expect(received?.sanitizedContent).not.toContain('after-window');
+      expect(JSON.stringify(received)).not.toMatch(/secret-value|private-correlation-id|4bf92f3577b34da6a3ce929d0e0e4736/);
+    },
+  );
 
   it('rejects a malformed structured source without a handoff', async () => {
     const fetchMock = vi.fn();
@@ -444,6 +455,7 @@ describe('LocalSanitizedDiagnosticCollectorV1', () => {
 
 async function collectorForSource(
   kind:
+    | 'file_tail'
     | 'docker_json_file_tail'
     | 'kubernetes_cri_file_tail',
   raw: string,

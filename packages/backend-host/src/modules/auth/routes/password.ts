@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { createLogger } from '@enterpriseglue/shared/utils/structuredLogger.js';
 import { z } from 'zod';
 import { randomBytes } from 'crypto';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
@@ -15,6 +15,8 @@ import { IsNull } from 'typeorm';
 import { validateBody } from '@enterpriseglue/shared/middleware/validate.js';
 import { passwordResetLimiter , apiLimiter} from '@enterpriseglue/shared/middleware/rateLimiter.js';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+
+const logger = createLogger('auth');
 
 const router = Router();
 
@@ -130,7 +132,7 @@ router.post('/api/auth/reset-password', apiLimiter, requireAuth, passwordResetLi
       details: { email: user.email, reason: 'first_password_reset' },
     });
 
-    logger.info(`✅ Verification email sent to ${user.email} after first password reset`);
+    logger.info('Verification email sent after first password reset');
   }
 
   res.json({ 

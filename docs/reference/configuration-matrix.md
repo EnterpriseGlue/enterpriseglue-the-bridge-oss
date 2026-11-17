@@ -29,6 +29,18 @@ in `engine-tenant-mappings.json`. See
 | ENCRYPTION_KEY | Yes | dev value | 64-char hex key |
 | ENTERPRISE_SCHEMA | No | enterprise | Must be non-public and distinct from active main schema |
 
+## Backend (Runtime Logging)
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| EG_LOG_LEVEL | No | debug | Global minimum severity. Accepts `error`, `warn`, `info`, `debug`, or `trace`. |
+| EG_LOG_FORMAT | No | pretty | `pretty` uses timestamped text. `json` writes one structured record per line. The production Compose example sets `json`. |
+| EG_LOGGER_LEVELS | No | unset | Comma-separated category overrides such as `db:error,config-bundle:info,http:warn`. |
+| EG_DB_LOGGING | No | error | TypeORM query policy. Accepts `off`, `error`, `slow`, or `all`, independent of `NODE_ENV`. |
+| EG_DB_SLOW_QUERY_MS | No | 1000 | Positive integer in milliseconds. Used with `EG_DB_LOGGING=slow`. |
+
+See [Observability and Logs](observability-logs.md#runtime-logging) for record fields and policy precedence.
+
 ## Backend (Native Tenancy)
 
 | Variable | Required | Default | Notes |

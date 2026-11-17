@@ -3,9 +3,11 @@
  * Handles password reset request and token-based password reset
  */
 
+const logger = createLogger('auth');
+
 import { Router } from 'express';
 import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
+import { createLogger } from '@enterpriseglue/shared/utils/structuredLogger.js';
 import { z } from 'zod';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
@@ -144,7 +146,7 @@ router.post('/api/auth/reset-password-with-token', apiLimiter, passwordResetVeri
     details: { email: user.email },
   });
 
-  logger.info(`✅ Password reset completed for ${user.email}`);
+  logger.info('Password reset completed');
 
   res.json({ 
     message: 'Password has been reset successfully. You can now login with your new password.',

@@ -6,8 +6,6 @@ const fixture = vi.hoisted(() => ({
 }));
 vi.mock('typeorm', () => ({ DataSource: class { constructor() { return fixture.dataSource; } } }));
 vi.mock('@enterpriseglue/shared/db/adapters/index.js', () => ({ getAdapter: () => ({ getDataSourceOptions: () => ({ type: 'oracle' }) }) }));
-vi.mock('@enterpriseglue/shared/db/TimestampedTypeOrmLogger.js', () => ({ TimestampedTypeOrmLogger: class {} }));
-vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({ logger: { info: vi.fn() } }));
 vi.mock('@enterpriseglue/shared/infrastructure/persistence/subscribers/TenantRlsSubscriber.js', () => ({
   installPostgresContextBoundary: vi.fn(), assertPostgresContextBoundary: fixture.assertContext,
 }));

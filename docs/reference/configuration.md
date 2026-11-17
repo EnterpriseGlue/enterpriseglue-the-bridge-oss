@@ -102,6 +102,9 @@ Launcher and validation scripts:
 - `dev.sh` / `down.sh` select DB overlays from `infra/docker/compose/` (`docker-compose.<db>.yml`) and env files.
 - `scripts/db-preflight.sh` validates DB-specific env requirements and can install a missing DB driver into local `node_modules`.
 
+Control backend log levels, output format, and SQL diagnostics in the backend
+environment. See [Observability and Logs](observability-logs.md#runtime-logging).
+
 ### Core Settings
 - `API_PORT`: backend port (default 8787)
 - `BACKEND_HOST_PORT`: backend host port (Docker dev)

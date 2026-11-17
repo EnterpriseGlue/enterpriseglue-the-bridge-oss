@@ -602,6 +602,19 @@ async function collectAndRedact(
   }
 }
 
+function logLineTimestamp(line: string): string | undefined {
+  if (line.startsWith('{')) {
+    try {
+      const timestamp: unknown = JSON.parse(line)?.['@timestamp'];
+      return typeof timestamp === 'string' && isRfc3339Timestamp(timestamp) ? timestamp : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  const match = /(?:^|\s|\[)(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2}))(?=\s|\]|$)/.exec(line);
+  return match?.[1];
+}
+
 function filterNormalizedLogByTimeRange(
   input: string,
   timeRange: NonNullable<PluginDiagnosticCollectionRequestV1['timeRange']>,
@@ -612,12 +625,10 @@ function filterNormalizedLogByTimeRange(
   let includeContinuation = false;
   const selected: string[] = [];
   for (const line of input.split('\n')) {
-    const match = /(?:^|\s)(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2}))(?:\s|$)/.exec(
-      line,
-    );
-    if (match) {
+    const timestamp = logLineTimestamp(line);
+    if (timestamp) {
       timestampedEvents += 1;
-      const observed = Date.parse(match[1]!);
+      const observed = Date.parse(timestamp);
       includeContinuation = observed >= start && observed <= end;
     }
     if (includeContinuation) selected.push(line);
@@ -708,6 +719,8 @@ function isRfc3339Timestamp(value: string): boolean {
   );
 }
 
+const LOG_CORRELATION_ID = /("(?:request|trace)"\s*:\s*\{\s*"id"\s*:\s*")([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})(")/g;
+
 function redact(input: string): {
   content: string;
   summary: PluginSanitizedDiagnosticBundleV1['redactionSummary'];
@@ -718,8 +731,12 @@ function redact(input: string): {
     networkAddresses: 0,
     identifiers: 0,
   };
+  const withoutCorrelationIds = input.replace(LOG_CORRELATION_ID, (_match, prefix: string, _id: string, suffix: string) => {
+    summary.identifiers++;
+    return `${prefix}<IDENTIFIER>${suffix}`;
+  });
   let content = replace(
-    input,
+    withoutCorrelationIds,
     /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
     '<SECRET>',
     () => summary.secrets++,
@@ -772,6 +789,7 @@ function redact(input: string): {
 }
 
 function containsSensitive(content: string): boolean {
+  if (content.search(LOG_CORRELATION_ID) !== -1) return true;
   return [
     /-----BEGIN [A-Z ]*PRIVATE KEY-----/,
     /\b(?:Bearer|Basic)\s+(?!<SECRET>)[A-Za-z0-9._~+/=-]{8,}/i,

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { zipSync } from 'fflate';
 import { createHash } from 'node:crypto';
 import { getPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
@@ -27,13 +27,23 @@ const drainApplyRun = vi.hoisted(() => vi.fn());
 const drainRuntimeApplyRun = vi.hoisted(() => vi.fn());
 const findApplyRun = vi.hoisted(() => vi.fn());
 const updateApplyRun = vi.hoisted(() => vi.fn());
-const bootstrapLogger = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+vi.hoisted(() => vi.stubEnv('EG_LOG_FORMAT', 'json'));
+
+const info = vi.fn();
+const error = vi.fn();
+function events(spy: typeof info) {
+  return spy.mock.calls.flatMap(([line]) => {
+    if (typeof line !== 'string' || !line.startsWith('{')) return [];
+    const record = JSON.parse(line);
+    return record.log?.logger === 'config-bundle' ? [record] : [];
+  });
+}
+
 
 vi.mock('@enterpriseglue/shared/config/index.js', () => ({ config }));
 vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
   getDataSource: vi.fn().mockResolvedValue({ getRepository: () => ({ findOne: findApplyRun, update: updateApplyRun }) }),
 }));
-vi.mock('@enterpriseglue/shared/utils/logger.js', () => ({ logger: bootstrapLogger }));
 vi.mock('node:fs/promises', () => ({ open, readdir, realpath, stat: statPath }));
 vi.mock('@enterpriseglue/shared/services/platform-admin/ConfigBundlePreviewService.js', () => ({
   configBundlePreviewService: { preview },
@@ -62,7 +72,7 @@ function mountDirectory(files: Record<string, Buffer>): void {
   realpath.mockImplementation(async (path) => path);
   readdir.mockResolvedValue(Object.keys(files).map(name => ({ name, isFile: () => true })));
   open.mockImplementation(async (path: string) => {
-    const source = files[path.split('/').at(-1)!];
+    const source = files[path.split('/').pop()!];
     return { stat, readFile: async () => source, close };
   });
 }
@@ -73,6 +83,9 @@ const sha256 = (source: Buffer | string) => createHash('sha256').update(source).
 describe('configBundleBootstrap', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'log').mockImplementation(info);
+    vi.spyOn(console, 'error').mockImplementation(error);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     config.configBundlePath = '/etc/enterpriseglue/config/bundle.json';
     config.configBootstrapMode = 'apply';
     config.configExpectedSha256 = undefined;
@@ -93,6 +106,9 @@ describe('configBundleBootstrap', () => {
     findApplyRun.mockResolvedValue({ id: 'apply-run-1', resultJson: JSON.stringify({ canonicalHash: 'preview-hash', changes: [] }) });
     updateApplyRun.mockResolvedValue({ affected: 1 });
   });
+
+  afterEach(() => vi.restoreAllMocks());
+  afterAll(() => vi.unstubAllEnvs());
 
   it('keeps a no-bundle startup ready without touching filesystem ingress', async () => {
     config.configBootstrapMode = 'disabled';
@@ -123,10 +139,14 @@ describe('configBundleBootstrap', () => {
     await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle apply failed');
     expect(apply.mock.calls.map(([input]) => input.bundle.metadata.key)).toEqual(['platform.base', 'engine.a', 'engine.b']);
     expect(getPlatformSettings).toHaveBeenCalledTimes(3);
-    expect(bootstrapLogger.info.mock.calls.map(([, result]) => result.filename)).toEqual(['01-platform.json', '20-engine-b.json']);
-    expect(bootstrapLogger.error).toHaveBeenCalledWith('Configuration bootstrap failed', expect.objectContaining({
-      filename: '10-engine-a.json', bundleKey: 'engine.a', status: 'failed', issueCode: 'apply_failed',
-    }));
+    expect(events(info).map((record) => record.config_bundle.status)).toEqual(['applied', 'applied']);
+    expect(events(error)).toEqual([
+      expect.objectContaining({
+        event: { action: 'config_bundle_apply', outcome: 'failure', code: 'apply_failed' },
+        config_bundle: { status: 'failed' },
+      }),
+    ]);
+    expect(JSON.stringify([...events(info), ...events(error)])).not.toMatch(/engine\.a|\.json|private failure details|preview-hash/);
     expect(JSON.stringify(getConfigBootstrapStatus())).not.toMatch(/engine\.a|\.json|private failure details/);
     expect(getConfigBootstrapStatus()).toMatchObject({ status: 'failed', issueCode: 'apply_failed' });
   });
@@ -147,9 +167,7 @@ describe('configBundleBootstrap', () => {
     apply.mockResolvedValue({ applyRunId: 'apply-run-1' });
     await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle could not be read');
     expect(apply.mock.calls.map(([input]) => input.bundle.metadata.key)).toEqual(['platform.base', 'engine.b']);
-    expect(bootstrapLogger.error).toHaveBeenCalledWith('Configuration bootstrap failed', expect.objectContaining({
-      filename: '10-engine-a.json', bundleKey: null, issueCode: 'bundle_read_failed',
-    }));
+    expect(events(error).map((record) => record.event.code)).toEqual(['hash_mismatch', 'bundle_read_failed']);
     expect(getConfigBootstrapStatus()).toMatchObject({ hash: config.configExpectedSha256, status: 'failed' });
   });
 
@@ -157,8 +175,8 @@ describe('configBundleBootstrap', () => {
     mountDirectory({ '02-second.json': bundleBytes('platform.second'), '01-first.json': bundleBytes('platform.first') });
     config.configBootstrapMode = 'validate';
     await expect(runConfigBundleBootstrap()).resolves.toMatchObject({ status: 'validated', issueCode: null });
-    expect(bootstrapLogger.info.mock.calls.map(([, result]) => [result.filename, result.status]))
-      .toEqual([['01-first.json', 'validated'], ['02-second.json', 'validated']]);
+    expect(events(info).map((record) => [record.event.action, record.config_bundle.status]))
+      .toEqual([['config_bundle_validate', 'validated'], ['config_bundle_validate', 'validated']]);
     expect(apply).not.toHaveBeenCalled();
   });
 
@@ -178,9 +196,7 @@ describe('configBundleBootstrap', () => {
 
     await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle hash verification failed');
     expect(apply.mock.calls.map(([input]) => input.bundle.metadata.key)).toEqual(['platform.base', 'engine.b']);
-    expect(bootstrapLogger.error).toHaveBeenCalledWith('Configuration bootstrap failed', expect.objectContaining({
-      filename: '10-engine-a.json', status: 'failed', issueCode: 'hash_mismatch',
-    }));
+    expect(events(error)[0]).toMatchObject({ event: { code: 'hash_mismatch' } });
   });
 
   it('rejects a bootstrap apply without an explicit expected tenant scope', async () => {
@@ -374,7 +390,7 @@ describe('configBundleBootstrap', () => {
     expect(metrics).toContain('enterpriseglue_config_bootstrap_ready 0');
     expect(metrics).toContain('issue_code="identity_reconciliation_failed"');
     expect(metrics).not.toContain(getConfigBootstrapStatus().hash || 'preview-hash');
-    expect(bootstrapLogger.error).toHaveBeenCalledWith('Configuration bootstrap failed', expect.objectContaining({ issueCode: 'identity_reconciliation_failed' }));
+    expect(events(error)[0]).toMatchObject({ event: { code: 'identity_reconciliation_failed' } });
   });
 
   it('fails bootstrap when the initial identity reconciliation page fails', async () => {
@@ -531,7 +547,7 @@ describe('configBundleBootstrap', () => {
       throw new Error('private upstream credential diagnostic');
     });
     await expect(runConfigBundleBootstrap()).rejects.toThrow('Configuration bundle apply failed');
-    expect(JSON.stringify(bootstrapLogger.error.mock.calls)).not.toContain('private upstream');
+    expect(JSON.stringify(events(error))).not.toContain('private upstream');
     expect(getPlatformDatabaseCapability()).toBeUndefined();
   });
 });
