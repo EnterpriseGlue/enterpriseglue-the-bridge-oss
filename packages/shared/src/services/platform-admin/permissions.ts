@@ -3233,43 +3233,44 @@ class PermissionServiceClass {
   }
 
   async getCurrentUserPermissions(userId: string, tenantId?: string | null): Promise<CurrentUserPermissionsSnapshot> {
-    return runWithPlatformDatabaseCapability({kind:'authenticated-account',userId}, () => this.getCurrentUserPermissionsScoped(userId,tenantId));
+    return runWithPlatformDatabaseCapability({ kind: 'authenticated-account', userId }, () =>
+      this.getCurrentUserPermissionsScoped(userId, tenantId),
+    );
   }
 
   private async getCurrentUserPermissionsScoped(userId: string, tenantId?: string | null): Promise<CurrentUserPermissionsSnapshot> {
     const dataSource = await getDataSource();
     const generatedAt = Date.now();
-    const projectIds = await this.getKnownProjectIds(dataSource, userId, tenantId);
-    const engineIds = await this.getKnownEngineIds(dataSource, userId, tenantId);
-    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+    const [projectIds, engineIds, groupIds, catalog] = await Promise.all([
+      this.getKnownProjectIds(dataSource, userId, tenantId),
+      this.getKnownEngineIds(dataSource, userId, tenantId),
+      this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId),
+      this.getPermissionCatalog(dataSource),
+    ]);
 
-    return {
-      userId,
-      platform: await this.evaluatePermissionSet(userId, 'platform', undefined, tenantId),
-      tenant: tenantId
-        ? {
-            resourceId: tenantId,
-            permissions: await this.evaluatePermissionSet(userId, 'tenant', tenantId, tenantId),
-          }
-        : null,
-      projects: await Promise.all(projectIds.map(async (projectId) => ({
+    const evaluate = (scope: ResourceType, resourceId?: string) =>
+      this.evaluatePermissionSet({
+        dataSource, userId, groupIds, tenantId, scope, resourceId, catalog, now: generatedAt,
+      });
+    const [platform, tenantPermissions, projects, engines, authorizationVersion] = await Promise.all([
+      evaluate('platform'),
+      tenantId ? evaluate('tenant', tenantId) : Promise.resolve([]),
+      Promise.all(projectIds.map(async (projectId) => ({
         resourceId: projectId,
-        permissions: await this.evaluatePermissionSet(userId, 'project', projectId, tenantId),
+        permissions: await evaluate('project', projectId),
       }))),
-      engines: await Promise.all(engineIds.map(async (engineId) => {
+      Promise.all(engineIds.map(async (engineId) => {
         const [permissions, runtimePermissions] = await Promise.all([
-          this.evaluatePermissionSet(userId, 'engine', engineId, tenantId),
+          evaluate('engine', engineId),
           this.getRuntimeNavigationPermissions(dataSource, userId, groupIds, tenantId, engineId),
         ]);
         return { resourceId: engineId, permissions, runtimePermissions };
       })),
-      authorizationVersion: await this.getAuthorizationVersion(dataSource, {
-        userId,
-        tenantId,
-        projectIds,
-        engineIds,
-      }),
-      generatedAt,
+      this.getAuthorizationVersion(dataSource, { userId, tenantId, projectIds, engineIds, groupIds }),
+    ]);
+    return {
+      userId, platform, projects, engines, authorizationVersion, generatedAt,
+      tenant: tenantId ? { resourceId: tenantId, permissions: tenantPermissions } : null,
     };
   }
 
@@ -3396,28 +3397,82 @@ class PermissionServiceClass {
     return decisions.filter((decision) => decision.allowed).map((decision) => decision.resource);
   }
 
-  private async evaluatePermissionSet(
-    userId: string,
-    scope: ResourceType,
-    resourceId?: string,
-    tenantId?: string | null
-  ): Promise<Permission[]> {
-    const permissions = (await this.getPermissionCatalog())
-      .filter((permission) => permission.scope === scope)
-      .map((permission) => permission.key);
-    const allowed = await Promise.all(permissions.map(async (permission) => ({
-      permission,
-      allowed: (await this.evaluatePermission(permission, {
-        userId,
-        tenantId,
-        resourceType: scope,
-        resourceId,
-      })).allowed,
-    })));
+  /**
+   * A browser snapshot needs permission keys, so fetch the matching role and
+   * grant keys in sets. The action evaluator still constructs source lineage
+   * for enforcement and explanations.
+   */
+  private async evaluatePermissionSet(input: {
+    dataSource: DataSource;
+    userId: string;
+    groupIds: string[];
+    tenantId?: string | null;
+    scope: ResourceType;
+    resourceId?: string;
+    catalog: PermissionDefinition[];
+    now: number;
+  }): Promise<Permission[]> {
+    const { dataSource, userId, groupIds, tenantId, scope, resourceId, catalog, now } = input;
+    const candidatesByKey = new Map(catalog.filter((permission) => permission.scope === scope)
+      .map((permission) => [permission.key, compatiblePermissionCandidates(permission.key)]));
+    const candidates = [...new Set([...candidatesByKey.values()].flat())];
+    if (!candidates.length) return [];
 
-    return allowed
-      .filter((entry) => entry.allowed)
-      .map((entry) => entry.permission)
+    const inheritable = candidates.filter(isTenantSafePermission);
+    const tenantScopeId = inheritable.length
+      ? await this.resolveTenantInheritanceScope(dataSource, inheritable[0], scope, resourceId, tenantId, null)
+      : null;
+    const roles = dataSource.getRepository(RbacRoleAssignment).createQueryBuilder('assignment')
+      .innerJoin(RbacRolePermission, 'rolePermission', 'rolePermission.roleId = assignment.roleId')
+      .innerJoin(RbacRole, 'role', 'role.id = assignment.roleId')
+      .select('rolePermission.permissionId', 'permission')
+      .distinct(true)
+      .where('rolePermission.permissionId IN (:...candidates)', { candidates })
+      .andWhere('role.isArchived = :isArchived', { isArchived: false })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now });
+    this.addPrincipalAssignmentFilter(roles, 'assignment', userId, groupIds);
+    addTenantScopeFilter(roles, 'assignment', tenantId);
+    addTenantScopeFilter(roles, 'role', tenantId);
+
+    const directRole = '(assignment.scopeType = :scope AND assignment.scopeId IS NULL)';
+    const resourceRole = resourceId
+      ? ' OR (assignment.scopeType = :scope AND assignment.scopeId = :resourceId)'
+      : '';
+    const tenantRole = tenantScopeId
+      ? ' OR (assignment.scopeType = :tenantScope AND assignment.scopeId = :tenantScopeId AND rolePermission.permissionId IN (:...inheritable))'
+      : '';
+    if (scope === 'engine' && resourceId) {
+      const matchingMaterialization = roles.subQuery().select('1').from(EngineSetMaterialization, 'materialization')
+        .where('materialization.engineSetId = assignment.scopeId')
+        .andWhere('materialization.engineId = :resourceId');
+      addTenantScopeFilter(matchingMaterialization, 'materialization', tenantId);
+      roles.andWhere(
+        `(${directRole}${resourceRole}${tenantRole} OR (assignment.scopeType = 'engine_set' AND role.scope = 'engine' AND EXISTS ${matchingMaterialization.getQuery()}))`,
+      ).setParameters(matchingMaterialization.getParameters());
+    } else {
+      roles.andWhere(`(${directRole}${resourceRole}${tenantRole})`);
+    }
+    roles.setParameters({ scope, resourceId, tenantScope: 'tenant', tenantScopeId, inheritable });
+
+    const grants = dataSource.getRepository(PermissionGrant).createQueryBuilder('grant')
+      .select('grant.permission', 'permission')
+      .distinct(true)
+      .where('grant.userId = :userId', { userId })
+      .andWhere('grant.permission IN (:...candidates)', { candidates })
+      .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now });
+    addTenantScopeFilter(grants, 'grant', tenantId);
+    grants.andWhere(resourceId
+      ? '(grant.resourceType IS NULL OR (grant.resourceType = :scope AND (grant.resourceId = :resourceId OR grant.resourceId IS NULL)))'
+      : '(grant.resourceType IS NULL OR grant.resourceType = :scope)',
+    { scope, resourceId });
+    const [roleKeys, grantKeys] = await Promise.all([
+      roles.getRawMany<{ permission: Permission }>(),
+      grants.getRawMany<{ permission: Permission }>(),
+    ]);
+    const allowed = new Set([...roleKeys, ...grantKeys].map(({ permission }) => permission));
+    return [...candidatesByKey]
+      .filter(([, permissionCandidates]) => permissionCandidates.some((candidate) => allowed.has(candidate)))
+      .map(([key]) => key)
       .sort();
   }
 
@@ -3677,9 +3732,10 @@ class PermissionServiceClass {
       tenantId?: string | null;
       projectIds: string[];
       engineIds: string[];
+      groupIds: string[];
     }
   ): Promise<string> {
-    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, input.userId, input.tenantId).catch(() => []);
+    const { groupIds } = input;
     const normalizedTenantId = normalizeTenantId(input.tenantId);
     const projectIds = [...input.projectIds].sort();
     const engineIds = [...input.engineIds].sort();

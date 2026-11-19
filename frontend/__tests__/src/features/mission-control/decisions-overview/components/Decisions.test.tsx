@@ -228,7 +228,7 @@ describe('Decisions component', () => {
 
     expect(screen.getByText('To view a Decision Table, select a Decision in the Filters panel')).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText('No visible decision definitions')).toBeInTheDocument();
+      expect(screen.getByText('No decisions to show')).toBeInTheDocument();
     });
   });
 
@@ -244,7 +244,7 @@ describe('Decisions component', () => {
     renderDecisions();
 
     expect(screen.getByText('Decision definitions unavailable')).toBeInTheDocument();
-    expect(screen.getByText('Missing permission engine:instance:view')).toBeInTheDocument();
+    expect(screen.getByText('You don’t have permission to view decisions for this engine.')).toBeInTheDocument();
     expect(listDecisionDefinitions).not.toHaveBeenCalled();
   });
 

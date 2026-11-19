@@ -1,6 +1,6 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Dropdown } from '@carbon/react'
+import { Dropdown, DropdownSkeleton } from '@carbon/react'
 import { useEngineSelectorStore } from '../stores/engineSelectorStore'
 import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
 import type { AccessibleEngineSummary } from '@enterpriseglue/shared/schemas/mission-control/engine.js'
@@ -77,7 +77,9 @@ export function useEngineSelection(enabled = true) {
   })
 
   const engines = React.useMemo(
-    () => enabled ? sortAccessibleEngines(enginesQuery.data || []) : [],
+    () => enabled
+      ? sortAccessibleEngines(enginesQuery.data ?? [])
+      : [],
     [enabled, enginesQuery.data],
   )
   const requestedEngineId = !isMissionControlBrowserPath(location.pathname)
@@ -125,6 +127,8 @@ interface EngineSelectorProps {
 
 export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled = true }: EngineSelectorProps) {
   const { setSelectedEngineIdForScope } = useEngineSelectorStore()
+  const inputId = React.useId()
+  const trigger = React.useRef<HTMLButtonElement>(null)
   const { engines, scope, selectedEngineId, isResolving, isError, isRequestedEngineUnavailable } = useEngineSelection(enabled)
   const location = useLocation()
   const navigate = useNavigate()
@@ -135,41 +139,39 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled =
     navigate(withEngineContext(`${location.pathname}${location.search}${location.hash}`, selectedEngineId), { replace: true })
   }, [location.hash, location.pathname, location.search, navigate, selectedEngineId])
 
-  // Build items list (no "All Engines" option)
-  const items = React.useMemo(() => {
-    if (engines.length === 0) return []
-    return engines.map(e => ({
-      id: e.id,
-      label: engineDisplayName(e),
-    }))
-  }, [engines])
+  const items = React.useMemo(() => engines.map((engine) => ({
+    id: engine.id,
+    label: engineDisplayName(engine),
+  })), [engines])
+  const currentItem = items.find((item) => item.id === selectedEngineId) || null
+  const currentLabel = currentItem?.label
 
-  // Find current selection
-  const currentItem = React.useMemo(() => {
-    if (items.length === 0) return null
-    return items.find(i => i.id === selectedEngineId) || null
-  }, [items, selectedEngineId])
+  React.useLayoutEffect(() => {
+    // Carbon sets a native title on the toggle. The selected name now wraps
+    // visibly, so the duplicate tooltip can be removed before paint.
+    trigger.current?.removeAttribute('title')
+  }, [currentLabel, isResolving, isError, isRequestedEngineUnavailable])
 
-  // Don't render if loading or no engines - but keep hook count stable
-  if (!enabled || isResolving || isError || isRequestedEngineUnavailable || engines.length === 0) {
-    return null
+  if (!enabled || isError || isRequestedEngineUnavailable) return null
+  if (isResolving) {
+    return <DropdownSkeleton className="eg-engine-dropdown" style={style} hideLabel />
   }
+  if (items.length === 0) return null
 
   return (
     <Dropdown
-      id="engine-selector"
+      id={`engine-selector-${inputId}`}
+      ref={trigger}
+      className="eg-engine-dropdown"
       aria-label={label || 'Engine'}
       titleText=""
       label={label}
       size={size}
       items={items}
-      // One line per option: Carbon menu rows have a fixed height, so a second
-      // line was clipped. The engine's friendly name is the only label shown.
-      itemToString={(item: any) => item?.label || ''}
+      itemToString={(item) => item?.label || ''}
       autoAlign
-      className="eg-engine-selector"
       selectedItem={currentItem}
-      onChange={({ selectedItem }: any) => {
+      onChange={({ selectedItem }) => {
         if (selectedItem?.id) {
           if (isMissionControlBrowserPath(location.pathname)) {
             navigate(withEngineContext(`${location.pathname}${location.search}${location.hash}`, selectedItem.id), { replace: true })
@@ -177,7 +179,7 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled =
           setSelectedEngineIdForScope(scope, selectedItem.id)
         }
       }}
-      style={{ minWidth: '240px', maxWidth: '22rem', ...style }}
+      style={style}
     />
   )
 }

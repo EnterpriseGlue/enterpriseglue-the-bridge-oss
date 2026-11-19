@@ -11,13 +11,13 @@ describe('RuntimeCollectionEmptyState', () => {
     render(<RuntimeCollectionEmptyState kind="process_instances" />);
 
     expect(screen.getByText('No visible process instances')).toBeInTheDocument();
-    expect(screen.getByText(/authorized instances match the current filters/i)).toBeInTheDocument();
+    expect(screen.getByText(/try adjusting the filters/i)).toBeInTheDocument();
   });
 
   it('provides collection-specific batch and migration guidance', () => {
     expect(getRuntimeCollectionEmptyState('batches')).toMatchObject({
-      title: 'No visible batches',
-      subtitle: expect.stringContaining('authorized runtime resources'),
+      title: 'No batches to show',
+      subtitle: expect.stringContaining('Batch operations you can access'),
     });
     expect(getRuntimeCollectionEmptyState('migration_definitions')).toMatchObject({
       title: 'No visible migration processes',

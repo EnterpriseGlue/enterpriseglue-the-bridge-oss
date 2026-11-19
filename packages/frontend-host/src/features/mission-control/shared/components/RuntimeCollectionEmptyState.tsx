@@ -5,20 +5,20 @@ export type RuntimeCollectionKind = 'process_definitions' | 'decision_definition
 
 const emptyStateCopy: Record<RuntimeCollectionKind, { title: string; subtitle: string }> = {
   process_definitions: {
-    title: 'No visible process definitions',
-    subtitle: 'This engine may have no deployments, or your access is limited to a different runtime resource set.',
+    title: 'No processes to show',
+    subtitle: 'Deploy a process to this engine or ask an administrator to share one with you.',
   },
   decision_definitions: {
-    title: 'No visible decision definitions',
-    subtitle: 'This engine may have no deployed decisions, or your access is limited to a different runtime resource set.',
+    title: 'No decisions to show',
+    subtitle: 'Deploy a decision to this engine or ask an administrator to share one with you.',
   },
   process_instances: {
     title: 'No visible process instances',
-    subtitle: 'No authorized instances match the current filters, or the process definitions you can access have no instances.',
+    subtitle: 'Try adjusting the filters or selecting another process.',
   },
   batches: {
-    title: 'No visible batches',
-    subtitle: 'This engine may have no batch history, or its batches belong to process definitions outside your authorized runtime resources.',
+    title: 'No batches to show',
+    subtitle: 'Batch operations you can access will appear here.',
   },
   migration_definitions: {
     title: 'No visible migration processes',

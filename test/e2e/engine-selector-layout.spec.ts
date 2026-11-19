@@ -4,7 +4,7 @@ import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
 const longName = 'Customer onboarding production engine for the European region';
 
 test.describe('Engine selector layout', () => {
-  test('shows full friendly engine names on single, unclipped rows @access-control-layout', async ({ page }) => {
+  test('shows full friendly engine names on unclipped rows @access-control-layout', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     const identityStack = new MockBrowserIdentityStack();
     await identityStack.install(page, process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173');
@@ -26,7 +26,7 @@ test.describe('Engine selector layout', () => {
     });
 
     await page.goto('/mission-control/processes');
-    const selector = page.locator('#engine-selector');
+    const selector = page.getByRole('combobox', { name: 'Engine', exact: true });
     await expect(selector).toBeVisible();
     await selector.click();
     const options = page.getByRole('option');

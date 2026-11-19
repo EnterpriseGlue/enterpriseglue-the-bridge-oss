@@ -128,12 +128,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [invalidateSession]);
 
-  const refreshPermissions = useCallback(async (): Promise<CurrentUserPermissions | null> => {
+  const refreshPermissions = useCallback(async (prefetched?: PromiseSettledResult<CurrentUserPermissions>): Promise<CurrentUserPermissions | null> => {
     const generation = generationRef.current;
     const request = ++permissionsRequestRef.current;
     const isCurrent = () => isCurrentSession(generation) && request === permissionsRequestRef.current;
     try {
-      const nextPermissions = await authService.getMyPermissions();
+      if (prefetched?.status === 'rejected') throw prefetched.reason;
+      const nextPermissions = prefetched?.value ?? await authService.getMyPermissions();
       if (!isCurrent()) return null;
       const accepted = permissionSnapshotMatchesSession(currentUserRef.current, nextPermissions) ? nextPermissions : null;
       const authority = permissionSnapshotAuthorityKey(accepted);
@@ -197,8 +198,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       try {
         let nextUser: User;
+        let nextPermissions: PromiseSettledResult<CurrentUserPermissions> | undefined;
         try {
-          nextUser = await authService.getMe();
+          let hasCachedSession = false;
+          try { hasCachedSession = Boolean(readStoredUser(localStorage.getItem(USER_KEY))); }
+          catch { /* storage may be unavailable */ }
+          if (publicRoute || !hasCachedSession) {
+            nextUser = await authService.getMe();
+          } else {
+            // Both reads use the same cookie session. Validate the account
+            // first, then accept only a snapshot bound to that account.
+            const [me, permissions] = await Promise.allSettled([
+              authService.getMe(),
+              authService.getMyPermissions(),
+            ]);
+            if (me.status === 'rejected') throw me.reason;
+            nextUser = me.value;
+            nextPermissions = permissions;
+          }
         } catch (error) {
           if (!isCurrent()) return;
           assertRequestSession();
@@ -220,7 +237,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         persistUser(nextUser);
         // persistUser may advance the session generation on initial identity.
         acceptedGeneration = generationRef.current;
-        await refreshPermissions();
+        await refreshPermissions(nextPermissions);
       } catch {
         if (isCurrent()) clearAuth();
       } finally {

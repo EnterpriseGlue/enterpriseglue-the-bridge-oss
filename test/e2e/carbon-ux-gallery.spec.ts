@@ -318,6 +318,101 @@ async function installGalleryStack(page: Page): Promise<void> {
 test.describe('Carbon UX screenshot gallery', () => {
   test.setTimeout(90_000);
 
+  test('opens the warm dashboard while its supplementary context loads @tenant-workspace', async ({ page }, testInfo) => {
+    await installGalleryStack(page);
+    let blockContext = false;
+    let finishContext: () => void = () => undefined;
+    let accessibleInventoryRequests = 0;
+    await page.route('**/engines-api/engines', (route) => {
+      accessibleInventoryRequests += 1;
+      return json(route, [engine]);
+    });
+    await page.route('**/api/dashboard/context', async (route) => {
+      if (blockContext) await new Promise<void>((resolve) => { finishContext = resolve; });
+      await json(route, { canViewProcessData: false, canViewMetrics: false, runtimeScopedEngineIds: [] });
+    });
+    await page.goto('/t/default/');
+    await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+    await expect(page.locator('.eg-dashboard-controls').getByText(engine.name)).toBeVisible();
+    blockContext = true;
+    accessibleInventoryRequests = 0;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    try {
+      await expect(page.locator('[aria-label="Platform key performance indicators"]')).toBeVisible({ timeout: 2_000 });
+      const usableMs = await page.evaluate(() => performance.now());
+      expect(usableMs).toBeLessThan(2_000);
+      await testInfo.attach('warm dashboard fixture', { body: JSON.stringify({ usableMs }), contentType: 'application/json' });
+      await expect(page.locator('.eg-dashboard-controls').getByText(engine.name)).toBeVisible();
+      expect(accessibleInventoryRequests).toBe(1);
+    } finally {
+      finishContext();
+    }
+  });
+
+  test('keeps retired engines and stored process labels out of the runtime UI @tenant-workspace', async ({ page }) => {
+    await installGalleryStack(page);
+    const retired = { ...engine, id: 'retired-record', name: 'Retired test engine', lifecycleStatus: 'decommissioned' };
+    let runtimeRequests = 0;
+    await page.route('**/engines-api/engines', (route) => json(route, [retired]));
+    await page.route('**/mission-control-api/process-definitions**', (route) => {
+      runtimeRequests += 1;
+      return json(route, []);
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem('mission-control-process-filters', JSON.stringify({
+        state: { selectedProcess: { id: 'archived', key: 'archived', label: 'Archived sample process', version: 1 }, selectedVersion: 1 },
+        version: 0,
+      }));
+    });
+
+    await page.goto('/t/default/mission-control/processes?engineId=retired-record');
+    await expect(page.getByText('This engine is no longer available.')).toBeVisible();
+    await expect(page.getByText('Archived sample process')).toHaveCount(0);
+    await expect(page.getByText('Retired test engine')).toHaveCount(0);
+    expect(runtimeRequests).toBe(0);
+  });
+
+  test('keeps engine names readable and distinguishes inventory failures from empty lists @tenant-workspace', async ({ page }) => {
+    await installGalleryStack(page);
+    const secondary = { ...engine, id: 'regional-payments-engine-id', name: 'Regional Payments and International Settlements Processing Engine' };
+    await page.route('**/engines-api/engines', (route) => json(route, [engine, secondary]));
+    let inventoryError = true;
+    await page.route('**/engines-api/engines?includeManageableShared=true', (route) => inventoryError
+      ? json(route, { error: 'Inventory unavailable' }, 503)
+      : json(route, [engine, secondary]));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/t/default/mission-control/processes?engineId=' + engine.id);
+    const selector = page.locator('.eg-engine-dropdown').getByRole('combobox');
+    await expect(selector).toBeVisible();
+    await selector.click();
+    const option = page.getByRole('option', { name: secondary.name });
+    await expect(option).toBeVisible();
+    await expect(option).not.toContainText(secondary.id);
+    await expect(selector).not.toHaveAttribute('title', /.+/);
+    const clipped = await option.evaluate((node) => node.scrollHeight > node.clientHeight || node.scrollWidth > node.clientWidth);
+    expect(clipped).toBe(false);
+    await expect.poll(() => selector.evaluate((button) => {
+      const list = button.closest('.cds--list-box');
+      const menu = list?.querySelector('.cds--list-box__menu');
+      if (!list || !menu) return null;
+      return Math.round(menu.getBoundingClientRect().top - button.getBoundingClientRect().bottom);
+    })).toBeGreaterThanOrEqual(-1);
+    await captureManualScreenshot(page, 'tenant-workspace-engine-selector.jpg');
+    await option.click();
+    await expect(selector).toContainText(secondary.name);
+    await expect(page).toHaveURL(new RegExp('engineId=' + secondary.id));
+    await expect.poll(() => selector.locator('.cds--list-box__label').evaluate((node) =>
+      node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight,
+    )).toBe(true);
+
+    await page.goto('/t/default/engines');
+    await expect(page.getByText('Failed to load engines')).toBeVisible();
+    await expect(page.getByText(/No engines (configured|registered)/)).toHaveCount(0);
+    inventoryError = false;
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(page.getByText(secondary.name, { exact: true })).toBeVisible();
+  });
+
   test('keeps dashboard filters aligned with and without an engine @carbon-gallery', async ({ page }) => {
     await installGalleryStack(page);
     let availableEngines: typeof engine[] = [];

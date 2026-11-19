@@ -62,10 +62,16 @@ r.get('/api/dashboard/context', requireAuth, requireAction('platform.dashboard.r
   const resourceAwareEngines = evaluatorEngineIds.length > 0
     ? await dataSource.getRepository(Engine).find({
       where: { id: In(evaluatorEngineIds), runtimeAccessScope: 'resource_aware' },
-      select: ['id'],
+      select: ['id', 'tenancyMode'],
     })
     : [];
-  const runtimeVisibleEngineIds = (await Promise.all(resourceAwareEngines.map(async (engine) => {
+  const engineWideReadIds = new Set(permissionSnapshot.engines
+    .filter((engine) => engine.permissions.includes(EnginePermissions.INSTANCE_VIEW))
+    .map((engine) => engine.resourceId));
+  const scopedEngines = resourceAwareEngines.filter((engine) =>
+    engine.tenancyMode !== 'dedicated' || !engineWideReadIds.has(engine.id)
+  );
+  const runtimeVisibleEngineIds = (await Promise.all(scopedEngines.map(async (engine) => {
     const [processes, decisions] = await Promise.all([
       permissionService.getVisibleRuntimeResources({
         userId,

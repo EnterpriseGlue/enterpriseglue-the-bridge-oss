@@ -10,6 +10,7 @@ import './styles/carbon-overrides.css'
 import './styles/theme.css'
 import './styles/pro-sidebar.css'
 import './styles/split-pane.css'
+import { SkeletonText } from '@carbon/react'
 
 // Feature Flags
 import { FeatureFlagsProvider } from './contexts/FeatureFlagsContext'
@@ -87,22 +88,24 @@ export async function startApp() {
     return
   }
 
-  await getEnterpriseFrontendPlugin()
-  await loadTrustedSystemFrontendModules(getConfiguredSystemFrontendModules())
-  await initializeTenancyCapabilities()
-  await loadInstalledNativePluginsV1()
-  const enterpriseRootChildren = [...extensions.rootRoutes] as any[]
-  const enterpriseTenantChildren = [...extensions.tenantRoutes] as any[]
-  const nativePluginRootChildren = getNativePluginRoutesV1('root')
-  const nativePluginTenantChildren = getNativePluginRoutesV1('tenant')
-
+  const router = (async () => {
+    await getEnterpriseFrontendPlugin()
+    await loadTrustedSystemFrontendModules(getConfiguredSystemFrontendModules())
+    await initializeTenancyCapabilities()
+    await loadInstalledNativePluginsV1()
+    return createBrowserRouter(createAppRoutes(
+      [...extensions.rootRoutes],
+      [...extensions.tenantRoutes],
+      getNativePluginRoutesV1('root'),
+      getNativePluginRoutesV1('tenant'),
+    ))
+  })()
   const qc = new QueryClient()
-  const routes = createAppRoutes(
-    enterpriseRootChildren,
-    enterpriseTenantChildren,
-    nativePluginRootChildren,
-    nativePluginTenantChildren,
-  )
+
+  // Restore the cookie session while the plugin route graph is loading.
+  function AppRouter() {
+    return <RouterProvider router={React.use(router)} />
+  }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
@@ -112,7 +115,9 @@ export async function startApp() {
             <FeatureFlagsProvider>
               <ToastProvider>
                 <HostContextualFlowProviderV1>
-                  <RouterProvider router={createBrowserRouter(routes)} />
+                  <React.Suspense fallback={<SkeletonText paragraph lineCount={4} />}>
+                    <AppRouter />
+                  </React.Suspense>
                 </HostContextualFlowProviderV1>
               </ToastProvider>
             </FeatureFlagsProvider>

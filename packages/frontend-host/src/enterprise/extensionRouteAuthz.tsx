@@ -203,11 +203,9 @@ function routeEntryHasValidAuthz(route: EnterpriseExtensionRoute, scope: Extensi
 
 function ExtensionRouteAuthzBoundary({
   authz,
-  routePath,
   children,
 }: {
   authz: ExtensionRouteAuthzMetadata;
-  routePath: string;
   children: React.ReactNode;
 }) {
   const { permissions } = useAuth();
@@ -218,11 +216,10 @@ function ExtensionRouteAuthzBoundary({
   const allowed = decisions.some((decision) => decision.allowed);
   if (allowed) return <>{children}</>;
 
-  const firstDecision = decisions[0];
   return (
     <UnauthorizedEmptyState
       title="Not authorized"
-      reason={firstDecision?.reason || `Missing authorization for extension route ${routePath}.`}
+      reason="You don’t have permission to view this page."
     />
   );
 }
@@ -254,7 +251,7 @@ function prepareRoute(
   const authz = getExtensionRouteAuthz(route);
   const element = authz && route.element
     ? (
-        <ExtensionRouteAuthzBoundary authz={authz} routePath={path}>
+        <ExtensionRouteAuthzBoundary authz={authz}>
           {route.element}
         </ExtensionRouteAuthzBoundary>
       )

@@ -19,6 +19,7 @@ vi.mock('@src/features/mission-control/engines/api/engines', () => ({
 }));
 
 vi.mock('@carbon/react', () => ({
+  DropdownSkeleton: () => <div data-testid="engine-dropdown-skeleton" />,
   Dropdown: (props: any) => {
     dropdownSpy(props);
     return <div data-testid="engine-dropdown" />;
@@ -167,7 +168,7 @@ describe('EngineSelector', () => {
 
     expect(await screen.findByTestId('engine-dropdown')).toBeInTheDocument();
     const props = dropdownSpy.mock.calls[dropdownSpy.mock.calls.length - 1]?.[0];
-    // One readable line per option: the friendly name only, never the raw ID.
+    // The label contains only the friendly name.
     expect(props.items).toEqual([
       { id: 'engine-a', label: 'Alpha' },
       { id: 'engine-z', label: 'Zulu' },

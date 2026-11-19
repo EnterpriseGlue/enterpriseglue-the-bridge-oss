@@ -901,7 +901,7 @@ export default function EngineMembersModal({
   return (
     <>
       <ComposedModal open={open && !childModalOpen} size="lg" onClose={onClose}>
-        <ModalHeader label={engine.name} title="Engine members" closeModal={onClose} />
+        <ModalHeader label={engine.name} title="People with access" closeModal={onClose} />
         <ModalBody>
           <div data-eg-collaborators-panel>
             {canViewProjectAccess && accessRequestsQ.data && accessRequestsQ.data.length > 0 && (
@@ -1134,7 +1134,7 @@ export default function EngineMembersModal({
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 600 }}>Scoped RBAC assignments</div>
                           <div style={{ fontSize: 12, color: 'var(--cds-text-secondary)' }}>
-                            Principal-scoped access from the authorization model. Legacy members remain listed above during migration.
+                            Access granted to people and groups for this engine.
                           </div>
                         </div>
                         <div style={{ display: 'flex', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>

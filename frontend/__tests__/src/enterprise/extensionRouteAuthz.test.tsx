@@ -134,7 +134,8 @@ describe('extensionRouteAuthz', () => {
     ]);
 
     expect(screen.getByText('Not authorized')).toBeInTheDocument();
-    expect(screen.getByText('Missing permission platform:audit:view')).toBeInTheDocument();
+    expect(screen.getByText('You don’t have permission to view this page.')).toBeInTheDocument();
+    expect(screen.queryByText(/platform:audit:view/)).not.toBeInTheDocument();
   });
 
   it('uses the active tenant for tenant-scoped extension route actions', () => {

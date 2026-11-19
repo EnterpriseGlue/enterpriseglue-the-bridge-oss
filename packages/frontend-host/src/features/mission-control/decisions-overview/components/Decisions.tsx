@@ -273,8 +273,8 @@ export default function Decisions() {
 
   // Check for engine access errors (403/503)
   const engineAccessError = isEngineAccessError(defsQ.error)
-  if (engineAccessError) {
-    return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
+  if (engineAccessError || [defsQ.error, historyQ.error].some((error) => (error as { status?: number } | null)?.status === 404)) {
+    return <EngineAccessError status={engineAccessError?.status ?? 404} />
   }
   if (selectedEngineId && !decisionsReadDecision.allowed) {
     return (
@@ -282,7 +282,7 @@ export default function Decisions() {
         <InlineNotification
           kind="warning"
           title="Decision definitions unavailable"
-          subtitle={decisionsReadDecision.reason}
+          subtitle="You don’t have permission to view decisions for this engine."
           lowContrast
           hideCloseButton
         />
@@ -438,7 +438,7 @@ export default function Decisions() {
           ) : xmlQ.isError ? (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--color-error)', background: 'var(--color-bg-primary)', zIndex: 10 }}>
               <div>Error loading decision table</div>
-              <div style={{ fontSize: 'var(--text-12)', marginTop: 'var(--spacing-1)' }}>{String(xmlQ.error)}</div>
+              <div style={{ fontSize: 'var(--text-12)', marginTop: 'var(--spacing-1)' }}>Try again to load the decision table.</div>
             </div>
           ) : (
             <React.Suspense fallback={<LoadingState message="Loading decision table..." />}>
@@ -491,7 +491,7 @@ export default function Decisions() {
                 <InlineNotification
                   kind="error"
                   title="Failed to load decision instances"
-                  subtitle={String(historyQ.error)}
+                  subtitle="Try again to load decision history."
                   lowContrast
                   hideCloseButton
                 />

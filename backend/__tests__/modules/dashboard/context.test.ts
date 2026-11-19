@@ -302,6 +302,28 @@ describe('GET /api/dashboard/context', () => {
     );
   });
 
+  it('does not mark a dedicated engine as scoped when the user has engine-wide instance access', async () => {
+    vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
+      ...emptyPermissions(),
+      engines: [{ resourceId: 'dedicated', permissions: ['engine:instance:view'], runtimePermissions: [] }],
+    });
+    (getDataSource as unknown as Mock).mockResolvedValue({
+      getRepository: (entity: unknown) => {
+        if (entity === Engine) return {
+          find: vi.fn().mockResolvedValue([{ id: 'dedicated', tenancyMode: 'dedicated' }]),
+        };
+        if (entity === Project) return { find: vi.fn() };
+        throw new Error('Unexpected repository');
+      },
+    });
+
+    const response = await request(app).get('/api/dashboard/context');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ canViewProcessData: true, runtimeScopedEngineIds: [] });
+    expect(permissionService.getVisibleRuntimeResources).not.toHaveBeenCalled();
+  });
+
   it('derives platform-admin dashboard flags from platform permissions', async () => {
     vi.mocked(permissionService.getCurrentUserPermissions).mockResolvedValue({
       ...emptyPermissions(),

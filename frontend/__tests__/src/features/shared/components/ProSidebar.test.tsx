@@ -28,7 +28,7 @@ vi.mock('@src/features/shared/stores/layoutStore', () => ({
 }));
 vi.mock('@src/components/EngineSelector', () => ({
   EngineSelector: () => <div data-testid="engine-selector" />,
-  useSelectedEngine: () => 'engine-1',
+  useEngineSelection: () => ({ selectedEngineId: 'engine-1' }),
 }));
 vi.mock('@src/features/mission-control/shared/stores/processesFilterStore', () => ({
   useProcessesFilterStore: () => ({

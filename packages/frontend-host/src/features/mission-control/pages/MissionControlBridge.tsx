@@ -50,7 +50,7 @@ export default function MissionControlHome() {
     },
     {
       title: 'Decisions',
-      description: 'Test and evaluate DMN decision tables. Input variables and see decision outcomes in real-time.',
+      description: 'View decision tables and evaluation history.',
       icon: DecisionTree,
       path: '/mission-control/decisions',
       color: 'var(--color-warning)',

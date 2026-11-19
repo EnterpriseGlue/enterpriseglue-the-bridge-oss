@@ -346,7 +346,7 @@ test.describe.serial('Governance administration with the real local API', () => 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.scrollTo(0, 0));
     const mobileControls = await page.locator('.eg-dashboard-controls').boundingBox();
-    const mobileRuntimeNotice = await page.locator('.cds--inline-notification').filter({ hasText: 'Runtime access is scoped' }).boundingBox();
+    const mobileRuntimeNotice = await page.locator('.cds--inline-notification').filter({ hasText: 'Showing the processes you can access' }).boundingBox();
     const mobileKpiTiles = page.locator('.eg-dashboard-tile');
     const firstMobileKpi = await mobileKpiTiles.nth(0).boundingBox();
     const secondMobileKpi = await mobileKpiTiles.nth(1).boundingBox();

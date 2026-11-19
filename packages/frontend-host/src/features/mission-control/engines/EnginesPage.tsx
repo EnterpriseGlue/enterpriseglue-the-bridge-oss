@@ -1,8 +1,10 @@
+import { isMultiTenantEnabled } from '../../../enterprise/extensionRegistry'
 import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { safeRelativePath } from '../../../shared/utils/sanitize'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
+  ActionableNotification,
   Button,
   InlineLoading,
   InlineNotification,
@@ -25,6 +27,7 @@ import {
 } from '@carbon/react'
 import { Add, Chip } from '@carbon/icons-react'
 import FormModal from '../../../components/FormModal'
+import { engineSelectionScope } from '../../../components/EngineSelector'
 import { PageLayout, PageHeader, PAGE_GRADIENTS } from '../../../shared/components/PageLayout'
 import { useModal } from '../../../shared/hooks/useModal'
 import { useAuth } from '../../../shared/hooks/useAuth'
@@ -963,7 +966,7 @@ function EngineDeploymentSection({
           lowContrast
           kind="info"
           title="Deployment targets unavailable"
-          subtitle="Viewing project-engine deployment targets requires engine project access visibility permission."
+          subtitle="You don’t have permission to view deployment targets."
           hideCloseButton
         />
       ) : isLoading ? (
@@ -1576,8 +1579,9 @@ export function buildEngineMutationPayload(
 export default function Engines() {
   const location = useLocation() as any
   const navigate = useNavigate()
+  const cloudWorkspace = isMultiTenantEnabled() && /^\/t\/[^/]+\//.test(location.pathname)
   const qc = useQueryClient()
-  const { refreshUser, hasEnginePermission, permissions } = useAuth()
+  const { user, refreshUser, hasEnginePermission, permissions } = useAuth()
   const createEngineDecision = useActionDecision('engine.inventory.create', { type: 'platform' })
   const runtimeResourcesReadDecision = useActionDecision('platform.engine-sets.read', { type: 'platform' })
   const assignmentReadDecision = useActionDecision('platform.authz.assignments.read', { type: 'platform' })
@@ -1637,7 +1641,12 @@ export default function Engines() {
   const hasSingleTag = Array.isArray(envTags) && envTags.length === 1
   const hasMultipleTags = Array.isArray(envTags) && envTags.length > 1
 
-  const listQ = useQuery({ queryKey: ['engines'], queryFn: getManageableEngines })
+  const listQ = useQuery({
+    queryKey: ['engines', 'manageable', engineSelectionScope(location.pathname, user)],
+    queryFn: getManageableEngines,
+    staleTime: 60_000,
+    retry: false,
+  })
   const areSourceOwnedFieldsReadOnly = Boolean(editing && (isExternallyManagedEngine(editing) || isConfigLockedEngine(editing)))
 
   const createM = useMutation({
@@ -1733,7 +1742,9 @@ export default function Engines() {
     navigate(safeRelativePath(`${location.pathname || ''}${location.search || ''}`), { replace: true, state: {} })
   }, [location, navigate, openNew])
 
-  const rows = listQ.data || []
+  const rows = React.useMemo(() => (listQ.data ?? []).filter((engine) =>
+    !cloudWorkspace || engine.lifecycleStatus !== 'decommissioned',
+  ), [cloudWorkspace, listQ.data])
   const [isAddFirstEngineHover, setIsAddFirstEngineHover] = React.useState(false)
 
   const hasEngineAction = React.useCallback((engineId: string | null | undefined, actionId: string) => {
@@ -1810,12 +1821,12 @@ export default function Engines() {
     ),
   })
   const engineDetailSections = React.useMemo(() => resolveEngineDetailSections({
-    isEditing: Boolean(editing),
+    isEditing: Boolean(editing && !(cloudWorkspace && isManagedCloudEngine)),
     canViewMembers: Boolean(editingActions?.canViewMembers),
     canViewProjectAccess: canViewEditingProjectAccess,
     canViewDeployments: canViewEditingDeployments,
     canViewRuntimeResources: Boolean(editing?.runtimeAccessScope === 'resource_aware' && runtimeResourcesReadDecision.allowed),
-  }), [canViewEditingDeployments, canViewEditingProjectAccess, editing, editingActions?.canViewMembers, runtimeResourcesReadDecision.allowed])
+  }), [canViewEditingDeployments, canViewEditingProjectAccess, cloudWorkspace, editing, editingActions?.canViewMembers, isManagedCloudEngine, runtimeResourcesReadDecision.allowed])
 
   function openEngineDetails(row: EngineInventory) {
     if (!row?.id) return
@@ -1925,20 +1936,24 @@ export default function Engines() {
       {/* Access Error State */}
       {listQ.isError && (() => {
         const accessErr = isEngineAccessError(listQ.error)
-        if (accessErr) {
-          return <EngineAccessError status={accessErr.status} message={accessErr.message} />
+        if (accessErr?.status === 403) {
+          return <EngineAccessError status={accessErr.status} message="You don’t have access to the engine list." />
         }
         return (
-          <InlineNotification
+          <ActionableNotification
             lowContrast
             kind="error"
             title="Failed to load engines"
-            subtitle={(listQ.error as any)?.message || 'Unknown error'}
+            subtitle="Try again to load the engine list."
+            actionButtonLabel="Retry"
+            onActionButtonClick={() => { void listQ.refetch() }}
+            hideCloseButton
+            inline
           />
         )
       })()}
 
-      {!listQ.isLoading && rows.length > 0 && !hasPlatformEngineCreatePermission && (
+      {!cloudWorkspace && !listQ.isLoading && rows.length > 0 && !hasPlatformEngineCreatePermission && (
         <InlineNotification
           lowContrast
           kind="info"
@@ -1977,7 +1992,7 @@ export default function Engines() {
       )}
 
       {/* Empty State */}
-      {!listQ.isLoading && rows.length === 0 && (
+      {listQ.isSuccess && rows.length === 0 && (
         <div style={{
           background: 'var(--color-bg-secondary)',
           border: '2px dashed var(--color-border-primary)',
@@ -2109,7 +2124,7 @@ export default function Engines() {
                             const key = cell.info.header
 
                             if (key === 'name') {
-                              const diagnosticTags = getEngineRowDiagnosticTags(engine)
+                              const diagnosticTags = cloudWorkspace ? [] : getEngineRowDiagnosticTags(engine)
                               return (
                                 <TableCell key={cell.id}>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', flexWrap: 'wrap' }}>
@@ -2138,6 +2153,9 @@ export default function Engines() {
                             }
 
                             if (key === 'baseUrl') {
+                              if (cloudWorkspace && engine?.registrationSource === 'managed_workload') {
+                                return <TableCell key={cell.id}>Managed by EnterpriseGlue</TableCell>
+                              }
                               const url = engine?.baseUrl
                               const safeHref = (() => {
                                 if (typeof url !== 'string') return null
@@ -2434,7 +2452,7 @@ export default function Engines() {
             lowContrast
             kind="info"
             title="Authentication fields redacted"
-            subtitle="Current authentication values are hidden because this role does not include engine secret view permission."
+            subtitle="You don’t have permission to view the connection credentials."
             hideCloseButton
           />
         )}
@@ -2443,7 +2461,7 @@ export default function Engines() {
             lowContrast
             kind="info"
             title="Authentication fields read-only"
-            subtitle="Changing authentication values requires engine secret management permission."
+            subtitle="You don’t have permission to change the connection credentials."
             hideCloseButton
           />
         )}
