@@ -53,6 +53,15 @@ test('production and TLS rehearsal proxies preserve bounded SSO response headers
   }
 });
 
+test('the SPA entry document revalidates while versioned browser assets remain immutable', () => {
+  const nginx = read('frontend/nginx.conf');
+  const index = nginx.match(/location = \/index\.html \{([^}]+)\}/)?.[1];
+  assert.match(index, /^\s+expires -1s;$/m);
+  assert.doesNotMatch(index, /\badd_header\b/);
+  assert.match(nginx, /location \/ \{\s+try_files \$uri \/index\.html;/);
+  assert.match(nginx, /location \/assets\/ \{[^}]+max-age=31536000, immutable/);
+});
+
 test('the production frontend image has a stable container-start runtime document', () => {
   const dockerfile = read('frontend/Dockerfile.prod');
   const entrypoint = read('frontend/nginx-entrypoint.sh');

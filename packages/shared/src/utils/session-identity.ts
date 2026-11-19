@@ -7,9 +7,10 @@ import type { AuthenticatedSessionContext } from '@enterpriseglue/shared/contrac
 export function createAuthenticatedSessionContext(
   userId: string,
   tenantId: string | null | undefined,
+  tenantSlug?: string,
 ): AuthenticatedSessionContext {
   return {
     principal: { type: 'user', id: userId },
-    tenant: { id: tenantId ?? null },
+    tenant: { id: tenantId ?? null, ...(tenantId && tenantSlug ? { slug: tenantSlug } : {}) },
   };
 }

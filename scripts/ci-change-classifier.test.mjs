@@ -339,7 +339,6 @@ test('frontend bundle delivery changes retain focused acceptance and execute the
     'frontend/__tests__/build/frontend-performance.test.ts',
     'frontend/build/bundle-budget.mjs',
     'frontend/build/manual-chunks.mjs',
-    'frontend/nginx.conf',
     'frontend/package.json',
     'frontend/vite.config.ts',
   ]);
@@ -365,8 +364,9 @@ test('frontend bundle delivery changes retain focused acceptance and execute the
   assert.match(workflow, /- name: Build frontend and enforce public bundle budgets[\s\S]*?pnpm --filter frontend-host run build[\s\S]*?pnpm --filter webmodeler-frontend run build/);
 });
 
-test('frontend upstream TLS runtime and contract checks select the application image lane', () => {
+test('frontend proxy configuration and contract checks select the application image lane', () => {
   for (const path of [
+    'frontend/nginx.conf',
     'frontend/nginx-entrypoint.sh',
     'scripts/frontend-upstream-tls.test.mjs',
     'scripts/frontend-runtime-config-deployment.test.mjs',

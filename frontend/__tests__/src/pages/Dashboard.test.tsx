@@ -112,7 +112,7 @@ describe('Dashboard', () => {
     renderDashboard();
 
     expect(await screen.findByText('Dashboard unavailable')).toBeInTheDocument();
-    expect(screen.getByText('Missing permission platform:dashboard:view')).toBeInTheDocument();
+    expect(screen.getByText('You don’t have permission to view this dashboard.')).toBeInTheDocument();
     expect(apiClient.get).not.toHaveBeenCalled();
   });
 
