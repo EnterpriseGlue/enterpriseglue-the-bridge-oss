@@ -6,16 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.39.0...v0.40.0) (2026-11-19)
 
+### Changes
 
-### Features
+- **authentication:** Adds a membership-based organization picker to Cloud sign-in and moves workspace switching into the account menu.
 
-* **auth:** add organization selection and account switching ([51b957d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/51b957d6904233ddc89d93f7c851c6d4891ff1d7))
-* **auth:** add organization selection and account switching ([c0d12eb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c0d12eb87b7646cb54a26f6c918f7d624a96cd20))
-
-
-### Bug Fixes
-
-* **release:** keep the plugin API on its compatible line ([cc7b8b2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cc7b8b2f17ab123f3e13bcb0fddcfcc02e76ae20))
+Full upgrade, compatibility and verification details: [v0.40.0 release notes](docs/releases/v0.40.0.md).
 
 ## [0.39.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.1...v0.39.0) (2026-11-19)
 
