@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.39.0...v0.40.0) (2026-11-19)
+
+
+### Features
+
+* **auth:** add organization selection and account switching ([51b957d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/51b957d6904233ddc89d93f7c851c6d4891ff1d7))
+* **auth:** add organization selection and account switching ([c0d12eb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c0d12eb87b7646cb54a26f6c918f7d624a96cd20))
+
+
+### Bug Fixes
+
+* **release:** keep the plugin API on its compatible line ([cc7b8b2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cc7b8b2f17ab123f3e13bcb0fddcfcc02e76ae20))
+
 ## [0.39.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.1...v0.39.0) (2026-11-19)
 
 ### Changes
