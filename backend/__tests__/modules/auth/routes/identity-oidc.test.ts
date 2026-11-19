@@ -828,6 +828,8 @@ describe('provider-neutral OIDC routes', () => {
       .redirects(0);
     expect(response.status).toBe(302);
     expect(response.headers.location).toContain('/t/default/login?error=account_link_required');
+    expect(new URL(response.headers.location, 'http://localhost').searchParams.get('message'))
+      .toBe('Use the method you signed up with, then connect this one from your profile.');
     expect(authSessionService.issue).not.toHaveBeenCalled();
   });
 

@@ -166,6 +166,67 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page).toHaveURL(/\/login$/);
   });
 
+  test('returning user: the linked method signs in and an unlinked method shows a stable error without reloading @identity-lifecycle', async ({ page }) => {
+    const linkRequired = 'Use the method you signed up with, then connect this one from your profile.';
+    let authenticated = false;
+    await page.route('**/api/tenancy/capabilities', (route) => json(route, {
+      mode: 'pooled', rootTenantAliasesEnabled: false, tenantScopedLoginRequired: true,
+      databaseIsolation: 'postgres_rls', customDomainsEnabled: true, organizationDiscoveryEnabled: true,
+      signedPlacementAssertionsEnabled: true,
+    }));
+    await page.route('**/api/plugins/v1/frontend', (route) => json(route, {
+      apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1', revision: 1, issues: [], plugins: [],
+    }));
+    await page.route('**/api/auth/branding', (route) => json(route, {}));
+    await page.route('**/api/auth/me', (route) => authenticated
+      ? json(route, {
+        id: 'returning-account', email: 'owner@returning.example', firstName: 'Returning', lastName: 'Owner',
+        platformRole: 'user', authProvider: 'oidc', isActive: true, isEmailVerified: true,
+        createdAt: Date.now(), session: { principal: { type: 'user', id: 'returning-account' }, tenant: { id: null } },
+      })
+      : json(route, { error: 'Not authenticated' }, 401));
+    await page.route('**/api/auth/refresh', (route) => json(route, { error: 'No refresh session' }, 401));
+    await page.route('**/api/authz/me/permissions', (route) => json(route, {
+      userId: 'returning-account', tenantId: null, platform: [], projects: [], engines: [],
+      generatedAt: Date.now(), authorizationVersion: 'browser-returning-user-v1',
+    }));
+    await page.route('**/api/auth/cloud-signup/providers', (route) => json(route, [
+      { id: 'google-global', displayName: 'Google', protocol: 'oidc' },
+      { id: 'microsoft-global', displayName: 'Microsoft', protocol: 'oidc' },
+    ]));
+    // The account was created with Google. Microsoft reaches the same email but
+    // is not connected, so the backend returns to /login with the safe code.
+    await page.route(/\/api\/auth\/cloud-signup\/providers\/microsoft-global\/start\?/, (route) => route.fulfill({
+      status: 200, contentType: 'text/html',
+      body: `<!doctype html><script>location.replace(${JSON.stringify(`/login?error=account_link_required&message=${encodeURIComponent(linkRequired)}`)})</script>`,
+    }));
+    await page.route(/\/api\/auth\/cloud-signup\/providers\/google-global\/start\?/, (route) => {
+      authenticated = true;
+      return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><script>location.replace("/login")</script>' });
+    });
+    await page.route('**/api/auth/my-tenants', (route) => json(route, [
+      { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha', tenantStatus: 'active', role: 'owner' },
+      { tenantId: 'b', tenantSlug: 'bravo', tenantName: 'Bravo', tenantStatus: 'active', role: 'member' },
+    ]));
+
+    await page.goto('/login');
+    await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
+    await expect(page.getByText('This sign-in method isn’t connected to your account')).toBeVisible();
+    await expect(page.getByText(linkRequired)).toBeVisible();
+    await expect(page).toHaveURL(/\/login$/);
+    let documentLoads = 0;
+    page.on('load', () => { documentLoads += 1; });
+    await page.waitForTimeout(3_000);
+    expect(documentLoads).toBe(0);
+    await expect(page.getByText(linkRequired)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Continue with Google' })).toBeVisible();
+    await expect(page.locator('body')).not.toContainText(/signed up with (Google|Microsoft|Apple|email)/i);
+
+    await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
+    await expect(page.getByText(linkRequired)).toHaveCount(0);
+  });
+
   test('opens anonymous signup without probing or refreshing a session @identity-lifecycle', async ({ page }) => {
     await installBootstrap(page);
     const diagnostics = monitorBrowserDiagnostics(page);

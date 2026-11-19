@@ -691,7 +691,7 @@ async function completeOidcLogin(req: Request, res: Response): Promise<void> {
     if (redirectForAdministratorMfa(error, res)) return;
     if (error instanceof IdentityProviderAccountLinkRequiredError && parsed) {
       const tenantPrefix = parsed.tenantSlug ? `/t/${encodeURIComponent(parsed.tenantSlug)}` : '';
-      const message = encodeURIComponent('This sign-in method is not connected yet. Sign in with an existing method, then connect it from your profile.');
+      const message = encodeURIComponent('Use the method you signed up with, then connect this one from your profile.');
       res.redirect(`${config.frontendUrl.replace(/\/$/, '')}${tenantPrefix}/login?error=account_link_required&message=${message}`);
       return;
     }
@@ -731,7 +731,7 @@ router.post('/api/auth/cloud-signup/microsoft/email/complete', apiLimiter, ident
       res.json(CloudMicrosoftEmailCompleteSchema.parse({ destination: proof.destination }));
     } catch (error) {
       if (error instanceof IdentityProviderAccountLinkRequiredError) {
-        throw Errors.conflict('This email is already in use. Sign in with your existing method, then connect Microsoft from your profile.');
+        throw Errors.conflict('This email is already in use. Use the method you signed up with, then connect Microsoft from your profile.');
       }
       throw error;
     }

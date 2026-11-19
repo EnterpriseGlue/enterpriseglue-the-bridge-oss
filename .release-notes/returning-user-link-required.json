@@ -1,0 +1,64 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "returning-user-link-required",
+  "type": "fix",
+  "scope": "login",
+  "breaking": false,
+  "audiences": [
+    "users"
+  ],
+  "summary": "A returning user who signs in with a method their account has not connected now sees a clear, stable instruction to use the method they signed up with.",
+  "userImpact": [
+    "The login page titles the error \"This sign-in method isn’t connected to your account\" and asks the person to use the method they signed up with, then connect the new one from their profile. The message stays on screen until the person acts, and the other sign-in buttons stay visible next to it. The page never names the method the account uses."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "The wording does not disclose which sign-in method an account has. Pooled providers still cannot adopt an existing account by email."
+  ],
+  "documentation": [
+    "docs/concepts/authentication-and-authoritative-provisioning.md"
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the application image. No data change is involved."
+  ],
+  "validation": [
+    "A browser test covers a returning user: an unconnected provider returns a stable error with no document reload, and the connected provider then signs in.",
+    "The OIDC route test asserts the account-link-required redirect message."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.25.0",
+      "newVersion": "0.25.1",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.26",
+      "newVersion": "0.20.27",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": [
+      "cloud-sign-in"
+    ]
+  }
+}

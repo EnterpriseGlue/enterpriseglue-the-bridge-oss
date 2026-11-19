@@ -2531,3 +2531,17 @@
     background: var(--cds-layer-accent-01);
   }
 }
+
+/* Engine selector: let the open menu size to the engine names instead of the
+   collapsed control, and keep each option on one readable line. */
+.eg-engine-selector .cds--list-box__menu {
+  min-width: 100%;
+  width: max-content;
+  max-width: min(28rem, calc(100vw - 2rem));
+}
+
+.eg-engine-selector .cds--list-box__menu-item__option {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

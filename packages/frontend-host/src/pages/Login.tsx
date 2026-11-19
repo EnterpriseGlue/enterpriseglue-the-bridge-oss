@@ -122,6 +122,11 @@ export default function Login() {
   const [ssoLoading, setSsoLoading] = useState(true);
   const [loginMethodsUnavailable, setLoginMethodsUnavailable] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
+  // A provider sign-in that reached an existing account through a method the
+  // account has not connected. The message stays until the visitor acts and
+  // never names the account's connected method.
+  const [loginErrorLinkRequired, setLoginErrorLinkRequired] = useState(false);
+  useEffect(() => { if (!loginError) setLoginErrorLinkRequired(false); }, [loginError]);
   const [loginErrorFocusTarget, setLoginErrorFocusTarget] = useState<LoginErrorFocusTarget>('notification');
   const [touchedFields, setTouchedFields] = useState<Partial<Record<LoginField, boolean>>>({});
   const [redirectingProvider, setRedirectingProvider] = useState<PublicLoginProvider | null>(null);
@@ -244,6 +249,7 @@ export default function Login() {
 
       setLoginErrorFocusTarget('notification');
       setLoginError(errorMessage || error);
+      setLoginErrorLinkRequired(error === 'account_link_required');
       // Clean up URL
       navigate(toSafeInternalPath(location.pathname, '/login'), { replace: true });
     }
@@ -656,7 +662,7 @@ export default function Login() {
           kind="error"
           lowContrast
           hideCloseButton
-          title="Work-account sign-in failed"
+          title={loginErrorLinkRequired ? 'This sign-in method isn’t connected to your account' : 'Work-account sign-in failed'}
           subtitle={sentence(loginError)}
           style={{ marginBottom: 'var(--spacing-5)' }}
         />}
@@ -864,8 +870,8 @@ export default function Login() {
             kind="error"
             lowContrast
             hideCloseButton
-            title={isAdministratorRecovery ? 'Recovery login failed' : 'Log in failed'}
-            subtitle={`${sentence(loginError)} Check the entered details or choose another login method.`}
+            title={loginErrorLinkRequired ? 'This sign-in method isn’t connected to your account' : isAdministratorRecovery ? 'Recovery login failed' : 'Log in failed'}
+            subtitle={loginErrorLinkRequired ? sentence(loginError) : `${sentence(loginError)} Check the entered details or choose another login method.`}
             style={{ marginBottom: 'var(--spacing-5)' }}
           />
         </div>}
