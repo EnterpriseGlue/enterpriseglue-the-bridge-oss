@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LayoutWithProSidebar from '@src/features/shared/components/LayoutWithProSidebar';
+import { WorkspaceShell } from '@src/features/organizations/WorkspaceShell';
 import { apiClient } from '@src/shared/api/client';
 import { EnginePermission, PlatformPermission } from '@src/shared/auth/permissions';
 
@@ -110,7 +111,7 @@ vi.mock('@src/shared/api/client', () => ({
   },
 }));
 
-function renderLayout() {
+function renderLayout(path = '/', withWorkspaceShell = false) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -119,10 +120,12 @@ function renderLayout() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/" element={<LayoutWithProSidebar />}>
-            <Route index element={<div>Home</div>} />
+          <Route element={withWorkspaceShell ? <WorkspaceShell /> : undefined}>
+            <Route path={path} element={<LayoutWithProSidebar />}>
+              <Route index element={<div>Home</div>} />
+            </Route>
           </Route>
         </Routes>
       </MemoryRouter>
@@ -217,6 +220,7 @@ describe('LayoutWithProSidebar', () => {
 
   it('reads pooled tenancy after startup capability initialization', async () => {
     tenancyState.enabled = true;
+    authState.user = { ...authState.user, session: { tenant: { id: 'tenant-1' } } } as typeof authState.user;
     vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
       if (url === '/api/auth/my-tenants') {
         return [{ tenantId: 'tenant-1', tenantSlug: 'acme', tenantName: 'Acme', tenantStatus: 'active', role: 'admin' }];
@@ -225,9 +229,11 @@ describe('LayoutWithProSidebar', () => {
       return [];
     });
 
-    renderLayout();
+    renderLayout('/t/acme/', true);
 
+    fireEvent.click(await screen.findByRole('button', { name: 'Account menu' }));
     expect(await screen.findByText('Acme')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Switch organization' })).not.toBeInTheDocument();
   });
 
   it('does not request or render tenant notifications on the pooled platform root', async () => {

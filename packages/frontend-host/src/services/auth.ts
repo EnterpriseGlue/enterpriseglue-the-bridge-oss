@@ -90,18 +90,20 @@ class AuthService {
   /**
    * Get current user profile
    */
-  async getMe(): Promise<User> {
+  async getMe(scope?: { tenantSlug: string }): Promise<User> {
     return apiClient.get<User>(`${API_BASE_URL}/auth/me`, undefined, {
       credentials: 'include', // Send HTTP-only cookies for Microsoft auth
+      ...(scope && { headers: { 'X-Tenant-Slug': scope.tenantSlug } }),
     });
   }
 
   /**
    * Get current user's effective RBAC permissions.
    */
-  async getMyPermissions(): Promise<CurrentUserPermissions> {
+  async getMyPermissions(scope?: { tenantSlug: string }): Promise<CurrentUserPermissions> {
     return CurrentUserPermissionsSchema.parse(await apiClient.get<unknown>('/api/authz/me/permissions', undefined, {
       credentials: 'include',
+      ...(scope && { headers: { 'X-Tenant-Slug': scope.tenantSlug } }),
     }));
   }
 

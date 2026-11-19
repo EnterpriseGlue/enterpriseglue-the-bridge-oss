@@ -50,7 +50,7 @@ export class TenantLoginPolicyService {
       if (!session?.identityProviderId || !session.providerSubjectId || (protocol !== 'oidc' && protocol !== 'saml' && protocol !== 'ldap') ||
           !await dataSource.getRepository(IdentityProvider).existsBy({ id: session.identityProviderId, protocol,
             tenantId: tenant.tenantId, isEnabled: true, authenticationMode: 'direct' })) {
-        throw Errors.forbidden('Sign in through your organization’s SSO provider');
+        throw Errors.withCode('TENANT_COMPANY_SSO_REQUIRED', 'Sign in through your organization’s SSO provider', 403);
       }
     });
   }

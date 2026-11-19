@@ -5,11 +5,14 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@src/shared/notifications/ToastProvider';
+import { OrganizationSelection } from '@src/features/organizations/OrganizationSelection';
+import { OrganizationSessionProvider } from '@src/features/organizations/OrganizationSession';
 import Login from '@src/pages/Login';
-import { apiClient } from '@src/shared/api/client';
+import { apiClient, ApiError } from '@src/shared/api/client';
 
 const navigateMock = vi.fn();
 const redirectMock = vi.fn();
+const refreshUserMock = vi.fn();
 const authState = vi.hoisted(() => ({ isAuthenticated: false, isLoading: false }));
 
 vi.mock('@src/utils/redirect', () => ({ redirectTo: (...args: unknown[]) => redirectMock(...args) }));
@@ -19,6 +22,9 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
     login: vi.fn(),
     setAuthenticatedUser: vi.fn(),
     refreshPermissions: vi.fn(),
+    refreshUser: refreshUserMock,
+    hasPlatformPermission: () => true,
+    get user() { return authState.isAuthenticated ? { id: 'account', email: 'person@example.com' } : null; },
     get isAuthenticated() { return authState.isAuthenticated; },
     get isLoading() { return authState.isLoading; },
   }),
@@ -41,7 +47,8 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => navigateMock };
 });
 
-vi.mock('@src/shared/api/client', () => ({
+vi.mock('@src/shared/api/client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@src/shared/api/client')>(),
   apiClient: { get: vi.fn(), post: vi.fn() },
 }));
 
@@ -54,6 +61,19 @@ function renderLogin(initialPath = '/login') {
           <Login />
         </MemoryRouter>
       </ToastProvider>
+    </QueryClientProvider>,
+  );
+}
+
+function renderSelection() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/organizations/select']}>
+        <OrganizationSessionProvider>
+          <OrganizationSelection onboardingPath="/cloud/onboarding" />
+        </OrganizationSessionProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -159,19 +179,31 @@ describe('pooled organization discovery login', () => {
     expect(apiClient.get).not.toHaveBeenCalledWith('/api/auth/login-methods');
   });
 
-  it('opens the sole active membership only after the server issues a tenant-bound session', async () => {
+  it('hands an authenticated account to the neutral organization route', async () => {
+    authState.isAuthenticated = true;
+    renderLogin();
+
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/organizations/select', {
+      replace: true, state: { destination: undefined },
+    }));
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('opens a single membership only after the server issues a tenant-bound session', async () => {
     authState.isAuthenticated = true;
     (apiClient.get as any).mockImplementation((path: string) => path === '/api/auth/my-tenants'
       ? Promise.resolve([
         { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha', tenantStatus: 'active', role: 'member' },
-        { tenantId: 'b', tenantSlug: 'disabled', tenantName: 'Disabled', tenantStatus: 'suspended', role: 'member' },
       ])
       : path === '/api/auth/cloud-signup/providers' ? Promise.resolve([]) : Promise.resolve({}));
-    (apiClient.post as any).mockResolvedValue({ tenantSlug: 'alpha' });
-    renderLogin();
+    const session = { tenantId: 'a', tenantSlug: 'alpha' };
+    (apiClient.post as any).mockResolvedValue(session);
+    renderSelection();
 
-    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/auth/switch-tenant', { tenantSlug: 'alpha' }));
-    expect(redirectMock).toHaveBeenCalledWith('/t/alpha/');
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/t/alpha/', { replace: true }));
+    expect(apiClient.post).toHaveBeenCalledWith('/api/auth/switch-tenant', { tenantSlug: 'alpha' });
+    expect(refreshUserMock).toHaveBeenCalledWith(session);
+    expect(redirectMock).not.toHaveBeenCalled();
     expect(screen.queryByLabelText('Email address')).not.toBeInTheDocument();
   });
 
@@ -185,17 +217,18 @@ describe('pooled organization discovery login', () => {
         { tenantId: 'c', tenantSlug: 'charlie', tenantName: 'Charlie', tenantStatus: 'suspended', role: 'member' },
       ])
       : path === '/api/auth/cloud-signup/providers' ? Promise.resolve([]) : Promise.resolve({}));
-    (apiClient.post as any).mockResolvedValue({ tenantSlug: 'bravo' });
-    renderLogin();
+    (apiClient.post as any).mockResolvedValue({ tenantId: 'b', tenantSlug: 'bravo' });
+    renderSelection();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Choose an organization' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Alpha' })).toHaveClass('eg-login-provider-button');
-    expect(screen.getByRole('button', { name: 'Bravo' })).toHaveClass('eg-login-provider-button');
-    expect(screen.queryByRole('button', { name: 'Charlie' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Alpha/ })).toBeVisible();
+    expect(screen.getByRole('link', { name: /Bravo/ })).toBeVisible();
+    expect(screen.getByText('Suspended')).toBeVisible();
+    expect(screen.queryByRole('link', { name: /Charlie/ })).not.toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Bravo' }));
-    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/auth/switch-tenant', { tenantSlug: 'bravo' }));
-    expect(redirectMock).toHaveBeenCalledWith('/t/bravo/');
+    await user.click(screen.getByRole('link', { name: /Bravo/ }));
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/t/bravo/', { replace: true }));
+    expect(apiClient.post).toHaveBeenCalledWith('/api/auth/switch-tenant', { tenantSlug: 'bravo' });
   });
 
   it('does not navigate when authenticated membership lookup fails', async () => {
@@ -204,13 +237,13 @@ describe('pooled organization discovery login', () => {
     (apiClient.get as any).mockImplementation((path: string) => path === '/api/auth/my-tenants'
       ? Promise.reject(new Error('unavailable'))
       : path === '/api/auth/cloud-signup/providers' ? Promise.resolve([]) : Promise.resolve({}));
-    renderLogin();
+    renderSelection();
 
-    expect(await screen.findByText('Could not load your organizations. Try again.')).toBeInTheDocument();
-    expect(redirectMock).not.toHaveBeenCalled();
+    expect(await screen.findByText('Could not load your organizations')).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith('/api/auth/my-tenants'));
-    expect((apiClient.get as any).mock.calls.filter(([path]: string[]) => path === '/api/auth/my-tenants')).toHaveLength(2);
+    await waitFor(() => expect(vi.mocked(apiClient.get).mock.calls).toHaveLength(2));
+    expect(apiClient.get).toHaveBeenCalledWith('/api/auth/my-tenants', { includeSelectionHints: 'true' });
   });
 
   it('does not guess an organization for a verified account with no active memberships', async () => {
@@ -218,10 +251,11 @@ describe('pooled organization discovery login', () => {
     (apiClient.get as any).mockImplementation((path: string) => path === '/api/auth/my-tenants'
       ? Promise.resolve([])
       : path === '/api/auth/cloud-signup/providers' ? Promise.resolve([]) : Promise.resolve({}));
-    renderLogin();
+    renderSelection();
 
-    expect(await screen.findByRole('heading', { name: 'No organization yet' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Create an organization' })).toHaveAttribute('href', '/cloud/onboarding');
+    await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/cloud/onboarding', {
+      replace: true, state: { organizationAccessDenied: false },
+    }));
     expect(apiClient.post).not.toHaveBeenCalled();
     expect(redirectMock).not.toHaveBeenCalled();
   });
@@ -235,12 +269,12 @@ describe('pooled organization discovery login', () => {
         { tenantId: 'b', tenantSlug: 'bravo', tenantName: 'Bravo', tenantStatus: 'active', role: 'member' },
       ])
       : path === '/api/auth/cloud-signup/providers' ? Promise.resolve([]) : Promise.resolve({}));
-    (apiClient.post as any).mockRejectedValue(new Error('forbidden'));
-    renderLogin();
+    (apiClient.post as any).mockRejectedValue(new ApiError(403, 'Forbidden', '{"code":"FORBIDDEN"}'));
+    renderSelection();
 
-    await user.click(await screen.findByRole('button', { name: 'Bravo' }));
-    expect(await screen.findByText('Could not open this organization. Your access may have changed. Try again.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Alpha' })).toBeInTheDocument();
-    expect(redirectMock).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole('link', { name: /Bravo/ }));
+    expect(await screen.findByText('Could not open this organization. Try again or choose another organization.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Alpha/ })).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });

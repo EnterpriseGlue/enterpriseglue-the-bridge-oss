@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { In } from 'typeorm';
 import { config } from '@enterpriseglue/shared/config/index.js';
 import { shouldUseSecureCookies } from '@enterpriseglue/shared/config/index.js';
 import { requireAuth, requireCloudAccountOrTenantAuth, requireAdmin } from '@enterpriseglue/shared/middleware/auth.js';
@@ -34,6 +35,8 @@ import { tenantLoginPolicyService } from '@enterpriseglue/shared/services/platfo
 import { authSessionService } from '@enterpriseglue/shared/services/AuthSessionService.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
+import { RefreshToken } from '@enterpriseglue/shared/infrastructure/persistence/entities/RefreshToken.js';
+import { runWithPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 import { Tenant } from '@enterpriseglue/shared/infrastructure/persistence/entities/Tenant.js';
 import { logAudit } from '@enterpriseglue/shared/services/audit.js';
 import {
@@ -449,8 +452,33 @@ router.post('/api/auth/tenant-discovery/exchange', identityFlowLimiter, validate
 }));
 
 router.get('/api/auth/my-tenants', requireCloudAccountOrTenantAuth, asyncHandler(async (req, res) => {
-  const memberships = await tenantService.listForUser(req.user!.userId);
-  res.json(z.array(NativeTenantMembershipSchema).parse(memberships));
+  res.setHeader('Cache-Control', 'no-store');
+  const userId = req.user!.userId;
+  const memberships = await tenantService.listForUser(userId);
+  if (req.query.includeSelectionHints !== 'true' || memberships.length < 2) {
+    res.json(z.array(NativeTenantMembershipSchema).parse(memberships));
+    return;
+  }
+  const dataSource = await getDataSource();
+  const activeIds = memberships.filter((membership) => membership.tenantStatus === 'active').map((membership) => membership.tenantId);
+  const [user, latest] = await runWithPlatformDatabaseCapability({ kind: 'authenticated-account', userId }, () =>
+    Promise.all([
+      dataSource.getRepository(User).findOneBy({ id: userId, isActive: true }),
+      activeIds.length ? dataSource.getRepository(RefreshToken).findOne({
+        where: { userId, tenantId: In(activeIds) },
+        select: ['tenantId'],
+        order: { createdAt: 'DESC', id: 'DESC' },
+      }) : null,
+    ]),
+  );
+  const domain = user?.isEmailVerified ? user.email.slice(user.email.lastIndexOf('@') + 1) : null;
+  const matches = domain ? await tenantService.findByDiscoveryDomain(domain) : [];
+  const domainTenant = matches.length === 1 ? matches[0].id : null;
+  res.json(z.array(NativeTenantMembershipSchema).parse(memberships.map((membership) => ({
+    ...membership,
+    verifiedDomain: membership.tenantId === domainTenant,
+    lastUsed: membership.tenantId === latest?.tenantId,
+  }))));
 }));
 
 router.post('/api/auth/switch-tenant', requireCloudAccountOrTenantAuth, validateBody(z.object({ tenantSlug: z.string().min(1).max(63) })), asyncHandler(async (req, res) => {

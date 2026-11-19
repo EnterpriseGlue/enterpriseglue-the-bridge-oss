@@ -1200,9 +1200,6 @@ jobs:
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
       - name: Verify pooled evidence and disposable database runner contracts
         run: >-
           node --test
@@ -1225,7 +1222,7 @@ jobs:
         env:
           CI: "true"
           PLAYWRIGHT_BROWSERS: chromium
-        run: pnpm run test:native-tenancy:pooled-e2e
+        run: bash scripts/run-ci-playwright.sh pnpm run test:native-tenancy:pooled-e2e
 
       - name: Upload sanitized pooled-tenancy evidence
         if: always()

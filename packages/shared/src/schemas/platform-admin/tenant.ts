@@ -207,8 +207,10 @@ export const NativeTenantMembershipSchema = z.object({
   tenantId: z.string().min(1),
   tenantSlug: TenantSlugSchema,
   tenantName: z.string().min(1),
-  tenantStatus: TenantStatusSchema,
+  tenantStatus: TenantStatusSchema.or(z.literal('provisioning')),
   role: z.enum(['admin', 'member']),
+  verifiedDomain: z.boolean().optional(),
+  lastUsed: z.boolean().optional(),
 });
 
 export const TenantCloudIdentityResponseSchema = z.object({

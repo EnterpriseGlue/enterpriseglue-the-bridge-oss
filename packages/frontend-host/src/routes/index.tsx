@@ -1,6 +1,8 @@
 import React from 'react'
 import { Navigate, RouteObject, useLocation } from 'react-router-dom'
-import { apiClient } from '../shared/api/client'
+import { OrganizationSelection } from '../features/organizations/OrganizationSelection'
+import { WorkspaceShell } from '../features/organizations/WorkspaceShell'
+import { ORGANIZATION_SELECTION_PATH } from '../features/organizations/organizationPaths'
 
 // Extension registry for EE plugin integration
 import { extensions, isMultiTenantEnabled, type EnterpriseExtensionRoute } from '../enterprise/extensionRegistry'
@@ -98,43 +100,12 @@ import { evaluateActionSnapshot, UnauthorizedEmptyState } from '../shared/auth/g
  */
 const DEFAULT_TENANT_SLUG = 'default'
 
-function DefaultTenantRedirect({ onboardingPath }: { onboardingPath?: string } = {}) {
+function DefaultTenantRedirect() {
   const location = useLocation()
-  const { user, permissions } = useAuth()
-  const multiTenant = isMultiTenantEnabled()
-  const [targetSlug, setTargetSlug] = React.useState<string | null>(multiTenant ? null : DEFAULT_TENANT_SLUG)
-  const [noMembership, setNoMembership] = React.useState(false)
-  React.useEffect(() => {
-    if (!multiTenant) return
-    let cancelled = false
-    apiClient.get<Array<{ tenantId: string; tenantSlug: string; tenantStatus: string }>>('/api/auth/my-tenants')
-      .then(async (memberships) => {
-        if (cancelled) return
-        const currentTenantId = user?.session?.tenant.id || null
-        const membership = memberships.find((candidate) => candidate.tenantStatus === 'active' && candidate.tenantId === currentTenantId)
-          || memberships.find((candidate) => candidate.tenantStatus === 'active')
-        if (membership) {
-          if (membership.tenantId !== currentTenantId) {
-            await apiClient.post('/api/auth/switch-tenant', { tenantSlug: membership.tenantSlug })
-            if (!cancelled) window.location.replace(`/t/${encodeURIComponent(membership.tenantSlug)}${location.pathname === '/' ? '' : location.pathname}${location.search}${location.hash}`)
-            return
-          }
-          setTargetSlug(membership.tenantSlug)
-        }
-        else setNoMembership(true)
-      })
-      .catch(() => { if (!cancelled) setNoMembership(true) })
-    return () => { cancelled = true }
-  }, [multiTenant, user?.session?.tenant.id, location.pathname, location.search, location.hash])
-  if (noMembership) return <Navigate to={onboardingPath && hasPlatformPermission(permissions, 'platform:tenants:self-create') ? onboardingPath : '/admin/tenants'} replace />
-  if (!targetSlug) return <PageLoadingState message="Finding your tenant..." />
-  const targetPath = location.pathname === '/' ? '' : location.pathname
-  return (
-    <Navigate
-      to={`/t/${encodeURIComponent(targetSlug)}${targetPath}${location.search}${location.hash}`}
-      replace
-    />
-  )
+  if (isMultiTenantEnabled()) {
+    return <Navigate to={ORGANIZATION_SELECTION_PATH} state={{ destination: location.state?.destination }} replace />
+  }
+  return <Navigate to={`/t/${DEFAULT_TENANT_SLUG}${location.pathname}${location.search}${location.hash}`} replace />
 }
 
 function MissionControlRoleGuard({
@@ -236,7 +207,7 @@ function LazyRoute({ children, message = 'Loading page...' }: { children: React.
  * Creates protected child routes that are shared between root (/) and tenant (/t/:tenantSlug) layouts
  * @param isRootLevel - true for root routes (uses "/" prefix), false for tenant routes (no prefix)
  */
-export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] {
+export function createProtectedChildRoutes(isRootLevel: boolean, cloudOrganizations = false): RouteObject[] {
   const multiTenantEnabled = isMultiTenantEnabled()
   const fallbackPath = isRootLevel ? '/' : '..'
   const pathPrefix = isRootLevel ? '/' : ''
@@ -245,7 +216,8 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
     return [
       {
         path: '/admin/tenants',
-        element: <ProtectedRoute requireAdmin><LazyRoute message="Loading tenants..."><TenantsPage /></LazyRoute></ProtectedRoute>,
+        element: cloudOrganizations ? <Navigate to="/cloud/organizations" replace />
+          : <ProtectedRoute requireAdmin><LazyRoute message="Loading tenants..."><TenantsPage /></LazyRoute></ProtectedRoute>,
       },
       { path: '*', element: <DefaultTenantRedirect /> },
     ]
@@ -768,6 +740,7 @@ export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): R
     && /^\/?[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/.test(route.path)
     && getExtensionRouteAuthz(route)?.actionId === 'platform.tenants.self_create')
   const onboardingPath = onboardingRoute?.path ? `/${onboardingRoute.path.replace(/^\//, '')}` : undefined
+  const cloudOrganizations = enterpriseChildren.some((route) => route.path?.replace(/^\//, '') === 'cloud/organizations')
   return {
     path: '/',
     element: (
@@ -781,8 +754,12 @@ export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): R
     ),
     children: [
       // Redirect root to default tenant for unified routing
-      { index: true, element: isMultiTenantEnabled() ? <DefaultTenantRedirect onboardingPath={onboardingPath} /> : <Navigate to={`/t/${DEFAULT_TENANT_SLUG}`} replace /> },
-      ...createProtectedChildRoutes(true),
+      { index: true, element: isMultiTenantEnabled() ? <DefaultTenantRedirect /> : <Navigate to={`/t/${DEFAULT_TENANT_SLUG}`} replace /> },
+      ...(isMultiTenantEnabled() ? [{
+        path: ORGANIZATION_SELECTION_PATH,
+        element: <OrganizationSelection onboardingPath={onboardingPath} />,
+      }] : []),
+      ...createProtectedChildRoutes(true, cloudOrganizations),
       ...enterpriseChildren,
     ],
   }
@@ -836,7 +813,7 @@ export function createAppRoutes(
     ...(extensions?.tenantRoutes || []),
   ], { scope: 'tenant' });
 
-  return [
+  const routes = [
     ...getPublicRoutes(),
     // Native plugin routes have already passed signed manifest parity,
     // contribution availability, and activation validation. Keep them out of
@@ -845,4 +822,5 @@ export function createAppRoutes(
     createRootLayoutRoute([...allRootChildren, ...nativePluginRootChildren]),
     createTenantLayoutRoute([...allTenantChildren, ...nativePluginTenantChildren]),
   ]
+  return isMultiTenantEnabled() ? [{ element: <WorkspaceShell />, children: routes }] : routes
 }

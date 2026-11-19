@@ -218,7 +218,9 @@ export async function interceptedFetch(
     const outcome = await pendingRefresh.promise;
     assertCurrent();
     if (outcome === 'unauthorized') {
-      handleAuthFailure();
+      // Session probes are owned by AuthProvider. Let the router keep the
+      // requested path so sign-in can return to a member's deep link.
+      if (prefixedUrl !== `${API_BASE_URL}/auth/me`) handleAuthFailure();
     } else if (outcome === 'refreshed') {
       const headers = new Headers(getAuthHeaders());
       new Headers(fetchOptions.headers).forEach((value, name) => headers.set(name, value));

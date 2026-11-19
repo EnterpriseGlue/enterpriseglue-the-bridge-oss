@@ -126,6 +126,18 @@ registry and are reconciled only by a `tenant:lifecycle` service account with
 an optimistic placement epoch. Work-email discovery domains are a different,
 non-authoritative directory hint and cannot route an ordinary tenant request.
 
+Cloud clients can read their own memberships through
+`GET /api/auth/my-tenants`. The optional `includeSelectionHints=true` query
+adds a verified-domain match and the last used membership when available.
+The response is private and carries `Cache-Control: no-store`. The Cloud
+gateway can project an unavailable placement state onto an existing
+membership. It cannot add memberships to the response.
+
+`POST /api/auth/switch-tenant` rechecks active membership and the destination
+login policy before replacing the session cookies. A company sign-in
+requirement returns `TENANT_COMPANY_SSO_REQUIRED` so the client can continue
+through the destination sign-in route.
+
 Cloud tenant create, suspend, resume, and routing-alias reconciliation use
 workload-only APIs. Every mutation requires a stable `Idempotency-Key` and
 `X-Correlation-ID`. The durable ledger stores only hashes, binds retries to the

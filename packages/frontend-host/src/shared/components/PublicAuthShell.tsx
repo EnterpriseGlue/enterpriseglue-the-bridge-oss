@@ -4,6 +4,7 @@ import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/plat
 import { apiClient } from '../api/client';
 import logoPng from '../../assets/logo.png';
 import processLandscape from '../../assets/login/process-landscape.svg';
+import { useWorkspaceHeader } from '../../features/organizations/workspaceHeaderContext';
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1';
 
@@ -85,13 +86,14 @@ export interface PublicAuthBrandingState {
   titleOffset: number;
 }
 
-function usePublicAuthBranding(): PublicAuthBrandingState {
+export function usePublicAuthBranding(enabled = true): PublicAuthBrandingState {
   const [initialBranding] = useState(readCachedBranding);
   const [branding, setBranding] = useState<PublicPlatformBranding | null>(initialBranding);
-  const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(() => makeLogoObjectUrl(initialBranding?.logoUrl || initialBranding?.loginLogoUrl));
+  const [logoObjectUrl, setLogoObjectUrl] = useState<string | null>(() => enabled ? makeLogoObjectUrl(initialBranding?.logoUrl || initialBranding?.loginLogoUrl) : null);
   const logoObjectUrlRef = useRef(logoObjectUrl);
 
   useEffect(() => {
+    if (!enabled) return;
     const next = makeLogoObjectUrl(branding?.logoUrl || branding?.loginLogoUrl);
     if (logoObjectUrlRef.current) URL.revokeObjectURL(logoObjectUrlRef.current);
     logoObjectUrlRef.current = next;
@@ -102,9 +104,10 @@ function usePublicAuthBranding(): PublicAuthBrandingState {
         logoObjectUrlRef.current = null;
       }
     };
-  }, [branding?.loginLogoUrl, branding?.logoUrl]);
+  }, [branding?.loginLogoUrl, branding?.logoUrl, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     apiClient.get<unknown>('/api/auth/branding', undefined, { credentials: 'include' })
       .then((data) => {
@@ -115,17 +118,19 @@ function usePublicAuthBranding(): PublicAuthBrandingState {
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"]')) as HTMLLinkElement[];
     for (const link of links) {
       if (!link.dataset.defaultHref) link.dataset.defaultHref = link.href;
       link.href = branding?.faviconUrl || link.dataset.defaultHref || link.href;
     }
-  }, [branding?.faviconUrl]);
+  }, [branding?.faviconUrl, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     const styleId = 'public-branding-font';
     let style = document.getElementById(styleId) as HTMLStyleElement | null;
     if (!branding?.titleFontUrl) {
@@ -138,7 +143,7 @@ function usePublicAuthBranding(): PublicAuthBrandingState {
       document.head.appendChild(style);
     }
     style.textContent = `@font-face { font-family: 'PublicBrandingFont'; src: url('${branding.titleFontUrl}') format('woff2'), url('${branding.titleFontUrl}') format('woff'), url('${branding.titleFontUrl}') format('truetype'); font-weight: normal; font-style: normal; font-display: swap; }`;
-  }, [branding?.titleFontUrl]);
+  }, [branding?.titleFontUrl, enabled]);
 
   const rawTitleOffset = branding?.titleVerticalOffset;
   return {
@@ -161,15 +166,46 @@ interface PublicAuthShellProps {
   children: React.ReactNode | ((branding: PublicAuthBrandingState) => React.ReactNode);
 }
 
+export function PublicAuthHeaderBrand({ branding, useLoginBrandDefaults = false }: {
+  branding: PublicAuthBrandingState;
+  useLoginBrandDefaults?: boolean;
+}) {
+  return (
+    <span className="eg-login-header-brand">
+      <img
+        src={branding.logoSrc}
+        alt=""
+        aria-hidden="true"
+        className="eg-login-header-logo default-logo"
+        style={{ height: `${branding.logoHeight}px` }}
+      />
+      <span
+        className="eg-login-header-title"
+        style={{
+          fontSize: useLoginBrandDefaults ? 'var(--cds-heading-compact-02-font-size, 1rem)' : `${branding.titleFontSize}px`,
+          fontWeight: branding.titleFontWeight,
+          fontFamily: branding.titleFontFamily || (useLoginBrandDefaults ? 'var(--font-ibm-plex-sans, inherit)' : 'inherit'),
+          transform: branding.titleOffset ? `translateY(${branding.titleOffset}px)` : undefined,
+        }}
+      >
+        {branding.brandTitle}
+      </span>
+    </span>
+  );
+}
+
 export default function PublicAuthShell({
   title,
   description,
   homePath = '/',
   panelSize = 'default',
-  appearance = 'process',
+  appearance: requestedAppearance = 'process',
   children,
 }: PublicAuthShellProps) {
-  const branding = usePublicAuthBranding();
+  const workspaceHeader = useWorkspaceHeader();
+  const appearance = workspaceHeader ? 'default' : requestedAppearance;
+  const localBranding = usePublicAuthBranding(!workspaceHeader);
+  const branding = workspaceHeader?.branding ?? localBranding;
   const headingId = 'public-auth-page-title';
   // Give the standard login wordmark more presence without replacing custom fonts/sizes.
   const useLoginBrandDefaults = appearance === 'process' && !branding.titleFontFamily && branding.titleFontSize === 14;
@@ -180,33 +216,14 @@ export default function PublicAuthShell({
 
   const shell = (
     <div className={`eg-login-shell${appearance === 'process' ? ' eg-login-shell--process' : ''}`}>
-      <Theme theme="g100">
+      {!workspaceHeader && <Theme theme="g100">
         <Header className="eg-login-header" aria-label={`${branding.brandTitle} application header`}>
           <SkipToContent href="#public-auth-main">Skip to main content</SkipToContent>
           <HeaderName href={homePath} prefix="">
-            <span className="eg-login-header-brand">
-              <img
-                src={branding.logoSrc}
-                alt=""
-                aria-hidden="true"
-                className="eg-login-header-logo default-logo"
-                style={{ height: `${branding.logoHeight}px` }}
-              />
-              <span
-                className="eg-login-header-title"
-                style={{
-                  fontSize: useLoginBrandDefaults ? 'var(--cds-heading-compact-02-font-size, 1rem)' : `${branding.titleFontSize}px`,
-                  fontWeight: branding.titleFontWeight,
-                  fontFamily: branding.titleFontFamily || (useLoginBrandDefaults ? 'var(--font-ibm-plex-sans, inherit)' : 'inherit'),
-                  transform: branding.titleOffset ? `translateY(${branding.titleOffset}px)` : undefined,
-                }}
-              >
-                {branding.brandTitle}
-              </span>
-            </span>
+            <PublicAuthHeaderBrand branding={branding} useLoginBrandDefaults={useLoginBrandDefaults} />
           </HeaderName>
         </Header>
-      </Theme>
+      </Theme>}
       <main id="public-auth-main" className="eg-login-page" aria-labelledby={headingId} tabIndex={-1}>
         {appearance === 'process' && <div className="eg-login-landscape" aria-hidden="true">
           <img src={processLandscape} alt="" />

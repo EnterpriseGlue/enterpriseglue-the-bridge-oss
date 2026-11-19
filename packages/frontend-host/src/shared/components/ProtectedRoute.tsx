@@ -1,6 +1,8 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { InlineLoading } from '@carbon/react';
+import { InlineLoading, SkeletonText } from '@carbon/react';
+import { useOptionalOrganizationSession } from '../../features/organizations/OrganizationSession';
+import { ORGANIZATION_SELECTION_PATH } from '../../features/organizations/organizationPaths';
 import { useAuth } from '../hooks/useAuth';
 import { apiClient } from '../../shared/api/client';
 import { isMultiTenantEnabled } from '../../enterprise/extensionRegistry';
@@ -25,6 +27,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, requireAdmin = false, requiredPlatformPermissions, skipSetupCheck = false }: ProtectedRouteProps) {
   const { user, permissions, isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
+  const organization = useOptionalOrganizationSession();
   const [setupChecked, setSetupChecked] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
 
@@ -36,13 +39,19 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   const tenantSlug = rawTenantSlug && /^[a-zA-Z0-9_-]+$/.test(rawTenantSlug) ? rawTenantSlug : null;
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
   const effectivePathname = tenantSlug ? (location.pathname.replace(/^\/t\/[^/]+/, '') || '/') : location.pathname;
-  const loginPath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/login` : '/login';
+  const loginPath = !organization && tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/login` : '/login';
   const homePath = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : '/';
 
   // Setup-exempt paths (accessible even when setup needed)
   const multiTenantEnabled = isMultiTenantEnabled();
   const setupExemptPaths = ['/admin/tenants', '/admin/email', '/logout', '/profile'];
   const isExemptPath = setupExemptPaths.some(p => effectivePathname.includes(p));
+  const organizationMatch = organization?.memberships.data?.find((membership) =>
+    membership.tenantSlug === tenantSlug && membership.tenantId === user?.session?.tenant.id
+      && membership.tenantStatus === 'active',
+  );
+  const checkingOrganization = Boolean(tenantSlug && organization && isAuthenticated
+    && (organization.transitioning || (user?.session?.tenant.id && organization.memberships.isPending)));
   const isSetupPath = !multiTenantEnabled && effectivePathname === '/admin/settings';
 
   useEffect(() => {
@@ -67,6 +76,12 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
     checkSetup();
   }, [isLoading, isAuthenticated, platformSettingsAllowed, skipSetupCheck, isExemptPath, isSetupPath]);
 
+  if (organization && (isLoading || checkingOrganization)) {
+    return <main id="main-content" className="eg-workspace-loading" aria-label="Loading your workspace">
+      <SkeletonText paragraph lineCount={4} />
+    </main>;
+  }
+
   if (isLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
@@ -78,6 +93,11 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   // Not authenticated - redirect to login
   if (!isAuthenticated) {
     return <Navigate to={loginPath} replace state={{ from: location }} />;
+  }
+
+  if (organization && tenantSlug && !organizationMatch) {
+    const destination = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={ORGANIZATION_SELECTION_PATH} state={{ destination }} replace />;
   }
 
   // Requires admin but user is not admin - redirect to home

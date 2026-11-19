@@ -7,27 +7,36 @@ import path from 'node:path';
 import { parseEncryptionEvidence } from './verify-oracle-session-encryption.mjs';
 import { oracleClientComponent, addOracleClientComponent } from './complete-oracle-image-sbom.mjs';
 
-for (const protocol of ['oidc', 'saml', 'ldap']) {
-  test(`${protocol} browser preflight recognizes Linux ARM64 and CFT executables but rejects non-executable files`, () => {
+test('identity browser preflight accepts the pinned server or an executable local Chromium', (t) => {
+  for (const protocol of ['oidc', 'saml', 'ldap']) {
     const source = readFileSync(`scripts/run-local-${protocol}-rehearsal-test.sh`, 'utf8');
-    const line = source.split('\n').find(value => value.startsWith('if [[ -z "$headless_shell_path"'));
-    assert.ok(line);
-    const check = line.slice(line.indexOf('find '), line.indexOf('; then'));
-    const directory = mkdtempSync(path.join(tmpdir(), 'eg-headless-preflight-'));
-    const execute = () => execFileSync('bash', ['-c', `headless_shell_path="$HEADLESS_SHELL_TEST_DIR"; ${check}`], {
-      env: { ...process.env, HEADLESS_SHELL_TEST_DIR: directory }, stdio: 'pipe',
-    });
-    try {
-      assert.throws(execute);
-      for (const name of ['headless_shell', 'chrome-headless-shell', 'chrome-headless-shell.exe']) {
-        const file = path.join(directory, name);
-        writeFileSync(file, 'fixture'); chmodSync(file, 0o600);
-        assert.throws(execute);
-        chmodSync(file, 0o755); execute(); rmSync(file);
-      }
-    } finally { rmSync(directory, { recursive: true, force: true }); }
+    assert.match(source, /bash "[^"]+\/scripts\/check-rehearsal-chromium\.sh"/);
+  }
+
+  const directory = mkdtempSync(path.join(tmpdir(), 'eg-headless-preflight-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  writeFileSync(path.join(directory, 'pnpm'), '#!/usr/bin/env bash\nprintf "Chrome Headless Shell\\n  Install location: %s\\n" "$HEADLESS_SHELL_TEST_DIR"\n', { mode: 0o755 });
+  const execute = (endpoint = '') => execFileSync('bash', ['scripts/check-rehearsal-chromium.sh'], {
+    env: {
+      ...process.env,
+      PATH: `${directory}:${process.env.PATH}`,
+      HEADLESS_SHELL_TEST_DIR: directory,
+      PW_TEST_CONNECT_WS_ENDPOINT: endpoint,
+    },
+    stdio: 'pipe',
   });
-}
+
+  assert.throws(() => execute());
+  execute('ws://127.0.0.1:12345/test');
+  for (const name of ['headless_shell', 'chrome-headless-shell', 'chrome-headless-shell.exe']) {
+    const file = path.join(directory, name);
+    writeFileSync(file, 'fixture', { mode: 0o600 });
+    assert.throws(() => execute());
+    chmodSync(file, 0o755);
+    execute();
+    rmSync(file);
+  }
+});
 
 test('Oracle SBOM includes the correct architecture distribution and licence without losing scanner inventory', () => {
   const installer = readFileSync('backend/install-oracle-instant-client.sh', 'utf8');
@@ -80,6 +89,8 @@ test('Oracle publication requires a released SHA and retained security-qualified
   assert.match(publish, /COSIGN_EXPERIMENTAL: '1'/);
   assert.match(publish, /run-id: \$\{\{ needs.validate.outputs.qualification_run_id \|\| github.run_id \}\}/);
   assert.match(publish, /needs.qualify.result == 'skipped' && needs.validate.outputs.qualification_run_id != ''/);
+  const qualification = readFileSync('.github/workflows/oracle-native-encryption-reusable.yml', 'utf8');
+  assert.match(qualification, /run: bash scripts\/run-ci-playwright\.sh pnpm run test:oracle:nne:sso/);
   const harness = readFileSync('scripts/run-ci-identity-protocol-rehearsals.sh', 'utf8');
   assert.ok(harness.indexOf('scripts/scan-oracle-image.sh') < harness.indexOf('run_compose up --no-build'));
   const scan = readFileSync('scripts/scan-oracle-image.sh', 'utf8');

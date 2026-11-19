@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { generateOpenApi } from '@enterpriseglue/shared/schemas/openapi.js';
@@ -5,6 +6,29 @@ import { AuthzOpenApiClassificationSchema, AuthzOpenApiExtensionSchema } from '@
 import type { AuthzOpenApiExtension } from '@enterpriseglue/shared/authz/permission-actions.js';
 
 describe('platform Cloud identity OpenAPI', () => {
+  it('documents the authenticated membership discovery and session handoff routes', () => {
+    const source = readFileSync(new URL(
+      '../../../../../packages/backend-host/src/modules/tenancy/routes/tenants.ts', import.meta.url,
+    ), 'utf8');
+    const document = generateOpenApi();
+    for (const [method, path] of [
+      ['get', '/api/auth/my-tenants'],
+      ['post', '/api/auth/switch-tenant'],
+    ] as const) {
+      expect(source).toContain(`router.${method}('${path}', requireCloudAccountOrTenantAuth,`);
+      expect(document.paths[path]?.[method]).toBeDefined();
+    }
+    expect(document.paths['/api/auth/my-tenants'].get?.parameters).toContainEqual(expect.objectContaining({
+      name: 'includeSelectionHints', in: 'query', required: false,
+    }));
+    const memberships = JSON.stringify(document.paths['/api/auth/my-tenants'].get?.responses[200]);
+    for (const field of ['provisioning', 'verifiedDomain', 'lastUsed']) {
+      expect(memberships).toContain(field);
+    }
+    expect(JSON.stringify(document.paths['/api/auth/switch-tenant'].post?.responses[403]))
+      .toContain('TENANT_COMPANY_SSO_REQUIRED');
+  });
+
   it('publishes the strict exchange schemas, exact action authorization, and mutation fence', () => {
     const document = generateOpenApi() as any;
     const exchange = document.paths?.['/api/platform/cloud-identity']?.post;

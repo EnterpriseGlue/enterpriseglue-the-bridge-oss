@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate, Link as RouterLink } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Header,
@@ -16,15 +16,13 @@ import {
   SideNavMenuItem,
   SkipToContent,
   Theme,
-  Modal,
   Button,
-  TextInput,
   InlineNotification,
   InlineLoading,
   MultiSelect,
-  Tag,
 } from '@carbon/react'
-import { Close, Link as LinkIcon, Logout, Notification, UserAvatar } from '@carbon/icons-react'
+import { Close, Logout, Notification, UserAvatar } from '@carbon/icons-react'
+import { ProfileDialog } from './ProfileDialog'
 import ProSidebar from './ProSidebar'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import logoPng from '../../../assets/logo.png'
@@ -33,8 +31,6 @@ import { useFeatureFlag } from '../../../shared/hooks/useFeatureFlag'
 import { usePlatformSyncSettings } from '../../platform-admin/hooks/usePlatformSyncSettings'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
-import { redirectToApi } from '../../../utils/redirect'
-import { configuredDocumentationOrigin, documentationAccountLink } from '../../../utils/documentationAccess'
 import { getEnterpriseFrontendPlugin } from '../../../enterprise/loadEnterpriseFrontendPlugin'
 import { ExtensionSlot, useFilteredExtensionNavItems } from '../../../enterprise/ExtensionSlot'
 import { extensions, isMultiTenantEnabled, type NavExtension } from '../../../enterprise/extensionRegistry'
@@ -51,13 +47,13 @@ import {
   USER_MANAGEMENT_PLATFORM_PERMISSIONS,
 } from '../../../shared/auth/permissions'
 import type { PlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
-import type { AuthenticatedIdentityProviderLinks } from '@enterpriseglue/shared/schemas/auth/session.js'
 import { resolveVoyagerNavigationVisibility } from '../../../shared/auth/voyagerNavigation'
 import {
   getNativePluginNavigationV1,
   NativePluginSlotV1,
 } from '../../../plugins/nativePluginRuntime'
-import NativeTenantPicker from './NativeTenantPicker'
+import { createPortal } from 'react-dom'
+import { useWorkspaceHeader } from '../../organizations/workspaceHeaderContext'
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1'
 
@@ -192,21 +188,17 @@ export default function LayoutWithProSidebar() {
   // mode before the router renders. Resolve it here instead of caching the
   // pre-bootstrap module value.
   const isMultiTenant = isMultiTenantEnabled()
+  const workspaceHeader = useWorkspaceHeader()
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { logout, user, permissions, refreshUser } = useAuth()
+  const { logout, user, permissions } = useAuth()
   const queryClient = useQueryClient()
   const { sidebarCollapsed, setSidebarCollapsed } = useLayoutStore()
   const [globalNavigationOpen, setGlobalNavigationOpen] = useState(false)
   const previousPathnameRef = React.useRef(pathname)
 
-  const [cachedBranding] = useState(() => readCachedBranding())
-
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
-  const [profileFirstName, setProfileFirstName] = useState('')
-  const [profileLastName, setProfileLastName] = useState('')
-  const [profileSaving, setProfileSaving] = useState(false)
-  const [profileError, setProfileError] = useState('')
+  const [cachedBranding] = useState(() => readCachedBranding())
 
   const tenantSlugMatch = pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const rawTenantSlug = tenantSlugMatch?.[1] ? decodeURIComponent(tenantSlugMatch[1]) : null
@@ -214,31 +206,6 @@ export default function LayoutWithProSidebar() {
   const tenantPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : ''
   const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
-
-  const identityProviderLinksQ = useQuery({
-    queryKey: ['auth', 'me', 'identity-providers', user?.id, tenantSlug],
-    queryFn: () => apiClient.get<AuthenticatedIdentityProviderLinks>('/api/auth/me/identity-providers'),
-    enabled: isProfileModalOpen && Boolean(user) && (!isMultiTenant || Boolean(tenantSlug)),
-    staleTime: 15_000,
-  })
-  const documentationLinkQ = useQuery({
-    queryKey: ['auth', 'documentation', 'configuration'],
-    queryFn: async () => {
-      const { documentationOrigin } = await apiClient.get<{ documentationOrigin: string }>('/api/auth/documentation/configuration')
-      return documentationAccountLink(configuredDocumentationOrigin(documentationOrigin))
-    },
-    enabled: isProfileModalOpen && isMultiTenant && user?.isEmailVerified === true && !user.mustResetPassword,
-    retry: false,
-  })
-
-  const connectIdentityProvider = (providerId: string) => {
-    const returnTo = pathname.startsWith('/') ? pathname : toTenantPath('/')
-    try {
-      redirectToApi(`/api/auth/me/identity-providers/${encodeURIComponent(providerId)}/link?returnTo=${encodeURIComponent(returnTo)}`)
-    } catch {
-      setProfileError('Unable to connect the identity provider. Check the application API configuration.')
-    }
-  }
 
   const isNotificationsEnabled = useFeatureFlag('notifications')
   const notificationsAvailable = notificationContextEnabled(isNotificationsEnabled, Boolean(user), isMultiTenant, tenantSlug)
@@ -435,14 +402,6 @@ export default function LayoutWithProSidebar() {
   }, [tenantSlug, platformSettingsManager, permissions])
 
   useEffect(() => {
-    if (!isProfileModalOpen) return
-    setProfileFirstName(user?.firstName || '')
-    setProfileLastName(user?.lastName || '')
-    setProfileError('')
-    setProfileSaving(false)
-  }, [isProfileModalOpen, user])
-
-  useEffect(() => {
     if (!notificationsOpen || !notificationUnreadCount) return
     markNotificationsReadM.mutate()
   }, [notificationsOpen, notificationUnreadCount, markNotificationsReadM])
@@ -461,14 +420,9 @@ export default function LayoutWithProSidebar() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [notificationsOpen])
 
-  const profileHasChanges =
-    profileFirstName !== (user?.firstName || '') ||
-    profileLastName !== (user?.lastName || '')
-
-  const handleOpenProfile = () => {
+  const handleOpenProfile = React.useCallback(() => {
     setIsProfileModalOpen(true)
-  }
-
+  }, [])
   const handleToggleNotifications = () => {
     if (!notificationsAvailable) return
     setNotificationsOpen((prev) => !prev)
@@ -476,34 +430,6 @@ export default function LayoutWithProSidebar() {
 
   const handleCloseNotifications = () => {
     setNotificationsOpen(false)
-  }
-
-  const handleCloseProfile = () => {
-    setIsProfileModalOpen(false)
-    setProfileError('')
-  }
-
-  const handleSaveProfile = async () => {
-    try {
-      setProfileSaving(true)
-      setProfileError('')
-
-      await apiClient.patch('/api/auth/me', {
-        firstName: profileFirstName,
-        lastName: profileLastName,
-      })
-
-      if (refreshUser) {
-        await refreshUser()
-      }
-
-      setIsProfileModalOpen(false)
-    } catch (e: any) {
-      const parsed = parseApiError(e, 'Failed to update profile')
-      setProfileError(parsed.message)
-    } finally {
-      setProfileSaving(false)
-    }
   }
 
   // Fetch tenant branding
@@ -784,103 +710,7 @@ export default function LayoutWithProSidebar() {
     }
   }, [])
 
-  return (
-    <Theme theme="g100" style={{ height: '100vh', width: '100%', overflow: 'hidden' }}>
-      <Modal
-        open={isProfileModalOpen}
-        modalHeading="My Profile"
-        primaryButtonText={profileSaving ? 'Saving...' : 'Save Changes'}
-        secondaryButtonText="Cancel"
-        primaryButtonDisabled={profileSaving || !profileHasChanges}
-        onRequestClose={handleCloseProfile}
-        onRequestSubmit={handleSaveProfile}
-      >
-        {profileError && (
-          <InlineNotification
-            kind="error"
-            title="Error"
-            subtitle={profileError}
-            onCloseButtonClick={() => setProfileError('')}
-            style={{ marginBottom: 'var(--spacing-5)' }}
-          />
-        )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)' }}>
-          <div>
-            <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Email</div>
-            <div style={{ fontSize: '14px' }}>{user?.email || ''}</div>
-          </div>
-
-          <div>
-            <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Role</div>
-            <Tag type={platformAdminMenuVisible ? 'purple' : 'gray'} size="sm">
-              {platformAdminMenuVisible ? 'Platform Admin' : 'User'}
-            </Tag>
-          </div>
-
-          {documentationLinkQ.data && user?.isEmailVerified === true && !user.mustResetPassword && (
-            <Button as="a" href={documentationLinkQ.data} kind="ghost" size="sm">Open documentation</Button>
-          )}
-
-          <TextInput
-            id="profile-first-name"
-            labelText="First Name"
-            value={profileFirstName}
-            onChange={(e) => setProfileFirstName(e.target.value)}
-          />
-
-          <TextInput
-            id="profile-last-name"
-            labelText="Last Name"
-            value={profileLastName}
-            onChange={(e) => setProfileLastName(e.target.value)}
-          />
-
-          <section aria-labelledby="profile-sign-in-methods-heading">
-            <h3 id="profile-sign-in-methods-heading" className="cds--type-heading-compact-01" style={{ marginBottom: 'var(--spacing-3)' }}>
-              Sign-in methods
-            </h3>
-            {identityProviderLinksQ.isLoading ? (
-              <InlineLoading description="Loading sign-in methods" />
-            ) : identityProviderLinksQ.isError ? (
-              <InlineNotification
-                kind="error"
-                lowContrast
-                hideCloseButton
-                title="Sign-in methods unavailable"
-                subtitle="Refresh the page and try again."
-              />
-            ) : identityProviderLinksQ.data?.providers.length ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
-                {identityProviderLinksQ.data.providers.map((provider) => (
-                  <div key={provider.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-4)' }}>
-                    <div>
-                      <div className="cds--type-body-compact-01">{provider.displayName}</div>
-                      {provider.organization && <div className="cds--type-label-01" style={{ color: 'var(--cds-text-secondary)' }}>{provider.organization}</div>}
-                    </div>
-                    {provider.linked ? (
-                      <Tag type="green" size="sm">Connected</Tag>
-                    ) : (
-                      <Button kind="tertiary" size="sm" renderIcon={LinkIcon} onClick={() => connectIdentityProvider(provider.id)}>
-                        Connect
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="cds--type-body-compact-01" style={{ color: 'var(--cds-text-secondary)' }}>
-                No additional sign-in methods are configured for this organization.
-              </p>
-            )}
-          </section>
-
-          {/* Git Connections moved to Project → (⋯) → Git Settings */}
-        </div>
-      </Modal>
-      {/* Entire app shell uses g100 dark theme - header menus inherit this */}
-      <Header className="eg-app-header" aria-label={`${effectiveBrandTitle} application header`}>
-              <SkipToContent href="#main-content">Skip to main content</SkipToContent>
+  const productNavigation = <>
               <HeaderMenuButton
                 aria-label={globalNavigationOpen ? 'Close global navigation' : 'Open global navigation'}
                 aria-controls="enterpriseglue-global-navigation"
@@ -888,40 +718,6 @@ export default function LayoutWithProSidebar() {
                 onClick={() => setGlobalNavigationOpen((open) => !open)}
                 isActive={globalNavigationOpen}
               />
-              <HeaderName href={toTenantPath('/')} prefix="">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
-                  {safeCustomLogoSrc ? (
-                    <img
-                      src={safeCustomLogoSrc}
-                      alt=""
-                      aria-hidden="true"
-                      style={{ height: `${scaledLogoHeight}px`, width: 'auto', objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <img
-                      src={logoPng}
-                      alt=""
-                      aria-hidden="true"
-                      className="default-logo"
-                      style={{ height: `${scaledLogoHeight}px`, width: 'auto' }}
-                    />
-                  )}
-                  {(customLogoTitle || !safeCustomLogoSrc) && (
-                    <span className="eg-header-brand-title" style={{
-                      fontFamily: customFontFamily ? `'${customFontFamily}', sans-serif` : 'inherit',
-                      fontSize: `${titleFontSize}px`,
-                      fontWeight: titleFontWeight,
-                      lineHeight: '20px',
-                      position: 'relative',
-                      top: `${titleVerticalOffset}px`,
-                    }}>
-                      {effectiveBrandTitle}
-                    </span>
-                  )}
-                </span>
-              </HeaderName>
-              {/* TenantPicker is an extension slot - empty in OSS, filled by EE plugin */}
-              <ExtensionSlot name="tenant-picker" fallback={<NativeTenantPicker enabled={isMultiTenant} />} />
               <HeaderNavigation aria-label="Main navigation">
                 {showVoyagerMenu && (
                   <HeaderMenu menuLinkName="Voyager">
@@ -1276,7 +1072,8 @@ export default function LayoutWithProSidebar() {
                   )}
                 </SideNavItems>
               </SideNav>
-              <HeaderGlobalBar>
+  </>
+  const headerActions = <>
                 <NativePluginSlotV1
                   slot="global.header.actions.v1"
                   context={{
@@ -1310,17 +1107,8 @@ export default function LayoutWithProSidebar() {
                     </span>
                   </HeaderGlobalAction>
                 )}
-                <HeaderGlobalAction aria-label="User" tooltipAlignment="end" onClick={handleOpenProfile}>
-                  <UserAvatar size={20} />
-                </HeaderGlobalAction>
-                <HeaderGlobalAction
-                  aria-label="Logout"
-                  tooltipAlignment="end"
-                  onClick={handleLogout}
-                >
-                  <Logout size={20} />
-                </HeaderGlobalAction>
-              </HeaderGlobalBar>
+  </>
+  const notificationPanel = <>
               {notificationsAvailable && notificationsOpen && (
                 <div
                   ref={notificationPanelRef}
@@ -1467,7 +1255,70 @@ export default function LayoutWithProSidebar() {
                   </div>
                 </div>
               )}
+  </>
+
+  return (
+    <Theme theme="g100" style={{ height: '100vh', width: '100%', overflow: 'hidden' }}>
+      {!workspaceHeader && <ProfileDialog open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)}
+        isMultiTenant={isMultiTenant} tenantSlug={tenantSlug} />}
+      {/* Entire app shell uses g100 dark theme - header menus inherit this */}
+      {workspaceHeader ? (
+        <>
+          {workspaceHeader.navigation && tenantSlug && createPortal(productNavigation, workspaceHeader.navigation)}
+          {workspaceHeader.actions && tenantSlug && createPortal(<>{headerActions}{notificationPanel}</>, workspaceHeader.actions)}
+        </>
+      ) : (
+        <Header className="eg-app-header" aria-label={`${effectiveBrandTitle} application header`}>
+          <SkipToContent href="#main-content">Skip to main content</SkipToContent>
+              <HeaderName as={RouterLink} to={toTenantPath('/')} prefix="">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+                  {safeCustomLogoSrc ? (
+                    <img
+                      src={safeCustomLogoSrc}
+                      alt=""
+                      aria-hidden="true"
+                      style={{ height: `${scaledLogoHeight}px`, width: 'auto', objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <img
+                      src={logoPng}
+                      alt=""
+                      aria-hidden="true"
+                      className="default-logo"
+                      style={{ height: `${scaledLogoHeight}px`, width: 'auto' }}
+                    />
+                  )}
+                  {(customLogoTitle || !safeCustomLogoSrc) && (
+                    <span className="eg-header-brand-title" style={{
+                      fontFamily: customFontFamily ? `'${customFontFamily}', sans-serif` : 'inherit',
+                      fontSize: `${titleFontSize}px`,
+                      fontWeight: titleFontWeight,
+                      lineHeight: '20px',
+                      position: 'relative',
+                      top: `${titleVerticalOffset}px`,
+                    }}>
+                      {effectiveBrandTitle}
+                    </span>
+                  )}
+                </span>
+              </HeaderName>
+          {productNavigation}
+          <HeaderGlobalBar>
+            {headerActions}
+                <HeaderGlobalAction aria-label="User" tooltipAlignment="end" onClick={handleOpenProfile}>
+                  <UserAvatar size={20} />
+                </HeaderGlobalAction>
+                <HeaderGlobalAction
+                  aria-label="Logout"
+                  tooltipAlignment="end"
+                  onClick={handleLogout}
+                >
+                  <Logout size={20} />
+                </HeaderGlobalAction>
+          </HeaderGlobalBar>
+          {notificationPanel}
         </Header>
+      )}
 
       {/* Main content area below fixed header */}
       <div style={{

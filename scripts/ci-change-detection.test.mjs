@@ -150,7 +150,7 @@ test('native tenancy changes select the pooled RLS and segregated SSO lane', () 
   const pooledJob = ciWorkflow.split('\n  native-tenancy-pooled-e2e:')[1].split('\n  saas-upgrade-restore-rollback:')[0];
   const steps = pooledJob.split(/^      - name: /m).slice(1);
   const databaseSteps = steps.filter((step) => step.includes('run: pnpm run test:native-tenancy:postgres-rls'));
-  const browserSteps = steps.filter((step) => step.includes('run: pnpm run test:native-tenancy:pooled-e2e'));
+  const browserSteps = steps.filter((step) => step.includes('run: bash scripts/run-ci-playwright.sh pnpm run test:native-tenancy:pooled-e2e'));
   assert.equal(databaseSteps.length, 1);
   assert.equal(browserSteps.length, 1);
   assert.ok(steps.indexOf(databaseSteps[0]) < steps.indexOf(browserSteps[0]));
