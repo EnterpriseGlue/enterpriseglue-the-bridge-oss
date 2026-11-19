@@ -10,9 +10,9 @@ const bravo = {
 }
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, json: body })
 
-async function installAccount(page: Page, memberships: Array<typeof alpha & { lastUsed?: boolean; verifiedDomain?: boolean }>, operator = false) {
-  let authenticated = false
-  let selected: typeof alpha | undefined
+async function installAccount(page: Page, memberships: Array<typeof alpha & { lastUsed?: boolean; verifiedDomain?: boolean }>, operator = false, current?: typeof alpha) {
+  let authenticated = Boolean(current)
+  let selected = current
   let documentRequests = 0
   page.on('request', (request) => { if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests += 1 })
   await page.addInitScript(({ orgNames }) => {
@@ -65,7 +65,10 @@ async function installAccount(page: Page, memberships: Array<typeof alpha & { la
         id: 'workspace-account', email: 'ada@example.test', firstName: 'Ada', lastName: 'Lovelace',
         platformRole: operator ? 'admin' : 'user', authProvider: 'oidc', isActive: true, isEmailVerified: true,
         mustResetPassword: false, createdAt: Date.now(),
-        session: { principal: { type: 'user', id: 'workspace-account' }, tenant: { id: selected?.tenantId ?? null } },
+        session: { principal: { type: 'user', id: 'workspace-account' }, tenant: {
+          id: selected?.tenantId ?? null,
+          ...(current && selected ? { slug: selected.tenantSlug } : {}),
+        } },
       }) : json(route, { error: 'Not authenticated' }, 401)
     }
     if (path === '/api/auth/refresh') return json(route, { error: 'No refresh session' }, 401)
@@ -107,6 +110,29 @@ const dashboard = (page: Page) => page.getByRole('heading', { name: 'Dashboard',
 const account = (page: Page) => header(page).getByRole('button', { name: 'Account menu' })
 
 test.describe('Cloud organization selection @organization-selection @identity-lifecycle', () => {
+  test('opens a verified workspace on reload while membership lookup is delayed', async ({ page }) => {
+    await installAccount(page, [alpha, bravo], false, alpha)
+    const membershipRequested = Promise.withResolvers<void>()
+    const releaseMembership = Promise.withResolvers<void>()
+    await page.route('**/api/auth/my-tenants', async (route) => {
+      membershipRequested.resolve()
+      await releaseMembership.promise
+      await route.fallback()
+    })
+
+    try {
+      await page.goto('/t/northwind/')
+      await membershipRequested.promise
+      await expect(dashboard(page)).toBeVisible()
+      await expect(header(page).getByRole('link', { name: 'EnterpriseGlue', exact: true })).toHaveAttribute('href', '/t/northwind/')
+    } finally {
+      releaseMembership.resolve()
+    }
+
+    await account(page).click()
+    await expect(page.getByRole('button', { name: 'Switch organization' })).toBeVisible()
+  })
+
   test('opens a single membership directly and omits switching', async ({ page }) => {
     await installAccount(page, [alpha])
     await signIn(page)

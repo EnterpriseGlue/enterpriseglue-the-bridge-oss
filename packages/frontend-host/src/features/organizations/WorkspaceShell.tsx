@@ -32,6 +32,7 @@ function WorkspaceHeader() {
   const active = tenantPath && memberships.data?.find((item) =>
     item.tenantId === user?.session?.tenant.id && item.tenantSlug === tenantPath,
   )
+  const hasTenantHome = tenantPath && (active || (user?.session?.tenant.id && user.session.tenant.slug === tenantPath))
   const options = memberships.data ?? []
   const publicPage = /\/(?:login|signup|forgot-password|password-reset|verify-email|admin-recovery)(?:\/|$)/.test(location.pathname)
   const noAccess = location.pathname === '/cloud/onboarding'
@@ -75,7 +76,7 @@ function WorkspaceHeader() {
         <Theme theme="g100">
           <Header className="eg-workspace-header" aria-label={`${branding.brandTitle} application header`}>
             <SkipToContent href={publicPage ? '#public-auth-main' : '#main-content'}>Skip to main content</SkipToContent>
-            <HeaderName as={RouterLink} to={active ? `/t/${active.tenantSlug}/` : '/'} prefix="">
+            <HeaderName as={RouterLink} to={hasTenantHome ? `/t/${tenantPath}/` : '/'} prefix="">
               <PublicAuthHeaderBrand branding={branding} />
             </HeaderName>
             <div className="eg-workspace-header-slot" ref={setNavigation} />

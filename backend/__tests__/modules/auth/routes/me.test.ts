@@ -44,16 +44,23 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/PlatformAdministratorMem
 
 describe('GET /api/auth/me', () => {
   let app: express.Application;
+  let tenant: { tenantId: string; tenantSlug: string } | undefined;
 
   beforeEach(() => {
+    tenant = undefined;
     app = express();
     app.disable('x-powered-by');
     app.use(express.json());
+    app.use((req, _res, next) => {
+      req.tenant = tenant;
+      next();
+    });
     app.use(meRouter);
     vi.clearAllMocks();
   });
 
-  it('returns current user profile', async () => {
+  it.each([undefined, { tenantId: 'org-northwind', tenantSlug: 'northwind' }])('returns the current profile with the verified tenant scope %j', async (scope) => {
+    tenant = scope;
     const mockUser = {
       id: 'user-1',
       email: 'test@example.com',
@@ -79,7 +86,7 @@ describe('GET /api/auth/me', () => {
     expect(response.body.email).toBe('test@example.com');
     expect(response.body.session).toEqual({
       principal: { type: 'user', id: 'user-1' },
-      tenant: { id: null },
+      tenant: scope ? { id: scope.tenantId, slug: scope.tenantSlug } : { id: null },
     });
   });
 

@@ -15,7 +15,7 @@ const TimestampSchema = z.union([
  */
 export const AuthenticatedSessionContextSchema = z.object({
   principal: z.object({ type: z.literal('user'), id: z.string() }),
-  tenant: z.object({ id: z.string().nullable() }),
+  tenant: z.object({ id: z.string().nullable(), slug: z.string().min(1).max(63).optional() }),
 });
 
 /**

@@ -68,7 +68,7 @@ router.get('/api/auth/me', apiLimiter, requireCloudAccountOrTenantAuth, asyncHan
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
-    session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+    session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId, req.tenant?.tenantSlug),
   }));
 }));
 
@@ -130,7 +130,7 @@ router.patch('/api/auth/me', apiLimiter, requireCloudAccountOrTenantAuth, valida
     mustResetPassword: Boolean(user.mustResetPassword),
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
-    session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId),
+    session: createAuthenticatedSessionContext(user.id, req.tenant?.tenantId, req.tenant?.tenantSlug),
   }));
 }));
 

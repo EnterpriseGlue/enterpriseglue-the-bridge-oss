@@ -169,7 +169,7 @@ async function captureResponsiveScreenshot(page: Page, fileName: string): Promis
 async function assertTenantSession(context: BrowserContext, tenant: { id: string; slug: string }, siblingSlug: string) {
   const meResponse = await context.request.get('/api/auth/me');
   const me = await expectStatus(meResponse, 200);
-  expect(me.session?.tenant).toEqual({ id: tenant.id });
+  expect(me.session?.tenant).toEqual({ id: tenant.id, slug: tenant.slug });
 
   const membershipsResponse = await context.request.get('/api/auth/my-tenants');
   const memberships = await membershipsResponse.json().catch(() => []);

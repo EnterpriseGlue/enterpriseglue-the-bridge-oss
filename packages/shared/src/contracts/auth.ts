@@ -1,3 +1,7 @@
+import type { AuthenticatedSessionContext } from '../schemas/auth/session.js';
+
+export type { AuthenticatedSessionContext } from '../schemas/auth/session.js';
+
 export type PlatformRole = 'admin' | 'user';
 
 export type LegacyPlatformRole = PlatformRole | 'developer';
@@ -7,21 +11,6 @@ export function normalizePlatformRole(role?: string | null): PlatformRole {
 }
 
 export type AdminUserStatus = 'active' | 'inactive' | 'pending';
-
-/**
- * Identity bound to the current authenticated request. This is intentionally
- * separate from the persisted user profile: a user may have a different
- * tenant scope on a subsequent request.
- */
-export interface AuthenticatedSessionContext {
-  principal: {
-    type: 'user';
-    id: string;
-  };
-  tenant: {
-    id: string | null;
-  };
-}
 
 export interface User {
   id: string;

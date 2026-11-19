@@ -140,11 +140,11 @@ function DashboardChartTile({ children }: { children: React.ReactNode }) {
   return <Tile className="eg-dashboard-chart-tile">{children}</Tile>
 }
 
-function DashboardUnauthorized({ reason }: { reason: string }) {
+function DashboardUnauthorized() {
   return (
     <PageLayout padding="0" className="eg-dashboard-page">
       <div className="eg-dashboard-content">
-        <InlineNotification kind="warning" title="Dashboard unavailable" subtitle={reason} lowContrast hideCloseButton />
+        <InlineNotification kind="warning" title="Dashboard unavailable" subtitle="You don’t have permission to view this dashboard." lowContrast hideCloseButton />
       </div>
     </PageLayout>
   )
@@ -181,8 +181,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { timePeriod, setTimePeriod } = useDashboardFilterStore()
   const { hasPlatformPermission, hasAnyEnginePermission, permissions, user } = useAuth()
-  const dashboardReadDecision = evaluateActionSnapshot(permissions, 'platform.dashboard.read', { type: 'platform', id: null })
-  const canReadDashboard = dashboardReadDecision.allowed
+  const canReadDashboard = evaluateActionSnapshot(permissions, 'platform.dashboard.read', { type: 'platform', id: null }).allowed
   const { engines, selectedEngineId, scope, isResolving, isError: enginesFailed } = useEngineSelection(canReadDashboard)
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
@@ -303,7 +302,7 @@ export default function Dashboard() {
   }
 
   if (!canReadDashboard) {
-    return <DashboardUnauthorized reason={dashboardReadDecision.reason || 'Missing permission to view dashboard data.'} />
+    return <DashboardUnauthorized />
   }
 
   if (contextQuery.isError) {

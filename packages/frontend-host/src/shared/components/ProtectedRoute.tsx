@@ -46,12 +46,16 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   const multiTenantEnabled = isMultiTenantEnabled();
   const setupExemptPaths = ['/admin/tenants', '/admin/email', '/logout', '/profile'];
   const isExemptPath = setupExemptPaths.some(p => effectivePathname.includes(p));
-  const organizationMatch = organization?.memberships.data?.find((membership) =>
-    membership.tenantSlug === tenantSlug && membership.tenantId === user?.session?.tenant.id
+  const sessionTenant = user?.session?.tenant;
+  const verifiedTenantSlug = sessionTenant?.id ? sessionTenant.slug : undefined;
+  const organizationMatch = verifiedTenantSlug ? verifiedTenantSlug === tenantSlug : organization?.memberships.data?.some((membership) =>
+    membership.tenantSlug === tenantSlug && membership.tenantId === sessionTenant?.id
       && membership.tenantStatus === 'active',
   );
+  // A current host has already checked the exact tenant and active membership
+  // when establishing this session. The full list can load in the background.
   const checkingOrganization = Boolean(tenantSlug && organization && isAuthenticated
-    && (organization.transitioning || (user?.session?.tenant.id && organization.memberships.isPending)));
+    && (organization.transitioning || (!verifiedTenantSlug && sessionTenant?.id && organization.memberships.isPending)));
   const isSetupPath = !multiTenantEnabled && effectivePathname === '/admin/settings';
 
   useEffect(() => {
