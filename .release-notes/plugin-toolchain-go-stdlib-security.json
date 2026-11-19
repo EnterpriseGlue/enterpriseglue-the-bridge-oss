@@ -14,7 +14,10 @@
   "configuration": [],
   "api": {"compatibility": "none", "changes": []},
   "database": {"migrations": [], "rollbackSupported": true, "notes": []},
-  "security": ["Go 1.26.11 fixes CVE-2026-97054 in the standard library linked into ORAS and Cosign."],
+  "security": [
+    "Go 1.26.11 fixes CVE-2026-97054 in the standard library linked into ORAS and Cosign.",
+    "Remove expired scan exceptions for CVE-2026-54285 and GHSA-qwww-vcr4-c8h2 because the lockfile already resolves patched OpenTelemetry and React Router versions."
+  ],
   "documentation": [
     "packages/plugin-installer/CONTAINER_THIRD_PARTY_NOTICES.md",
     "packages/plugin-manager/CONTAINER_THIRD_PARTY_NOTICES.md"
