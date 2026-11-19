@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.1...v0.40.2) (2026-11-19)
 
+### Changes
 
-### Bug Fixes
+- **frontend:** Keeps an organization switch stable when another workspace is open in the same browser.
 
-* **frontend:** keep organization switches stable across tabs ([e07f39b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e07f39b5b76a883770f4778b2d2ce0253190c631))
-* **frontend:** keep organization switches stable across tabs ([f4525bc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f4525bc0d61686ba683d27ad8de2b72a3098955a))
+Full upgrade, compatibility and verification details: [v0.40.2 release notes](docs/releases/v0.40.2.md).
 
 ## [0.40.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.0...v0.40.1) (2026-11-19)
 
