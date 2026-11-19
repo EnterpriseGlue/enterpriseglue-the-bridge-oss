@@ -27,21 +27,9 @@ vi.mock('@enterpriseglue/shared/services/platform-admin/permissions.js', () => (
 
 vi.mock('@enterpriseglue/shared/services/platform-admin/index.js', () => ({
   permissionService: {
-    getCurrentUserPermissions: vi.fn(),
+    getKnownProjectIdsForUser: vi.fn(),
   },
 }));
-
-function emptyPermissions() {
-  return {
-    userId: 'user-1',
-    platform: [],
-    tenant: null,
-    projects: [],
-    engines: [],
-    authorizationVersion: 'authz:1700000000000:test',
-    generatedAt: 1700000000000,
-  };
-}
 
 describe('GET /api/dashboard/stats', () => {
   let app: express.Application;
@@ -57,7 +45,7 @@ describe('GET /api/dashboard/stats', () => {
     vi.mocked(permissionService.hasPermission).mockImplementation(async (permission: string) =>
       permission === 'platform:dashboard:view'
     );
-    vi.mocked(dashboardPermissionService.getCurrentUserPermissions).mockResolvedValue(emptyPermissions());
+    vi.mocked(dashboardPermissionService.getKnownProjectIdsForUser).mockResolvedValue([]);
   });
 
   it('returns zero stats when no projects', async () => {
@@ -83,10 +71,7 @@ describe('GET /api/dashboard/stats', () => {
   });
 
   it('returns file type counts for evaluator-visible projects', async () => {
-    vi.mocked(dashboardPermissionService.getCurrentUserPermissions).mockResolvedValue({
-      ...emptyPermissions(),
-      projects: [{ resourceId: 'project-1', permissions: ['project:files:view'] }],
-    });
+    vi.mocked(dashboardPermissionService.getKnownProjectIdsForUser).mockResolvedValue(['project-1']);
     const qb = {
       select: vi.fn().mockReturnThis(),
       addSelect: vi.fn().mockReturnThis(),
@@ -109,7 +94,8 @@ describe('GET /api/dashboard/stats', () => {
     const response = await request(app).get('/api/dashboard/stats');
 
     expect(response.status).toBe(200);
-    expect(dashboardPermissionService.getCurrentUserPermissions).toHaveBeenCalledWith('user-1', undefined);
+    expect(dashboardPermissionService.getKnownProjectIdsForUser).toHaveBeenCalledWith('user-1', undefined);
+    expect(qb.where).toHaveBeenCalledWith('f.projectId IN (:...projectIds)', { projectIds: ['project-1'] });
     expect(response.body.totalProjects).toBe(1);
     expect(response.body.totalFiles).toBe(3);
     expect(response.body.fileTypes).toEqual({ bpmn: 2, dmn: 1, form: 0 });
@@ -129,7 +115,7 @@ describe('GET /api/dashboard/stats', () => {
       .set('x-tenant-id', 'tenant-1');
 
     expect(response.status).toBe(200);
-    expect(dashboardPermissionService.getCurrentUserPermissions).toHaveBeenCalledWith('user-1', 'tenant-1');
+    expect(dashboardPermissionService.getKnownProjectIdsForUser).toHaveBeenCalledWith('user-1', 'tenant-1');
   });
 
   it('denies stats without dashboard view permission', async () => {

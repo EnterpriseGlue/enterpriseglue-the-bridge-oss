@@ -392,13 +392,13 @@ test('runtime OS floors invalidate stale zlib and glibc layers and application N
 test('both acquisition toolchains require the patched certificate verification standard library in the emitted binaries', async () => {
   for (const relative of ['packages/plugin-installer/Dockerfile', 'packages/plugin-manager/Dockerfile']) {
     const source = await readFile(new URL(relative, root), 'utf8');
-    assert.match(source, /golang:1\.26\.10-alpine3\.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0/);
+    assert.match(source, /golang:1\.26\.11-alpine3\.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a/);
     assert.ok(source.includes('brotli-libs>=1.2.1-r0'), `${relative} must retain Alpine's Brotli security floor`);
     assert.match(source, /FROM alpine:3\.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a/);
     assert.ok(source.includes("'nodejs>=24.22.1-r0'"), `${relative} must invalidate cached vulnerable Node packages`);
     assert.ok(source.includes("process.versions.node.split('.')[0] !== '24'"), `${relative} must retain the supported Node major`);
-    assert.ok(source.includes('^/out/oras: go1\\.26\\.10$'));
-    assert.ok(source.includes('^/out/cosign: go1\\.26\\.10$'));
+    assert.ok(source.includes('^/out/oras: go1\\.26\\.11$'));
+    assert.ok(source.includes('^/out/cosign: go1\\.26\\.11$'));
   }
 });
 
@@ -407,7 +407,7 @@ test('both Cosign builds require the patched JWK parser in the emitted binary', 
     const source = await readFile(new URL(relative, root), 'utf8');
     assert.ok(source.includes('github.com/go-jose/go-jose/v4@v4.1.6'));
     assert.ok(source.includes('github.com/go-jose/go-jose/v4[[:space:]]+v4\\.1\\.6([[:space:]]|$)'));
-    assert.ok(source.includes('v3.1.3-enterpriseglue.8'));
+    assert.ok(source.includes('v3.1.3-enterpriseglue.9'));
     assert.ok(!source.includes('MaxRSAModulusBits'), 'the upstream RSA size bound must not be raised');
   }
 });

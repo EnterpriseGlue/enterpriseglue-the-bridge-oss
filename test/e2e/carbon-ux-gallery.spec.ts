@@ -318,6 +318,42 @@ async function installGalleryStack(page: Page): Promise<void> {
 test.describe('Carbon UX screenshot gallery', () => {
   test.setTimeout(90_000);
 
+  test('restores an unprefixed admin session after pooled tenancy is known @tenant-workspace', async ({ page }) => {
+    await installGalleryStack(page);
+    let tenancyReady = false;
+    let authStartedBeforeTenancy = false;
+    await page.route('**/api/tenancy/capabilities', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      tenancyReady = true;
+      await json(route, {
+        mode: 'pooled',
+        rootTenantAliasesEnabled: false,
+        tenantScopedLoginRequired: true,
+        databaseIsolation: 'postgres_rls',
+        customDomainsEnabled: false,
+        signedPlacementAssertionsEnabled: false,
+      });
+    });
+    await page.route('**/api/auth/me', (route) => {
+      authStartedBeforeTenancy ||= !tenancyReady;
+      return route.fallback();
+    });
+    await page.route('**/api/authz/me/permissions', (route) => json(route, {
+      userId: 'browser-admin-user',
+      tenantId: null,
+      platform: ['platform:tenants:view', 'platform:settings:manage'],
+      projects: [],
+      engines: [],
+      generatedAt: now,
+      authorizationVersion: 'carbon-gallery-pooled-v1',
+    }));
+    await page.route('**/api/platform/tenants', (route) => json(route, []));
+
+    await page.goto('/admin/tenants');
+    await expect(page.getByRole('heading', { name: 'Tenants', exact: true })).toBeVisible();
+    expect(authStartedBeforeTenancy).toBe(false);
+  });
+
   test('opens the warm dashboard while its supplementary context loads @tenant-workspace', async ({ page }, testInfo) => {
     await installGalleryStack(page);
     let blockContext = false;

@@ -88,10 +88,12 @@ export async function startApp() {
     return
   }
 
-  const router = (async () => {
+  const tenancyReady = (async () => {
     await getEnterpriseFrontendPlugin()
     await loadTrustedSystemFrontendModules(getConfiguredSystemFrontendModules())
     await initializeTenancyCapabilities()
+  })()
+  const router = tenancyReady.then(async () => {
     await loadInstalledNativePluginsV1()
     return createBrowserRouter(createAppRoutes(
       [...extensions.rootRoutes],
@@ -99,29 +101,40 @@ export async function startApp() {
       getNativePluginRoutesV1('root'),
       getNativePluginRoutesV1('tenant'),
     ))
-  })()
+  })
   const qc = new QueryClient()
+  const hasExplicitTenant = /^\/t\/[^/]+(?:\/|$)/.test(window.location.pathname)
 
-  // Restore the cookie session while the plugin route graph is loading.
   function AppRouter() {
     return <RouterProvider router={React.use(router)} />
+  }
+
+  function AppSession() {
+    // Unprefixed routes need the tenancy mode to resolve their authentication
+    // scope. An explicit tenant can restore its session during bootstrap.
+    if (!hasExplicitTenant) React.use(tenancyReady)
+    return (
+      <AuthProvider>
+        <FeatureFlagsProvider>
+          <ToastProvider>
+            <HostContextualFlowProviderV1>
+              <React.Suspense fallback={<SkeletonText paragraph lineCount={4} />}>
+                <AppRouter />
+              </React.Suspense>
+            </HostContextualFlowProviderV1>
+          </ToastProvider>
+        </FeatureFlagsProvider>
+      </AuthProvider>
+    )
   }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <ErrorBoundary>
         <QueryClientProvider client={qc}>
-          <AuthProvider>
-            <FeatureFlagsProvider>
-              <ToastProvider>
-                <HostContextualFlowProviderV1>
-                  <React.Suspense fallback={<SkeletonText paragraph lineCount={4} />}>
-                    <AppRouter />
-                  </React.Suspense>
-                </HostContextualFlowProviderV1>
-              </ToastProvider>
-            </FeatureFlagsProvider>
-          </AuthProvider>
+          <React.Suspense fallback={<SkeletonText paragraph lineCount={4} />}>
+            <AppSession />
+          </React.Suspense>
         </QueryClientProvider>
       </ErrorBoundary>
     </React.StrictMode>
