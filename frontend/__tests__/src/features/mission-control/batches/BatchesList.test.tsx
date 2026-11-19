@@ -81,6 +81,8 @@ describe('BatchesList', () => {
   });
 
   it('does not fetch batch rows when the selected engine read action is denied', async () => {
+    const listBatches = vi.fn(() => HttpResponse.json([]));
+    server.use(http.get(/\/mission-control-api\/batches(?:\?.*)?$/, listBatches));
     authPermissions = {
       userId: 'user-1',
       platform: [],
@@ -91,9 +93,8 @@ describe('BatchesList', () => {
 
     renderWithProviders();
 
-    await waitFor(() => {
-      expect(screen.getByText('Batches unavailable')).toBeInTheDocument();
-      expect(screen.getByText('Missing permission engine:instance:view')).toBeInTheDocument();
-    });
+    expect(await screen.findByText('Batches unavailable')).toBeInTheDocument();
+    expect(screen.getByText('You don’t have permission to view batches for this engine.')).toBeInTheDocument();
+    expect(listBatches).not.toHaveBeenCalled();
   });
 });

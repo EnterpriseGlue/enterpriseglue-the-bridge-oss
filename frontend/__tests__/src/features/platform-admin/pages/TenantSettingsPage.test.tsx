@@ -54,6 +54,12 @@ describe('TenantSettingsPage', () => {
     decisions.settingsManage = true;
     decisions.membersManage = true;
     vi.mocked(apiClient.get).mockImplementation(async (path: string) => {
+      if (path.endsWith('/apps')) return {
+        apiVersion: 'tenant-application-list.plugin.enterpriseglue.io/v1',
+        revision: 0,
+        activationPolicy: 'direct',
+        applications: [],
+      };
       if (path.endsWith('/login-policy')) return { localPasswordMode: 'auto', providerSelectionMode: 'chooser' };
       if (path.endsWith('/members')) return [{ userId: 'user-1', email: 'operator@alpha.example', role: 'admin' }];
       if (path.endsWith('/discovery-domains')) return [{ id: 'domain-1', tenantId: 'tenant-alpha', domain: 'alpha.example', status: 'verified', verifiedAt: 1 }];
