@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.0...v0.40.1) (2026-11-19)
+
+### Changes
+
+- **frontend:** Revalidates the browser entry document after an upgrade and opens verified workspaces while membership choices load.
+
+Full upgrade, compatibility and verification details: [v0.40.1 release notes](docs/releases/v0.40.1.md).
+
 ## [0.40.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.39.0...v0.40.0) (2026-11-19)
 
 ### Changes
