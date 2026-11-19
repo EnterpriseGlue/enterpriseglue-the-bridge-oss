@@ -6,25 +6,16 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.39.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.1...v0.39.0) (2026-11-19)
 
+### Changes
 
-### Features
+- **runtime-logging:** Adds runtime log level and category controls, ECS-aligned JSON output, and safe TypeORM query diagnostics.
+- **mission-control:** Engine pickers show each engine's full friendly name on one readable line.
+- **project-git-settings:** The project Git settings token guide now shows instructions only for the Git provider in use instead of listing every provider.
+- **plugin-toolchain:** Build the plugin installer and manager acquisition tools with Go 1.26.11.
+- **login:** A returning user who signs in with a method their account has not connected now sees a clear, stable instruction to use the method they signed up with.
+- **tenant-workspace:** Reduces the work needed to open the dashboard and displays full engine names in the Mission Control engine selector.
 
-* **logging:** add configurable structured runtime logs ([c48fc52](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c48fc52e492c88812ccd4999baed07b5b287928b))
-* **logging:** add configurable structured runtime logs ([5290601](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/52906013824f32600bb9dec15f311f1a787808fa))
-
-
-### Bug Fixes
-
-* **git:** show token guidance only for the provider in use ([9a9124b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/9a9124b4417d3615e6941f8e476fccf0d2080155))
-* **git:** show token guidance only for the provider in use ([73c38cb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/73c38cb40bc968bfefaf0934c1f395151c53ff8b))
-* **login:** tell a returning user to use the method they signed up with ([5166766](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/5166766a24e05a54485dfd9fa61746a49d2eba5b))
-* **login:** tell a returning user to use the method they signed up with ([a6c764b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/a6c764b2da29ebb0175c515244f7682f37846d81))
-* **mission-control:** show full friendly engine names in the engine picker ([3da0f79](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3da0f7915fc75df14a0b2b30c4f3c4e0275aec56))
-* **mission-control:** show full friendly engine names in the engine picker ([40d03cf](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/40d03cf7f1e6989a1d6a2be27f6eceeda1d4e38f))
-* preserve pooled startup and patch acquisition tools ([41b9044](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/41b904405fa1f5c7af73833ad911b107ea13fe1d))
-* **security:** remove resolved scanner exceptions ([7457312](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/745731244ff7daba13a5cf1848d820d3eff0afe0))
-* **tenant-workspace:** speed up dashboards and clarify engine access ([f49065d](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f49065d2b99376dde37b978020777eecc963f371))
-* **tenant-workspace:** speed up dashboards and clarify engine access ([0df5456](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/0df545609cf127822b92905bfaf060e41585ba10))
+Full upgrade, compatibility and verification details: [v0.39.0 release notes](docs/releases/v0.39.0.md).
 
 ## [0.38.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.0...v0.38.1) (2026-11-16)
 
