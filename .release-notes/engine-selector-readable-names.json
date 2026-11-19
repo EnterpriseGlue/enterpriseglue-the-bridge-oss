@@ -1,0 +1,57 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "engine-selector-readable-names",
+  "type": "fix",
+  "scope": "mission-control",
+  "breaking": false,
+  "audiences": [
+    "users"
+  ],
+  "summary": "Engine pickers show each engine's full friendly name on one readable line.",
+  "userImpact": [
+    "The Mission Control engine picker shows the engine name (or its host when unnamed), never a raw engine ID. The open menu widens to fit names and options are no longer clipped."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "No authorization change. Only the picker's labels and layout change."
+  ],
+  "documentation": [
+    "docs/how-to/configure-engine-tenancy.md"
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Revert the application image. No data change is involved."
+  ],
+  "validation": [
+    "A browser test opens the engine picker with a long name and an unnamed engine and checks full names, single unclipped rows and no raw IDs.",
+    "EngineSelector unit tests cover the one-line items and the host fallback label."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.27",
+      "newVersion": "0.20.28",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "Layout and notice-condition fixes; no workflow or setting changes for users."
+  }
+}
