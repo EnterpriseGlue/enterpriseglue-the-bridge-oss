@@ -51,9 +51,12 @@ explicitly unlinked by an administrator remains blocked.
 
 In `pooled` mode, an ordinary logged-out OIDC callback never performs this merge.
 When its verified subject is new but its email belongs to an existing pooled account,
-the login page directs the person to authenticate with an existing method and
-connect the provider from their profile. This avoids both unsafe email-only
-linking and a generic server-error response.
+the callback returns to the login page with `error=account_link_required`. The
+page shows "This sign-in method isn't connected to your account" and asks the
+person to use the method they signed up with, then connect this one from their
+profile. The message stays until the person acts, the other sign-in options stay
+visible, and the page never names the method the account uses. This avoids both
+unsafe email-only linking and a generic server-error response.
 
 In a self-hosted `single`-organization installation, the provider can explicitly
 opt in to verified-email linking with `allowVerifiedEmailLinking=true`.
