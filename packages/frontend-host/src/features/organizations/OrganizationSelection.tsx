@@ -9,7 +9,7 @@ import { safeOrganizationDestination, tenantSlugForPath } from './organizationPa
 type SelectionState = { destination?: string; switchOrganization?: boolean }
 
 export function OrganizationSelection({ onboardingPath }: { onboardingPath?: string }) {
-  const { user, logout, hasPlatformPermission } = useAuth()
+  const { user, logout, hasPlatformPermission, organizationChangedInAnotherTab } = useAuth()
   const { memberships, lastOrganization, openOrganization, transitioning } = useOrganizationSession()
   const navigate = useNavigate()
   const state = useLocation().state as SelectionState | null
@@ -23,7 +23,7 @@ export function OrganizationSelection({ onboardingPath }: { onboardingPath?: str
   const emptyDestination = canCreate ? onboardingPath
     : !noAccess && hasPlatformPermission('platform:tenants:view') ? '/admin/tenants' : undefined
   const active = memberships.data?.filter((item) => item.tenantStatus === 'active') ?? []
-  const knownOrganization = !state?.switchOrganization && !noAccess
+  const knownOrganization = !organizationChangedInAnotherTab && !state?.switchOrganization && !noAccess
     ? membership ?? (!destinationSlug ? (active.find((item) => item.tenantId === user?.session?.tenant.id)
       ?? active.find((item) => item.verifiedDomain)
       ?? (memberships.data?.length === 1 ? active[0] : undefined)) : undefined)
@@ -78,6 +78,7 @@ export function OrganizationSelection({ onboardingPath }: { onboardingPath?: str
         <Stack gap={5} className="eg-organization-form">
           <h1 className="cds--type-heading-04">Choose an organization</h1>
           {user && <p className="cds--type-body-01">{user.email}</p>}
+          {organizationChangedInAnotherTab && <InlineNotification kind="info" lowContrast hideCloseButton title="Your organization changed in another tab. Choose an organization to continue." />}
           {noAccess && <InlineNotification kind="error" lowContrast hideCloseButton title="You don’t have access to that organization" />}
           {membership && membership.tenantStatus !== 'active' && <InlineNotification kind="warning" lowContrast hideCloseButton title="This organization is currently unavailable" />}
           {error && <InlineNotification kind="error" lowContrast hideCloseButton title={error} />}

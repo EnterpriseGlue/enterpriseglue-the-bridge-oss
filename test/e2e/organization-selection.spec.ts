@@ -14,8 +14,9 @@ async function installAccount(page: Page, memberships: Array<typeof alpha & { la
   let authenticated = Boolean(current)
   let selected = current
   let documentRequests = 0
+  const switches: string[] = []
   page.on('request', (request) => { if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests += 1 })
-  await page.addInitScript(({ orgNames }) => {
+  await page.context().addInitScript(({ orgNames }) => {
     const hostWindow = window as Window & { __ENTERPRISEGLUE_FRONTEND_PLUGIN__?: unknown }
     const plugin = {
       routes: [] as unknown[],
@@ -32,7 +33,7 @@ async function installAccount(page: Page, memberships: Array<typeof alpha & { la
     }
     hostWindow.__ENTERPRISEGLUE_FRONTEND_PLUGIN__ = plugin
   }, { orgNames: [alpha.tenantName, bravo.tenantName] })
-  await page.route('**/*', async (route) => {
+  await page.context().route('**/*', async (route) => {
     const url = new URL(route.request().url())
     const path = url.pathname.replace(/^\/t\/[^/]+(?=\/(?:api|engines-api|starbase-api))/, '')
     if (path === '/api/tenancy/capabilities') return json(route, {
@@ -64,7 +65,7 @@ async function installAccount(page: Page, memberships: Array<typeof alpha & { la
       return authenticated ? json(route, {
         id: 'workspace-account', email: 'ada@example.test', firstName: 'Ada', lastName: 'Lovelace',
         platformRole: operator ? 'admin' : 'user', authProvider: 'oidc', isActive: true, isEmailVerified: true,
-        mustResetPassword: false, createdAt: Date.now(),
+        mustResetPassword: false, createdAt: 1_700_000_000_000,
         session: { principal: { type: 'user', id: 'workspace-account' }, tenant: {
           id: selected?.tenantId ?? null,
           ...(current && selected ? { slug: selected.tenantSlug } : {}),
@@ -85,6 +86,7 @@ async function installAccount(page: Page, memberships: Array<typeof alpha & { la
       const { tenantSlug } = route.request().postDataJSON()
       const authorized = memberships.find((org) => org.tenantSlug === tenantSlug && org.tenantStatus === 'active')
       if (!authenticated || !authorized) return json(route, { error: 'Membership required' }, 403)
+      switches.push(tenantSlug)
       selected = authorized
       return json(route, { tenantId: selected.tenantId, tenantSlug: selected.tenantSlug })
     }
@@ -96,7 +98,7 @@ async function installAccount(page: Page, memberships: Array<typeof alpha & { la
     if (/^\/(?:api|engines-api|starbase-api)\//.test(path)) return json(route, [])
     return route.continue()
   })
-  return { documentRequests: () => documentRequests }
+  return { documentRequests: () => documentRequests, switches }
 }
 
 async function signIn(page: Page, path = '/login') {
@@ -110,6 +112,29 @@ const dashboard = (page: Page) => page.getByRole('heading', { name: 'Dashboard',
 const account = (page: Page) => header(page).getByRole('button', { name: 'Account menu' })
 
 test.describe('Cloud organization selection @organization-selection @identity-lifecycle', () => {
+  test('keeps another tab from reversing an explicit organization switch', async ({ page, context }) => {
+    const fixture = await installAccount(page, [alpha, bravo], false, alpha)
+    const previous = await context.newPage()
+    await previous.goto('/t/northwind/')
+    await expect(dashboard(previous)).toBeVisible()
+    await page.goto('/t/northwind/')
+    await expect(dashboard(page)).toBeVisible()
+    await account(page).click()
+    await page.getByRole('button', { name: 'Switch organization' }).click()
+    await page.getByRole('link', { name: /Westmere/ }).click()
+
+    await expect(page).toHaveURL(/\/t\/westmere\/$/)
+    await expect(dashboard(page)).toBeVisible()
+    await expect(picker(previous)).toBeVisible()
+    await expect(previous.getByText('Your organization changed in another tab. Choose an organization to continue.')).toBeVisible()
+    await expect(dashboard(previous)).toHaveCount(0)
+    expect(fixture.switches).toEqual(['westmere'])
+    await page.reload()
+    await expect(page).toHaveURL(/\/t\/westmere\/$/)
+    await expect(dashboard(page)).toBeVisible()
+    expect(fixture.switches).toEqual(['westmere'])
+  })
+
   test('opens a verified workspace on reload while membership lookup is delayed', async ({ page }) => {
     await installAccount(page, [alpha, bravo], false, alpha)
     const membershipRequested = Promise.withResolvers<void>()

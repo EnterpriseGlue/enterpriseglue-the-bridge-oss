@@ -308,6 +308,24 @@ describe('authentication response ownership', () => {
     expect(queryClient.getQueryData(key)).toBeUndefined();
   });
 
+  it('reports a superseded organization switch instead of opening the requested workspace', async () => {
+    const { authService } = await import('@src/services/auth');
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    const target = { tenantId: 'tenant-target', tenantSlug: 'target' };
+    const response = deferred<typeof a>();
+    vi.mocked(authService.getMe).mockReturnValueOnce(response.promise);
+    let outcome!: Promise<unknown>;
+    act(() => { outcome = result.current.refreshUser(target).catch(error => error); });
+    act(() => storage(b));
+
+    await act(async () => {
+      response.resolve({ ...a, session: { ...a.session, tenant: { id: target.tenantId, slug: target.tenantSlug } } });
+      expect(await outcome).toMatchObject({ name: 'BrowserSessionChangedError' });
+    });
+    expect(result.current.user).toEqual(b);
+  });
+
   it('keeps cached data through a same-authority permission refresh', async () => {
     const { authService } = await import('@src/services/auth');
     const { result } = renderHook(() => useAuth(), { wrapper });

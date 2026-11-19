@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth';
+import { getTenancyCapabilities } from '../services/tenancy';
 import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
 import type { User, LoginRequest, LoginResponse, ResetPasswordRequest, ChangePasswordRequest, CurrentUserPermissions } from '../shared/types/auth';
@@ -31,6 +32,9 @@ export interface AuthContextValue {
   isLoading: boolean;
   /** Changes when the browser authentication session is replaced or cleared. */
   sessionRevision?: number;
+  /** The tab must require a fresh choice before changing the shared workspace. */
+  organizationChangedInAnotherTab?: boolean;
+  acknowledgeOrganizationChoice?: () => void;
   login: (credentials: LoginRequest) => Promise<LoginResponse>;
   logout: () => Promise<void>;
   resetPassword: (request: ResetPasswordRequest) => Promise<void>;
@@ -74,6 +78,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<CurrentUserPermissions | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sharedSessionLoading, setSharedSessionLoading] = useState(false);
   const permissionAuthorityRef = useRef<string | null>(null);
   const currentUserRef = useRef<User | null>(null);
   const mountedRef = useRef(true);
@@ -81,6 +86,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const permissionsRequestRef = useRef(0);
   const userRequestRef = useRef(0);
   const [sessionRevision, setSessionRevision] = useState(0);
+  const [organizationChangedInAnotherTab, setOrganizationChangedInAnotherTab] = useState(false);
 
   const discardCachedAuthority = useCallback(() => {
     void queryClient.cancelQueries();
@@ -94,8 +100,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     userRequestRef.current += 1;
     permissionAuthorityRef.current = null;
     discardCachedAuthority();
-    if (mountedRef.current) setPermissions(null);
-    if (mountedRef.current) setSessionRevision(generationRef.current);
+    if (mountedRef.current) {
+      setSharedSessionLoading(false);
+      setPermissions(null);
+      setSessionRevision(generationRef.current);
+    }
     return generationRef.current;
   }, [discardCachedAuthority]);
   const isCurrentSession = useCallback((generation: number) => (
@@ -160,7 +169,32 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== USER_KEY && event.key !== null) return;
       const nextUser = readStoredUser(event.key === null ? null : event.newValue);
-      invalidateSession();
+      const changedScope = authenticatedSessionScope(currentUserRef.current) !== authenticatedSessionScope(nextUser);
+      const generation = invalidateSession();
+      if (changedScope) setOrganizationChangedInAnotherTab(true);
+      if (getTenancyCapabilities().mode === 'pooled') {
+        currentUserRef.current = null;
+        setUser(null);
+        setIsLoading(false);
+        setSharedSessionLoading(Boolean(nextUser));
+        if (!nextUser) return;
+
+        // Storage announces a change. Only the cookie-backed requests can
+        // establish the new tab's authenticated identity and permissions.
+        void authService.readSharedBrowserSession(nextUser.session?.tenant?.slug).then(({ user, permissions }) => {
+          if (!isCurrentSession(generation) || user.isEmailVerified === false
+              || !permissionSnapshotMatchesSession(user, permissions)) return;
+          currentUserRef.current = user;
+          permissionAuthorityRef.current = permissionSnapshotAuthorityKey(permissions);
+          setUser(user);
+          setPermissions(permissions);
+        }).catch(() => {
+          // Keep this tab signed out if the cookie session cannot be verified.
+        }).finally(() => {
+          if (isCurrentSession(generation)) setSharedSessionLoading(false);
+        });
+        return;
+      }
       currentUserRef.current = nextUser;
       setUser(nextUser);
       setPermissions(null);
@@ -168,7 +202,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [invalidateSession]);
+  }, [invalidateSession, isCurrentSession]);
 
   /**
    * Load user from localStorage and validate token
@@ -177,6 +211,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const clearAuth = useCallback(() => {
     invalidateSession();
     persistUser(null);
+    setOrganizationChangedInAnotherTab(false);
     setIsLoading(false);
   }, [invalidateSession, persistUser]);
 
@@ -254,6 +289,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     invalidateSession();
     persistUser(nextUser);
+    setOrganizationChangedInAnotherTab(false);
     setIsLoading(false);
     void refreshPermissions();
   }, [clearAuth, invalidateSession, persistUser, refreshPermissions]);
@@ -275,6 +311,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Store user info locally (tokens are in httpOnly cookies set by the server)
     persistUser(response.user);
+    setOrganizationChangedInAnotherTab(false);
     const acceptedGeneration = generationRef.current;
     await refreshPermissions();
     if (!isCurrentSession(acceptedGeneration)) throw new Error('Authentication changed while sign-in was pending');
@@ -352,19 +389,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
           ),
         ])
         : Promise.all([authService.getMe(), undefined]));
-      if (!isCurrent()) return;
+      if (!isCurrent()) {
+        if (organization) throw new BrowserSessionChangedError();
+        return;
+      }
       if (organization && (nextUser.id !== currentUserRef.current?.id
-        || nextUser.session?.tenant.id !== organization.tenantId)) {
+        || nextUser.session?.tenant.id !== organization.tenantId
+        || (nextUser.session.tenant.slug && nextUser.session.tenant.slug !== organization.tenantSlug))) {
         throw new BrowserSessionChangedError();
       }
       if (nextUser.isEmailVerified === false) {
         clearAuth();
+        if (organization) throw new BrowserSessionChangedError();
         return;
       }
       persistUser(nextUser);
+      const committedGeneration = generationRef.current;
       await refreshPermissions(nextPermissions);
+      if (organization && !isCurrentSession(committedGeneration)) throw new BrowserSessionChangedError();
     } catch (error) {
-      if (!isCurrent()) return;
+      if (!isCurrent()) {
+        if (organization) throw new BrowserSessionChangedError();
+        return;
+      }
       console.error('Failed to refresh user:', error);
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) clearAuth();
       throw error;
@@ -438,8 +485,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     user,
     permissions: activePermissions,
     isAuthenticated: !!user,
-    isLoading,
+    isLoading: isLoading || sharedSessionLoading,
     sessionRevision,
+    organizationChangedInAnotherTab,
+    acknowledgeOrganizationChoice: () => setOrganizationChangedInAnotherTab(false),
     login,
     logout,
     resetPassword,
