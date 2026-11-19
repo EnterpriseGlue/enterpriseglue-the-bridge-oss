@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.1...v0.40.2) (2026-11-19)
+
+
+### Bug Fixes
+
+* **frontend:** keep organization switches stable across tabs ([e07f39b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e07f39b5b76a883770f4778b2d2ce0253190c631))
+* **frontend:** keep organization switches stable across tabs ([f4525bc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f4525bc0d61686ba683d27ad8de2b72a3098955a))
+
 ## [0.40.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.0...v0.40.1) (2026-11-19)
 
 ### Changes
