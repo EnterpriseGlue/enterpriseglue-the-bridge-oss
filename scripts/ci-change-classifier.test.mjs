@@ -636,6 +636,7 @@ test('Oracle native encryption selects its required acceptance without broad unk
   for (const path of ['packages/shared/src/db/oracle-network-encryption.ts',
     'backend/Dockerfile.oracle-dev', 'infra/docker/oracle/client/sqlnet.ora',
     'scripts/run-oracle-native-encryption.mjs', 'scripts/scan-oracle-image.sh',
+    'scripts/run-ci-playwright.sh', 'scripts/check-rehearsal-chromium.sh',
     'scripts/run-local-oidc-rehearsal-test.sh', 'scripts/run-local-saml-rehearsal-test.sh',
     'scripts/run-local-ldap-rehearsal-test.sh',
     'test/e2e/playwright.config.ts', '.github/workflows/oracle-image-release.yml']) {

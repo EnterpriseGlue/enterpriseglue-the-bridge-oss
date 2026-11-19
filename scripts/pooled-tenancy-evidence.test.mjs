@@ -282,8 +282,9 @@ test('protected CI uploads precisely the receipt and runs this regression gate',
   assert.match(job, /node --test\s+scripts\/pooled-tenancy-evidence\.test\.mjs/);
   assert.match(job, /scripts\/native-tenancy-postgres-runner\.test\.mjs/);
   assert.match(job, /id: pooled-database\s+run: pnpm run test:native-tenancy:postgres-rls/);
+  assert.match(job, /run: bash scripts\/run-ci-playwright\.sh pnpm run test:native-tenancy:pooled-e2e/);
   assert.match(job, /if: failure\(\) && steps\.pooled-database\.outcome == 'failure'\s+run: node scripts\/pooled-tenancy-evidence\.mjs \.artifacts\/pooled-tenancy-e2e\/public\/receipt\.json failed database 1/);
-  for (const file of ['scripts/pooled-tenancy-evidence.mjs', 'scripts/pooled-tenancy-evidence.test.mjs']) {
+  for (const file of ['scripts/pooled-tenancy-evidence.mjs', 'scripts/pooled-tenancy-evidence.test.mjs', 'scripts/run-ci-playwright.sh']) {
     assert.equal(classifyChangedFiles([file]).run_native_tenancy, true);
   }
 });

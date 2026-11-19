@@ -31,10 +31,6 @@ jobs:
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with: { version: 11.0.8 }
       - run: pnpm install --frozen-lockfile
-      - name: Install Chromium
-        run: |
-          sudo bash scripts/ci-ubuntu-archive.sh
-          pnpm exec playwright install --with-deps chromium
       - run: pnpm run test:oracle:nne:unit
       - run: node --test scripts/oracle-native-encryption-contract.test.mjs
       - name: Verify existing Oracle 21c Thin-mode database behavior
@@ -43,7 +39,7 @@ jobs:
       - name: Qualify compiled Oracle image and SSO
         env:
           IDENTITY_PROTOCOL_REHEARSAL_SAVE_BACKEND_IMAGE: ${{ inputs.retain_image }}
-        run: pnpm run test:oracle:nne:sso
+        run: bash scripts/run-ci-playwright.sh pnpm run test:oracle:nne:sso
       - name: Qualify encryption negotiation and both pool paths
         run: |
           image=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('.artifacts/oracle-nne-sso/qualified-image.json'));process.stdout.write(j.Id)")
