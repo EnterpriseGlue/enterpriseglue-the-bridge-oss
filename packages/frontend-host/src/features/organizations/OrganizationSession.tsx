@@ -53,7 +53,7 @@ export function useOrganizationSession() {
 }
 
 export function OrganizationSessionProvider({ children }: { children: ReactNode }) {
-  const { user, refreshUser } = useAuth()
+  const { user, refreshUser, acknowledgeOrganizationChoice } = useAuth()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -96,7 +96,8 @@ export function OrganizationSessionProvider({ children }: { children: ReactNode 
     if (currentTenantId === membership.tenantId) {
       seedDestinationMemberships()
       rememberLastOrganization(principal, membership.tenantId)
-      navigate(target, { replace: true })
+      await navigate(target, { replace: true })
+      acknowledgeOrganizationChoice?.()
       return
     }
     inFlight.current = true
@@ -114,6 +115,7 @@ export function OrganizationSessionProvider({ children }: { children: ReactNode 
       seedDestinationMemberships()
       rememberLastOrganization(principal, membership.tenantId)
       await navigate(target, { replace: true })
+      acknowledgeOrganizationChoice?.()
     } catch (error) {
       setPendingTenantSlug(null)
       if (error instanceof ApiError && error.status === 403) {

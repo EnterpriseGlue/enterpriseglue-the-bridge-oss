@@ -1,0 +1,35 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "organization-switch-browser-tabs",
+  "type": "fix",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": ["users", "operators"],
+  "summary": "Keeps an organization switch stable when another workspace is open in the same browser.",
+  "userImpact": [
+    "An open tab affected by a change to the shared session offers an organization choice before changing the session again."
+  ],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": [
+    "Browser tabs recheck the server session and its permission snapshot after a change to shared browser storage."
+  ],
+  "documentation": ["The release notes describe how a previously open workspace tab responds to an organization change."],
+  "knownLimitations": [],
+  "rollback": ["Redeploy the previous compatible application images."],
+  "validation": [
+    "A Chromium regression opens two workspace tabs and verifies that only the explicitly selected tab exchanges the organization session."
+  ],
+  "packages": [
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.21.1", "newVersion": "0.21.2", "impact": "patch" }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The existing organization picker is used to resolve a shared browser session change."
+  }
+}

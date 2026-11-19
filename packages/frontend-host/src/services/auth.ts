@@ -7,6 +7,7 @@
 import { apiClient } from '../shared/api/client';
 import { fetchList } from '../shared/api/fetchList';
 import { parseApiError, getErrorMessageFromResponse } from '../shared/api/apiErrorUtils';
+import { apiFetch, applyApiBaseUrl } from '../utils/apiFetch';
 import { CurrentUserPermissionsSchema } from '@enterpriseglue/shared/schemas/platform-admin/authz.js';
 import type { LogoutResponse } from '@enterpriseglue/shared/schemas/auth/session.js';
 import type {
@@ -105,6 +106,20 @@ class AuthService {
       credentials: 'include',
       ...(scope && { headers: { 'X-Tenant-Slug': scope.tenantSlug } }),
     }));
+  }
+
+  /** Recheck a shared cookie session without refreshing it from a passive tab. */
+  async readSharedBrowserSession(tenantSlug?: string): Promise<{ user: User; permissions: CurrentUserPermissions }> {
+    const headers = tenantSlug ? { 'X-Tenant-Slug': tenantSlug } : undefined;
+    const [profile, permissions] = await Promise.all([
+      apiFetch(applyApiBaseUrl(`${API_BASE_URL}/auth/me`), { headers, cache: 'no-store' }),
+      apiFetch(applyApiBaseUrl(`${API_BASE_URL}/authz/me/permissions`), { headers, cache: 'no-store' }),
+    ]);
+    if (!profile.ok || !permissions.ok) throw new Error('Could not verify the shared browser session');
+    return {
+      user: await profile.json() as User,
+      permissions: CurrentUserPermissionsSchema.parse(await permissions.json()),
+    };
   }
 
   /**
