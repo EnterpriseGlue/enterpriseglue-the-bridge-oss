@@ -53,8 +53,8 @@
     {
       "name": "@enterpriseglue/enterprise-plugin-api",
       "previousVersion": "0.5.0",
-      "newVersion": "0.6.0",
-      "impact": "minor"
+      "newVersion": "0.5.1",
+      "impact": "patch"
     },
     {
       "name": "@enterpriseglue/frontend-host",
