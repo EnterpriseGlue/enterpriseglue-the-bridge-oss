@@ -119,7 +119,7 @@ export async function getAccessibleEngines(): Promise<AccessibleEngineSummary[]>
   if (!Array.isArray(response)) {
     throw new Error('The engine inventory response is not an array')
   }
-  return response as AccessibleEngineSummary[]
+  return (response as AccessibleEngineSummary[]).filter((engine) => engine.lifecycleStatus !== 'decommissioned')
 }
 
 /**

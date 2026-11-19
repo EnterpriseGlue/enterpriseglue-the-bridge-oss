@@ -10,6 +10,7 @@ import './styles/carbon-overrides.css'
 import './styles/theme.css'
 import './styles/pro-sidebar.css'
 import './styles/split-pane.css'
+import { SkeletonText } from '@carbon/react'
 
 // Feature Flags
 import { FeatureFlagsProvider } from './contexts/FeatureFlagsContext'
@@ -87,36 +88,53 @@ export async function startApp() {
     return
   }
 
-  await getEnterpriseFrontendPlugin()
-  await loadTrustedSystemFrontendModules(getConfiguredSystemFrontendModules())
-  await initializeTenancyCapabilities()
-  await loadInstalledNativePluginsV1()
-  const enterpriseRootChildren = [...extensions.rootRoutes] as any[]
-  const enterpriseTenantChildren = [...extensions.tenantRoutes] as any[]
-  const nativePluginRootChildren = getNativePluginRoutesV1('root')
-  const nativePluginTenantChildren = getNativePluginRoutesV1('tenant')
-
+  const tenancyReady = (async () => {
+    await getEnterpriseFrontendPlugin()
+    await loadTrustedSystemFrontendModules(getConfiguredSystemFrontendModules())
+    await initializeTenancyCapabilities()
+  })()
+  const router = tenancyReady.then(async () => {
+    await loadInstalledNativePluginsV1()
+    return createBrowserRouter(createAppRoutes(
+      [...extensions.rootRoutes],
+      [...extensions.tenantRoutes],
+      getNativePluginRoutesV1('root'),
+      getNativePluginRoutesV1('tenant'),
+    ))
+  })
   const qc = new QueryClient()
-  const routes = createAppRoutes(
-    enterpriseRootChildren,
-    enterpriseTenantChildren,
-    nativePluginRootChildren,
-    nativePluginTenantChildren,
-  )
+  const hasExplicitTenant = /^\/t\/[^/]+(?:\/|$)/.test(window.location.pathname)
+
+  function AppRouter() {
+    return <RouterProvider router={React.use(router)} />
+  }
+
+  function AppSession() {
+    // Unprefixed routes need the tenancy mode to resolve their authentication
+    // scope. An explicit tenant can restore its session during bootstrap.
+    if (!hasExplicitTenant) React.use(tenancyReady)
+    return (
+      <AuthProvider>
+        <FeatureFlagsProvider>
+          <ToastProvider>
+            <HostContextualFlowProviderV1>
+              <React.Suspense fallback={<SkeletonText paragraph lineCount={4} />}>
+                <AppRouter />
+              </React.Suspense>
+            </HostContextualFlowProviderV1>
+          </ToastProvider>
+        </FeatureFlagsProvider>
+      </AuthProvider>
+    )
+  }
 
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <ErrorBoundary>
         <QueryClientProvider client={qc}>
-          <AuthProvider>
-            <FeatureFlagsProvider>
-              <ToastProvider>
-                <HostContextualFlowProviderV1>
-                  <RouterProvider router={createBrowserRouter(routes)} />
-                </HostContextualFlowProviderV1>
-              </ToastProvider>
-            </FeatureFlagsProvider>
-          </AuthProvider>
+          <React.Suspense fallback={<SkeletonText paragraph lineCount={4} />}>
+            <AppSession />
+          </React.Suspense>
         </QueryClientProvider>
       </ErrorBoundary>
     </React.StrictMode>

@@ -123,8 +123,8 @@ export default function BatchesList() {
 
   // Check for engine access errors (403/503)
   const engineAccessError = isEngineAccessError(listQ.error)
-  if (engineAccessError) {
-    return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
+  if (engineAccessError || (listQ.error as { status?: number } | null)?.status === 404) {
+    return <EngineAccessError status={engineAccessError?.status ?? 404} />
   }
   if (selectedEngineId && !batchesReadDecision.allowed) {
     return (
@@ -132,7 +132,7 @@ export default function BatchesList() {
         <InlineNotification
           kind="warning"
           title="Batches unavailable"
-          subtitle={batchesReadDecision.reason}
+          subtitle="You don’t have permission to view batches for this engine."
           lowContrast
           hideCloseButton
         />
@@ -185,7 +185,7 @@ export default function BatchesList() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {dataRows.length === 0 && (
+                  {listQ.isSuccess && dataRows.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={headers.length}>
                         <RuntimeCollectionEmptyState kind="batches" />

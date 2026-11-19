@@ -89,7 +89,7 @@ import {
   PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS,
   USER_MANAGEMENT_PLATFORM_PERMISSIONS,
 } from '../shared/auth/permissions'
-import { evaluateActionSnapshot } from '../shared/auth/guards'
+import { evaluateActionSnapshot, UnauthorizedEmptyState } from '../shared/auth/guards'
 
 /**
  * Default tenant slug for OSS single-tenant mode and EE default tenant.
@@ -192,6 +192,12 @@ function EnginesRouteGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function TenantSettingsRouteGuard({ children }: { children: React.ReactNode }) {
+  const { permissions } = useAuth()
+  const access = evaluateActionSnapshot(permissions, 'tenant.settings.manage', { type: 'tenant', id: permissions?.tenant?.resourceId ?? null })
+  return access.allowed ? <>{children}</> : <UnauthorizedEmptyState reason="You don’t have permission to view this page." />
+}
+
 function StarbaseRouteGuard({ children }: { children: React.ReactNode }) {
   const { user, permissions } = useAuth()
   const location = useLocation()
@@ -253,7 +259,9 @@ export function createProtectedChildRoutes(isRootLevel: boolean): RouteObject[] 
       path: `${pathPrefix}admin/settings`, 
       element: multiTenantEnabled && !isRootLevel ? (
         <ProtectedRoute requireAdmin={false}>
-          <ExtensionPage name="tenant-settings-page" fallback={<LazyRoute message="Loading tenant settings..."><TenantSettingsPage /></LazyRoute>} />
+          <TenantSettingsRouteGuard>
+            <ExtensionPage name="tenant-settings-page" fallback={<LazyRoute message="Loading tenant settings..."><TenantSettingsPage /></LazyRoute>} />
+          </TenantSettingsRouteGuard>
         </ProtectedRoute>
       ) : (
         <ProtectedRoute requireAdmin requiredPlatformPermissions={PLATFORM_SETTINGS_HUB_PLATFORM_PERMISSIONS}>

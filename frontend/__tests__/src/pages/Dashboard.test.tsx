@@ -30,7 +30,7 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
 
 vi.mock('@src/components/EngineSelector', () => ({
   EngineSelector: () => <div data-testid="engine-selector" />,
-  useSelectedEngine: () => engineSelectorMocks.selectedEngineId,
+  useEngineSelection: () => ({ engines: [], selectedEngineId: engineSelectorMocks.selectedEngineId, scope: 'dashboard-test' }),
 }));
 
 vi.mock('@src/shared/api/client', () => ({
@@ -245,7 +245,7 @@ describe('Dashboard', () => {
       expect.objectContaining({ engineId: 'engine-central' }),
     ));
     await waitFor(() => {
-      expect(screen.getByText('Runtime access is scoped')).toBeInTheDocument();
+      expect(screen.getByText('Showing the processes you can access')).toBeInTheDocument();
       expect(screen.getByText('Process States')).toBeInTheDocument();
       expect(screen.getByText('Summary')).toBeInTheDocument();
     });

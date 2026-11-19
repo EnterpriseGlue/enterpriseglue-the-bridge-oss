@@ -100,12 +100,12 @@ export default function TenantApplicationsSettings(props: {
       <Stack gap={5}>
         <div>
           <h2 style={{ marginTop: 0 }}>Applications</h2>
-          <p>Use applications installed by the platform operator and control activation only for this organization.</p>
+          <p>Choose which installed applications are available in this organization.</p>
         </div>
         {error && <InlineNotification kind="error" title="Application marketplace" subtitle={error} lowContrast />}
         {catalogue.isError && <InlineNotification kind="error" title="Applications unavailable" subtitle={parseApiError(catalogue.error, 'The application catalogue could not be loaded').message} lowContrast />}
-        {!catalogue.isLoading && (catalogue.data?.applications?.length ?? 0) === 0 && (
-          <InlineNotification kind="info" title="No applications available" subtitle="A platform operator must install a tenant-compatible application before it appears here." lowContrast hideCloseButton />
+        {catalogue.isSuccess && catalogue.data.applications.length === 0 && (
+          <InlineNotification kind="info" title="No applications available" lowContrast hideCloseButton />
         )}
         {(catalogue.data?.applications ?? []).map((application) => (
           <div key={application.pluginId} style={{ borderTop: '1px solid var(--cds-border-subtle)', paddingTop: 'var(--spacing-4)' }}>

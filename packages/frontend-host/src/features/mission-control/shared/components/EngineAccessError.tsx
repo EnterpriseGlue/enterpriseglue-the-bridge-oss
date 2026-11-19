@@ -14,10 +14,10 @@ export function EngineAccessError({ status, message, actionPath = '/mission-cont
   const navigate = useNavigate()
 
   const is503 = status === 503
-  const title = is503 ? 'No Active Engine' : 'Access Denied'
-  const description = is503
-    ? message || 'There is no active engine configured. Please contact your administrator to set up an engine.'
-    : message || 'You do not have permission to access Mission Control for the active engine.'
+  const title = status === 404 ? 'Engine unavailable' : is503 ? 'No Active Engine' : 'Access Denied'
+  const description = message || (status === 404 ? 'This engine is no longer available.'
+    : is503 ? 'Ask your administrator to connect an engine.'
+    : 'You don’t have permission to access this engine.')
 
   const Icon = is503 ? Warning : Locked
 

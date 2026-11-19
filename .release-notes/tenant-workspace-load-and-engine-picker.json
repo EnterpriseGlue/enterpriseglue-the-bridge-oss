@@ -1,0 +1,73 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "tenant-workspace-load-and-engine-picker",
+  "type": "fix",
+  "scope": "tenant-workspace",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators"
+  ],
+  "summary": "Reduces the work needed to open the dashboard and displays full engine names in the Mission Control engine selector.",
+  "userImpact": [
+    "The dashboard opens while statistics and process activity load.",
+    "The engine selector displays engine names without internal identifiers.",
+    "The dashboard shows a limited-access notice only when the selected engine has resource-level visibility restrictions.",
+    "Deleted engines are removed from runtime and project import choices.",
+    "Unavailable engines and restricted pages show a plain-language message."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Authorization checks continue to use current, tenant-bound grants and roles."
+  ],
+  "documentation": [
+    "The existing dashboard and engine inventory endpoints retain their response contracts."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous application image."
+  ],
+  "validation": [
+    "Authorization, dashboard, and engine selector regression checks."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.25.1",
+      "newVersion": "0.25.2",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.28",
+      "newVersion": "0.20.29",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.29.0",
+      "newVersion": "0.29.1",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The dashboard, engine selection, and administration workflows retain their existing steps. This change corrects the loading and availability states."
+  }
+}

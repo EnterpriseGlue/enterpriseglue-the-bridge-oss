@@ -1,14 +1,13 @@
 import { Router, Request, Response } from 'express';
-import { logger } from '@enterpriseglue/shared/utils/logger.js';
 import { requireAuth } from '@enterpriseglue/shared/middleware/auth.js';
 import { requireAction } from '@enterpriseglue/shared/middleware/requireAction.js';
 import { dashboardLimiter } from '@enterpriseglue/shared/middleware/rateLimiter.js';
-import { asyncHandler, Errors } from '@enterpriseglue/shared/middleware/errorHandler.js';
+import { asyncHandler } from '@enterpriseglue/shared/middleware/errorHandler.js';
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
 import { File } from '@enterpriseglue/shared/infrastructure/persistence/entities/File.js';
 import { permissionService } from '@enterpriseglue/shared/services/platform-admin/index.js';
 import { DashboardStatsSchema } from '@enterpriseglue/shared/schemas/dashboard.js';
-import { In } from 'typeorm';
+import { runWithPlatformDatabaseCapability } from '@enterpriseglue/shared/services/platform-database-context.js';
 
 const r = Router();
 
@@ -22,10 +21,11 @@ r.get('/api/dashboard/stats', requireAuth, requireAction('platform.dashboard.rea
   const fileRepo = dataSource.getRepository(File);
   const tenantId = req.tenant?.tenantId;
 
-  // Scope aggregates through the canonical evaluator snapshot. Legacy project
-  // memberships are retained only as migration inputs for scoped assignments.
-  const permissionSnapshot = await permissionService.getCurrentUserPermissions(userId, tenantId);
-  const projectIds = Array.from(new Set(permissionSnapshot.projects.map((project) => project.resourceId)));
+  // Use the same project discovery as the permission snapshot. Aggregation
+  // needs the project IDs alone, so avoid evaluating every permission.
+  const projectIds = await runWithPlatformDatabaseCapability({ kind: 'authenticated-account', userId }, () =>
+    permissionService.getKnownProjectIdsForUser(userId, tenantId),
+  );
   const totalProjects = projectIds.length;
 
   // If user has no projects, return zeros

@@ -18,7 +18,7 @@ import { Dropdown, Checkbox, ComboBox, TextInput, DatePicker, DatePickerInput, T
 import { useQuery } from '@tanstack/react-query'
 import { useFeatureFlag } from '../../../shared/hooks/useFeatureFlag'
 import { useLayoutStore } from '../stores/layoutStore'
-import { EngineSelector, useSelectedEngine } from '../../../components/EngineSelector'
+import { EngineSelector, useEngineSelection } from '../../../components/EngineSelector'
 import { useDashboardThemeStore } from '../../../stores/dashboardThemeStore'
 import { useProcessesFilterStore } from '../../mission-control/shared/stores/processesFilterStore'
 import { useDecisionsFilterStore } from '../../mission-control/shared/stores/decisionsFilterStore'
@@ -205,7 +205,9 @@ export default function ProSidebar() {
     reset: resetDecisionFilters,
   } = useDecisionsFilterStore()
 
-  const selectedEngineId = useSelectedEngine(engineContextAvailable)
+  const engineSelection = useEngineSelection(engineContextAvailable && inMissionControl)
+  const { selectedEngineId, isEmpty, isRequestedEngineUnavailable } = engineSelection
+  const engineIsUnavailable = isEmpty || isRequestedEngineUnavailable
 
   // Fetch process definitions for the dropdown
   const defsQ = useQuery({ 
@@ -236,6 +238,16 @@ export default function ProSidebar() {
     }
     return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label))
   }, [defsQ.data])
+
+  React.useEffect(() => {
+    if (!onProcessesOverviewPage || !selectedProcess) return
+    if (engineIsUnavailable || (defsQ.isSuccess && !defItems.some(({ key }) => key === selectedProcess.key))) {
+      setSelectedProcess(null)
+      setSelectedVersion(null)
+      setFlowNode('')
+    }
+  }, [defItems, defsQ.isSuccess, engineIsUnavailable, onProcessesOverviewPage, selectedProcess,
+    setFlowNode, setSelectedProcess, setSelectedVersion])
 
   // Get available versions for selected process
   const versions = React.useMemo(() => {
@@ -274,6 +286,15 @@ export default function ProSidebar() {
     }
     return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label))
   }, [decisionDefsQ.data])
+
+  React.useEffect(() => {
+    if (!onDecisionsOverviewPage || !selectedDefinition) return
+    if (engineIsUnavailable || (decisionDefsQ.isSuccess && !decisionDefItems.some(({ key }) => key === selectedDefinition.key))) {
+      setSelectedDefinition(null)
+      setSelectedDecisionVersion(null)
+    }
+  }, [decisionDefItems, decisionDefsQ.isSuccess, engineIsUnavailable, onDecisionsOverviewPage, selectedDefinition,
+    setSelectedDecisionVersion, setSelectedDefinition])
 
   // Get available versions for selected decision
   const decisionVersions = React.useMemo(() => {
@@ -516,7 +537,7 @@ export default function ProSidebar() {
               titleText=""
               placeholder="Select process"
               items={defItems}
-              selectedItem={selectedProcess}
+              selectedItem={selectedEngineId ? selectedProcess : null}
               itemToString={(item: any) => item?.label || ''}
               onChange={({ selectedItem }: any) => setSelectedProcess(selectedItem || null)}
               size="sm"
@@ -730,7 +751,7 @@ export default function ProSidebar() {
               titleText=""
               placeholder="Select decision"
               items={decisionDefItems}
-              selectedItem={selectedDefinition as any}
+              selectedItem={selectedEngineId ? selectedDefinition : null}
               itemToString={(item: any) => item?.label || ''}
               onChange={({ selectedItem }: any) => setSelectedDefinition(selectedItem || null)}
               size="sm"

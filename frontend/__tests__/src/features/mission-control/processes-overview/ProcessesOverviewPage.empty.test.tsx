@@ -79,7 +79,7 @@ describe('ProcessesOverviewPage empty state', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/0 Process Instances/i)).toBeInTheDocument();
-      expect(screen.getByText('No visible process definitions')).toBeInTheDocument();
+      expect(screen.getByText('No processes to show')).toBeInTheDocument();
     });
   });
 });

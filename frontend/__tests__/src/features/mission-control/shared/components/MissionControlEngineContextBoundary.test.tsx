@@ -54,11 +54,21 @@ describe('MissionControlEngineContextBoundary', () => {
     useEngineSelectorStore.getState().setSelectedEngineIdForScope('anonymous:default', 'engine-a')
     renderBoundary('/t/default/mission-control/processes?engineId=removed-engine')
 
-    expect(await screen.findByText('Access Denied')).toBeInTheDocument()
-    expect(screen.getByText(/Engine removed-engine is unavailable or you are not authorized/)).toBeInTheDocument()
+    expect(await screen.findByText('Engine unavailable')).toBeInTheDocument()
+    expect(screen.getByText('This engine is no longer available.')).toBeInTheDocument()
+    expect(screen.queryByText(/removed-engine/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Runtime child/)).not.toBeInTheDocument()
     expect(runtimeQuery).not.toHaveBeenCalled()
     await waitFor(() => expect(useEngineSelectorStore.getState().selectedEngineId).toBeUndefined())
+  })
+
+  it('renders the no-engine state before mounting a runtime collection', async () => {
+    vi.mocked(getAccessibleEngines).mockResolvedValue([])
+    renderBoundary('/t/default/mission-control/batches')
+
+    expect(await screen.findByText('There are no engines available in this organization.')).toBeInTheDocument()
+    expect(screen.queryByText(/Runtime child/)).not.toBeInTheDocument()
+    expect(runtimeQuery).not.toHaveBeenCalled()
   })
 
   it('allows an accessible explicit engine and queries only that engine', async () => {

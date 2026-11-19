@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "plugin-toolchain-go-stdlib-security",
+  "type": "security",
+  "scope": "plugin-toolchain",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Build the plugin installer and manager acquisition tools with Go 1.26.11.",
+  "userImpact": ["Plugin acquisition and signature verification retain their existing interfaces."],
+  "upgrade": {
+    "required": true,
+    "instructions": ["Adopt the qualified installer and manager images when they are published."]
+  },
+  "configuration": [],
+  "api": {"compatibility": "none", "changes": []},
+  "database": {"migrations": [], "rollbackSupported": true, "notes": []},
+  "security": [
+    "Go 1.26.11 fixes CVE-2026-97054 in the standard library linked into ORAS and Cosign.",
+    "Remove expired scan exceptions for CVE-2026-54285 and GHSA-qwww-vcr4-c8h2 because the lockfile already resolves patched OpenTelemetry and React Router versions."
+  ],
+  "documentation": [
+    "packages/plugin-installer/CONTAINER_THIRD_PARTY_NOTICES.md",
+    "packages/plugin-manager/CONTAINER_THIRD_PARTY_NOTICES.md"
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "runtime-maintainers",
+    "pages": [],
+    "reason": "The rebuilt images use the existing installation and upgrade procedures."
+  },
+  "knownLimitations": [],
+  "rollback": ["Prefer the next qualified forward build because older image digests carry the affected Go version."],
+  "validation": ["Both image definitions verify Go 1.26.11 in the emitted ORAS and Cosign binaries before packaging them."],
+  "packages": [
+    {
+      "name": "@enterpriseglue/plugin-installer",
+      "previousVersion": "0.2.15",
+      "newVersion": "0.2.16",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/plugin-manager",
+      "previousVersion": "0.1.15",
+      "newVersion": "0.1.16",
+      "impact": "patch"
+    }
+  ]
+}

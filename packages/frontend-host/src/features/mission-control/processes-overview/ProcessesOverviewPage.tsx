@@ -1044,8 +1044,8 @@ export default function ProcessesOverviewPage() {
 
   // Check for engine access errors (403/503)
   const engineAccessError = isEngineAccessError(defsQ.error)
-  if (engineAccessError) {
-    return <EngineAccessError status={engineAccessError.status} message={engineAccessError.message} />
+  if (engineAccessError || (defsQ.error as { status?: number } | null)?.status === 404) {
+    return <EngineAccessError status={engineAccessError?.status ?? 404} />
   }
 
   if (definitionLink.active) return <RuntimeDefinitionLinkNotice error={definitionLink.error} onClear={definitionLink.clear} />
@@ -1166,7 +1166,7 @@ export default function ProcessesOverviewPage() {
         <InlineNotification
           kind="error"
           title="Process definitions could not be loaded"
-          subtitle={getUiErrorMessage(defsQ.error, 'The engine process-definition request failed.')}
+          subtitle="Try again to load processes."
           hideCloseButton
           style={{ margin: 'var(--spacing-3) var(--spacing-5) 0' }}
         />

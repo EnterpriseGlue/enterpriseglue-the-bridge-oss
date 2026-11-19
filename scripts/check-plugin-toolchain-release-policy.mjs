@@ -89,10 +89,10 @@ assert.doesNotMatch(
   /^  (?:push|pull_request|pull_request_target|release|schedule):/m,
 );
 for (const dockerfile of [installerDockerfile, managerDockerfile]) {
-  assert.match(dockerfile, /^FROM --platform=\$BUILDPLATFORM golang:1\.26\.10-alpine3\.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0 AS oras$/m);
+  assert.match(dockerfile, /^FROM --platform=\$BUILDPLATFORM golang:1\.26\.11-alpine3\.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS oras$/m);
   for (const binary of ['oras', 'cosign']) {
     assert.ok(
-      dockerfile.includes(`go version -m /out/${binary} | grep -E '^/out/${binary}: go1\\.26\\.10$'`),
+      dockerfile.includes(`go version -m /out/${binary} | grep -E '^/out/${binary}: go1\\.26\\.11$'`),
       `The emitted ${binary} binary must verify the patched Go compiler version`,
     );
   }

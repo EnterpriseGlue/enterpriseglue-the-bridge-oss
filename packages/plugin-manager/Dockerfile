@@ -41,7 +41,7 @@ RUN pnpm --filter @enterpriseglue/plugin-sdk build \
       /packs/enterpriseglue-plugin-manager-*.tgz \
   && test -z "$(find /output -type f -name '*.node' -print -quit)"
 
-FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine3.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0 AS oras
+FROM --platform=$BUILDPLATFORM golang:1.26.11-alpine3.23@sha256:23f198931d4bd83b4f5a613bd75656257ae8bf832dcbc2db80e1050b5219ca2a AS oras
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -89,7 +89,7 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
       golang.org/x/text@v0.43.0 \
   && CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
       go build -buildvcs=false -trimpath \
-        -ldflags='-buildid= -X sigs.k8s.io/release-utils/version.gitVersion=v3.1.3-enterpriseglue.8 -X sigs.k8s.io/release-utils/version.gitCommit=11926fa5bbbbde47e88fc006b625a17769b743b2 -X sigs.k8s.io/release-utils/version.gitTreeState=clean -X sigs.k8s.io/release-utils/version.buildDate=2026-08-06T00:10:15Z' \
+        -ldflags='-buildid= -X sigs.k8s.io/release-utils/version.gitVersion=v3.1.3-enterpriseglue.9 -X sigs.k8s.io/release-utils/version.gitCommit=11926fa5bbbbde47e88fc006b625a17769b743b2 -X sigs.k8s.io/release-utils/version.gitTreeState=clean -X sigs.k8s.io/release-utils/version.buildDate=2026-08-06T00:10:15Z' \
         -o /out/cosign github.com/sigstore/cosign/v3/cmd/cosign \
   && go version -m /out/cosign | grep -E 'github.com/go-jose/go-jose/v4[[:space:]]+v4\.1\.6([[:space:]]|$)' \
   && go version -m /out/cosign | grep -E 'golang.org/x/crypto[[:space:]]+v0\.58\.0' \
@@ -98,8 +98,8 @@ RUN --mount=type=cache,id=enterpriseglue-plugin-toolchain-go-modules,target=/go/
   && go version -m /out/cosign | grep -E 'golang.org/x/text[[:space:]]+v0\.43\.0' \
   && go version -m /out/cosign | grep -E 'google.golang.org/grpc[[:space:]]+v1\.83\.2'
 RUN go version -m /out/cosign | grep -E 'github.com/klauspost/compress[[:space:]]+v1\.18\.7([[:space:]]|$)'
-RUN go version -m /out/oras | grep -E '^/out/oras: go1\.26\.10$' \
-  && go version -m /out/cosign | grep -E '^/out/cosign: go1\.26\.10$'
+RUN go version -m /out/oras | grep -E '^/out/oras: go1\.26\.11$' \
+  && go version -m /out/cosign | grep -E '^/out/cosign: go1\.26\.11$'
 
 FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 

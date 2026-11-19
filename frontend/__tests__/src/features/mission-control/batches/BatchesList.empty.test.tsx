@@ -58,14 +58,15 @@ function renderWithProviders() {
 describe('BatchesList empty state', () => {
   it('shows empty state when no batches exist', async () => {
     server.use(
-      http.get('/mission-control-api/batches', () => HttpResponse.json([]))
+      http.get('/engines-api/engines', () => HttpResponse.json([{ id: 'engine-1', name: 'Process engine' }])),
+      http.get(/\/mission-control-api\/batches$/, () => HttpResponse.json([]))
     );
 
     renderWithProviders();
 
     await waitFor(() => {
-      expect(screen.getByText('No visible batches')).toBeInTheDocument();
-      expect(screen.getByText(/authorized runtime resources/i)).toBeInTheDocument();
+      expect(screen.getByText('No batches to show')).toBeInTheDocument();
+      expect(screen.getByText(/Batch operations you can access/i)).toBeInTheDocument();
     });
   });
 });

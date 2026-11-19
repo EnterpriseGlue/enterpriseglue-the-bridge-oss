@@ -9,15 +9,16 @@ export function MissionControlEngineContextBoundary({ children }: { children: Re
   const location = useLocation()
   const { toTenantPath } = useTenantNavigate()
   const requestedEngineId = new URLSearchParams(location.search).get('engineId')?.trim() || undefined
-  const selection = useEngineSelection(Boolean(requestedEngineId))
+  const runtimeList = /\/mission-control\/(processes|decisions|batches)(?:\/|$)/.test(location.pathname)
+  const selection = useEngineSelection(Boolean(requestedEngineId) || runtimeList)
 
-  if (!requestedEngineId) return <>{children}</>
+  if (!requestedEngineId && !runtimeList) return <>{children}</>
   if (selection.isResolving) return <PageLoadingState message="Checking engine access..." />
   if (selection.isError) {
     return (
       <EngineAccessError
         status={503}
-        message="Engine access could not be verified. Try again before opening this engine-qualified link."
+        message="Could not load engine access. Try again."
         actionPath={toTenantPath('/mission-control')}
         actionLabel="Back to Mission Control"
       />
@@ -26,12 +27,17 @@ export function MissionControlEngineContextBoundary({ children }: { children: Re
   if (selection.isRequestedEngineUnavailable) {
     return (
       <EngineAccessError
-        status={403}
-        message={`Engine ${requestedEngineId} is unavailable or you are not authorized to access it.`}
+        status={404}
+        message="This engine is no longer available."
         actionPath={toTenantPath('/mission-control')}
         actionLabel="Back to Mission Control"
       />
     )
+  }
+
+  if (selection.isEmpty) {
+    return <EngineAccessError status={503} message="There are no engines available in this organization."
+      actionPath={toTenantPath('/engines')} actionLabel="Go to Engines" />
   }
 
   return <>{children}</>
