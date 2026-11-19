@@ -204,8 +204,8 @@ test.describe('Login experience screenshot gallery', () => {
       authenticated = true;
       return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><script>location.replace("/login")</script>' });
     });
-    await page.route('**/api/auth/my-tenants', (route) => json(route, [
-      { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha', tenantStatus: 'active', role: 'owner' },
+    await page.route(/\/api\/auth\/my-tenants(?:\?.*)?$/, (route) => json(route, [
+      { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha', tenantStatus: 'active', role: 'admin' },
       { tenantId: 'b', tenantSlug: 'bravo', tenantName: 'Bravo', tenantStatus: 'active', role: 'member' },
     ]));
 
@@ -223,6 +223,7 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page.locator('body')).not.toContainText(/signed up with (Google|Microsoft|Apple|email)/i);
 
     await page.getByRole('button', { name: 'Continue with Google' }).click();
+    await expect(page).toHaveURL(/\/organizations\/select$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
     await expect(page.getByText(linkRequired)).toHaveCount(0);
   });

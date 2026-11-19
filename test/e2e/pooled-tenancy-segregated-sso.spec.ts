@@ -767,12 +767,22 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
 
       await admin.goto('/t/alpha');
       await expect(admin.getByRole('heading', { name: /dashboard/i })).toBeVisible({ timeout: 30_000 });
-      const tenantPicker = admin.locator('.cds--header__menu-title', { hasText: 'Alpha Industries' });
-      await expect(tenantPicker).toBeVisible();
-      await tenantPicker.click();
-      await expect(admin.getByRole('link', { name: 'Bravo Services' })).toBeVisible();
-      await expect(admin.getByRole('link', { name: 'Charlie Operations' })).toBeVisible();
+      const header = admin.getByRole('banner', { name: 'EnterpriseGlue application header' });
+      await expect(header.locator('.cds--header__menu-title', { hasText: 'Alpha Industries' })).toHaveCount(0);
+      await header.getByRole('button', { name: 'Account menu' }).click();
+      const accountPanel = header.getByRole('region', { name: 'Account settings' });
+      await expect(accountPanel.getByText('Alpha Industries', { exact: true })).toBeVisible();
+      await accountPanel.getByRole('button', { name: 'Switch organization' }).click();
+      const organizationList = accountPanel.getByRole('list', { name: 'Your organizations' });
+      await expect(organizationList.getByRole('link', { name: /Alpha Industries/ })).toBeFocused();
+      const bravoChoice = organizationList.getByRole('link', { name: /Bravo Services/ });
+      await expect(bravoChoice).toBeVisible();
+      await expect(organizationList.getByRole('link', { name: /Charlie Operations/ })).toBeVisible();
+      await admin.keyboard.press('ArrowDown');
+      await expect(bravoChoice).toBeFocused();
       await captureManualScreenshot(admin, '05-tenant-picker-with-memberships.jpg', { stabilize: false });
+      await admin.keyboard.press('Escape');
+      await expect(accountPanel).toHaveCount(0);
 
       await expectStatus(await admin.request.get('/api/auth/login-methods'), 404);
       await expectStatus(await admin.request.get('/api/identity/providers'), 404);
