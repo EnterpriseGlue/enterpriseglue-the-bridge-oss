@@ -222,6 +222,10 @@ resource is visible to the signed-in user. If the engine is absent from both
 places, confirm that the operator has `engine:edit`; do not grant runtime access
 to work around a missing administration permission.
 
+Engine selectors label each engine by its name, or by its host when it has no
+name, and never by its internal ID. Give each connection a recognizable name so
+people can choose it without knowing its identifier.
+
 ### Validate the Result Across Provisioning Channels
 
 Use the same acceptance sequence whether the engine was added in the UI,

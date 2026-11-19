@@ -6,6 +6,7 @@ import { BrowserRouter, useLocation } from 'react-router-dom';
 import {
   EngineSelector,
   useEngineSelection,
+  engineDisplayName,
 } from '@src/components/EngineSelector';
 import { useEngineSelectorStore } from '@src/stores/engineSelectorStore';
 import { getAccessibleEngines } from '@src/features/mission-control/engines/api/engines';
@@ -166,11 +167,20 @@ describe('EngineSelector', () => {
 
     expect(await screen.findByTestId('engine-dropdown')).toBeInTheDocument();
     const props = dropdownSpy.mock.calls[dropdownSpy.mock.calls.length - 1]?.[0];
+    // One readable line per option: the friendly name only, never the raw ID.
     expect(props.items).toEqual([
-      expect.objectContaining({ id: 'engine-a', label: 'Alpha', technicalId: 'engine-a' }),
-      expect.objectContaining({ id: 'engine-z', label: 'Zulu', technicalId: 'engine-z' }),
+      { id: 'engine-a', label: 'Alpha' },
+      { id: 'engine-z', label: 'Zulu' },
     ]);
+    expect(props.itemToElement).toBeUndefined();
+    expect(props.autoAlign).toBe(true);
     expect(props.selectedItem).toEqual(expect.objectContaining({ id: 'engine-a' }));
+  });
+
+  it('labels an unnamed engine by its host, not its ID', () => {
+    expect(engineDisplayName({ name: '  ', baseUrl: 'https://engine.example.test:8443/engine-rest' })).toBe('engine.example.test:8443');
+    expect(engineDisplayName({ name: 'Orders engine', baseUrl: 'https://x.test' })).toBe('Orders engine');
+    expect(engineDisplayName({ name: null as any, baseUrl: 'not a url' })).toBe('not a url');
   });
 
   it('updates the shareable engine context when the operator changes engines', async () => {

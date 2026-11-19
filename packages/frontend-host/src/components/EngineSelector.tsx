@@ -140,9 +140,7 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled =
     if (engines.length === 0) return []
     return engines.map(e => ({
       id: e.id,
-      label: e.name || e.baseUrl,
-      technicalId: e.id,
-      baseUrl: e.baseUrl,
+      label: engineDisplayName(e),
     }))
   }, [engines])
 
@@ -165,15 +163,11 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled =
       label={label}
       size={size}
       items={items}
+      // One line per option: Carbon menu rows have a fixed height, so a second
+      // line was clipped. The engine's friendly name is the only label shown.
       itemToString={(item: any) => item?.label || ''}
-      itemToElement={(item: any) => (
-        <div style={{ display: 'grid', gap: '0.125rem', minWidth: 0 }}>
-          <span>{item?.label || ''}</span>
-          <span style={{ color: 'var(--cds-text-secondary)', fontSize: '0.75rem', overflowWrap: 'anywhere' }}>
-            {item?.technicalId}
-          </span>
-        </div>
-      )}
+      autoAlign
+      className="eg-engine-selector"
       selectedItem={currentItem}
       onChange={({ selectedItem }: any) => {
         if (selectedItem?.id) {
@@ -183,9 +177,20 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled =
           setSelectedEngineIdForScope(scope, selectedItem.id)
         }
       }}
-      style={{ minWidth: '180px', ...style }}
+      style={{ minWidth: '240px', maxWidth: '22rem', ...style }}
     />
   )
+}
+
+/** A readable engine label: its name, else its host, never a raw ID. */
+export function engineDisplayName(engine: Pick<AccessibleEngineSummary, 'name' | 'baseUrl'>): string {
+  const name = engine.name?.trim()
+  if (name) return name
+  try {
+    return new URL(String(engine.baseUrl)).host || 'Engine'
+  } catch {
+    return engine.baseUrl ? String(engine.baseUrl) : 'Engine'
+  }
 }
 
 // Hook to get the current engine filter for queries

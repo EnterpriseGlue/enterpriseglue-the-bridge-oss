@@ -19,6 +19,7 @@ case "$browser_e2e_grep" in
     browser_e2e_files=(
       test/e2e/access-control-layout.spec.ts
       test/e2e/platform-admin-setup-routing.spec.ts
+      test/e2e/engine-selector-layout.spec.ts
     )
     ;;
   '@headless-admin')
