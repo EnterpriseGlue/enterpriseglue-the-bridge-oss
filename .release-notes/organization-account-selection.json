@@ -1,0 +1,79 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "organization-account-selection",
+  "type": "feature",
+  "scope": "authentication",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "administrators",
+    "operators"
+  ],
+  "summary": "Adds a membership-based organization picker to Cloud sign-in and moves workspace switching into the account menu.",
+  "userImpact": [
+    "People can open or switch between the organizations they belong to from the account menu."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "The authenticated membership list accepts optional selection hints. Trusted frontend modules can use host router navigation."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Organization choices come from authenticated membership. The server validates membership before issuing a tenant session."
+  ],
+  "documentation": [
+    "The Cloud gateway serves the organization selection route on the primary application host."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous compatible host application and Cloud gateway."
+  ],
+  "validation": [
+    "Browser tests verify selection, switching, deep links, onboarding, account scope, and header continuity."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.25.2",
+      "newVersion": "0.25.3",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/enterprise-plugin-api",
+      "previousVersion": "0.5.0",
+      "newVersion": "0.6.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.20.29",
+      "newVersion": "0.21.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/shared",
+      "previousVersion": "0.29.1",
+      "newVersion": "0.30.0",
+      "impact": "minor"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "required",
+    "owner": "documentation-maintainers",
+    "pages": [
+      "cloud-sign-in"
+    ]
+  }
+}

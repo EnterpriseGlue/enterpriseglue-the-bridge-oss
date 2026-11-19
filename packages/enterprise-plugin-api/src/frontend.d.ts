@@ -215,6 +215,8 @@ export interface FrontendPluginContext {
   };
   hooks: {
     useAuth(): PluginAuthContext;
+    /** Client-side navigation from components rendered by the host router. */
+    useNavigate?(): (to: string, options?: { replace?: boolean; state?: unknown }) => void;
     useModal<T = any>(): { isOpen: boolean; data: T | undefined; openModal(data?: T): void; closeModal(): void };
     useToast(): { notify(toast: ToastInput): void };
   };

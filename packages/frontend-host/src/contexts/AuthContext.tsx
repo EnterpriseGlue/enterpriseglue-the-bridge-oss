@@ -35,7 +35,7 @@ export interface AuthContextValue {
   logout: () => Promise<void>;
   resetPassword: (request: ResetPasswordRequest) => Promise<void>;
   changePassword: (request: ChangePasswordRequest) => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: (organization?: { tenantId: string; tenantSlug: string }) => Promise<void>;
   setAuthenticatedUser: (user: User | null) => void;
   refreshPermissions: () => Promise<CurrentUserPermissions | null>;
   hasPlatformPermission: (permission: string) => boolean;
@@ -336,19 +336,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
   /**
    * Refresh user data from server
    */
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (organization?: { tenantId: string; tenantSlug: string }) => {
     const generation = generationRef.current;
     const request = ++userRequestRef.current;
     const isCurrent = () => isCurrentSession(generation) && request === userRequestRef.current;
     try {
-      const nextUser = await authService.getMe();
+      // The replacement cookies already belong to the destination. Route the
+      // identity reads there before navigating away from the previous URL.
+      const [nextUser, nextPermissions] = await (organization
+        ? Promise.all([
+          authService.getMe(organization),
+          authService.getMyPermissions(organization).then(
+            (value): PromiseSettledResult<CurrentUserPermissions> => ({ status: 'fulfilled', value }),
+            (reason): PromiseSettledResult<CurrentUserPermissions> => ({ status: 'rejected', reason }),
+          ),
+        ])
+        : Promise.all([authService.getMe(), undefined]));
       if (!isCurrent()) return;
-      if (nextUser?.isEmailVerified === false) {
+      if (organization && (nextUser.id !== currentUserRef.current?.id
+        || nextUser.session?.tenant.id !== organization.tenantId)) {
+        throw new BrowserSessionChangedError();
+      }
+      if (nextUser.isEmailVerified === false) {
         clearAuth();
         return;
       }
       persistUser(nextUser);
-      await refreshPermissions();
+      await refreshPermissions(nextPermissions);
     } catch (error) {
       if (!isCurrent()) return;
       console.error('Failed to refresh user:', error);

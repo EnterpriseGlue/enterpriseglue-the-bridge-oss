@@ -3257,13 +3257,14 @@ registry.registerPath({
 registry.registerPath({
   method: 'get', path: '/api/auth/my-tenants',
   ...authzExemption('GET', '/api/auth/my-tenants'),
-  responses: { 200: { description: 'Active tenant memberships for the authenticated principal', content: { 'application/json': { schema: z.array(NativeTenantMembershipSchema) } } } },
+  request: { query: z.object({ includeSelectionHints: z.literal('true').optional() }) },
+  responses: { 200: { description: 'Tenant memberships and optional organization selection hints for the authenticated principal', content: { 'application/json': { schema: z.array(NativeTenantMembershipSchema) } } } },
 });
 registry.registerPath({
   method: 'post', path: '/api/auth/switch-tenant',
   ...authzExemption('POST', '/api/auth/switch-tenant'),
   request: { body: { content: { 'application/json': { schema: z.object({ tenantSlug: TenantSlugSchema }) } } } },
-  responses: { 200: { description: 'Tenant-bound replacement session issued', content: { 'application/json': { schema: z.object({ tenantId: z.string(), tenantSlug: TenantSlugSchema }) } } }, 403: { description: 'Active target-tenant membership is required' } },
+  responses: { 200: { description: 'Tenant-bound replacement session issued', content: { 'application/json': { schema: z.object({ tenantId: z.string(), tenantSlug: TenantSlugSchema }) } } }, 403: { description: 'Active target-tenant membership and its login policy are required. Company SSO denial uses TENANT_COMPANY_SSO_REQUIRED.' } },
 });
 registry.registerPath({
   method: 'get', path: '/api/platform/tenants',

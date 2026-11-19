@@ -1,6 +1,6 @@
 import { useState, FormEvent, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
-import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification } from '@carbon/react';
+import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification, SkeletonText } from '@carbon/react';
 import { useAuth } from '../shared/hooks/useAuth';
 import { apiClient, ApiError } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
@@ -10,6 +10,9 @@ import { toSafeInternalPath } from '../utils/safeNavigation';
 import { redirectTo, redirectToApi } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
 import { getTenancyCapabilities } from '../services/tenancy';
+import {
+  ORGANIZATION_SELECTION_PATH, rememberOrganizationDestination, safeOrganizationDestination, takeOrganizationDestination,
+} from '../features/organizations/organizationPaths';
 import type {
   PublicLoginMethodsResponse,
   PublicLoginProvider,
@@ -23,7 +26,8 @@ const TENANT_DISCOVERY_EMAIL_KEY = 'eg.tenancy.discoveryEmail';
 const SSO_REDIRECT_TRANSITION_MS = 600;
 
 interface LoginLocationState {
-  from?: { pathname?: unknown };
+  from?: { pathname?: string; search?: string; hash?: string };
+  requireCompanySso?: boolean;
 }
 
 type LoginField = 'email' | 'password' | 'discoveryEmail' | 'workspace' | 'ldapUsername' | 'ldapPassword';
@@ -105,14 +109,13 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [workspace, setWorkspace] = useState('');
-  const [organizationStep, setOrganizationStep] = useState<'email' | 'workspace' | 'tenants' | 'account-tenants' | 'account-empty'>('email');
+  const [organizationStep, setOrganizationStep] = useState<'email' | 'workspace' | 'tenants'>('email');
   const [organizationChoices, setOrganizationChoices] = useState<TenantDiscoveryMembership[]>([]);
   const [organizationNotice, setOrganizationNotice] = useState<string | null>(null);
   const [organizationError, setOrganizationError] = useState<string | null>(null);
   const [organizationLoading, setOrganizationLoading] = useState(false);
   const [cloudAccountProviders, setCloudAccountProviders] = useState<CloudAccountProvider[]>([]);
   const [cloudProviderError, setCloudProviderError] = useState<string | null>(null);
-  const [membershipAttempt, setMembershipAttempt] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [recoverySessionActive, setRecoverySessionActive] = useState(false);
   const [loginMethods, setLoginMethods] = useState<PublicLoginMethodsResponse | null>(null);
@@ -137,7 +140,13 @@ export default function Login() {
   const errorRef = useRef<HTMLDivElement | null>(null);
   const hasAppliedFirstFocusableState = useRef(false);
   const hasExchangedDiscoveryToken = useRef(false);
-  const tenantSwitchInFlight = useRef(false);
+  const transitioningToPicker = useRef(false);
+  const loginState = location.state as LoginLocationState | null;
+  const requested = loginState?.from;
+  const requireCompanySso = loginState?.requireCompanySso === true;
+  const requestedOrganizationPath = requested?.pathname
+    ? safeOrganizationDestination(`${requested.pathname}${requested.search ?? ''}${requested.hash ?? ''}`)
+    : undefined;
 
   const touchFields = useCallback((...fields: LoginField[]) => {
     setTouchedFields((current) => {
@@ -224,15 +233,14 @@ export default function Login() {
   }, [email, tenantSlug]);
 
   useEffect(() => {
-    if (isAuthLoading || !isAuthenticated || isOrganizationFinder || managedMfaRecovery) return;
+    if (isAuthLoading || !isAuthenticated || isOrganizationFinder || managedMfaRecovery || requireCompanySso) return;
 
     const params = new URLSearchParams(location.search);
     if (params.get('error')) return;
 
     const fallback = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}/` : `/t/${DEFAULT_TENANT_SLUG}/`;
-    const fromRaw = (location.state as LoginLocationState | null)?.from?.pathname;
-    navigate(toSafeInternalPath(fromRaw, fallback), { replace: true });
-  }, [isAuthLoading, isAuthenticated, isOrganizationFinder, location.search, location.state, managedMfaRecovery, navigate, tenantSlug]);
+    navigate(toSafeInternalPath(requestedOrganizationPath, fallback), { replace: true });
+  }, [isAuthLoading, isAuthenticated, isOrganizationFinder, location.search, location.state, managedMfaRecovery, navigate, requestedOrganizationPath, requireCompanySso, tenantSlug]);
 
   // Handle OAuth error messages (success now redirects directly to root)
   useEffect(() => {
@@ -268,45 +276,15 @@ export default function Login() {
     navigate(`/t/${encodeURIComponent(slug)}/login`, { replace: true });
   }, [navigate]);
 
-  const switchToAuthenticatedTenant = useCallback(async (membership: TenantDiscoveryMembership) => {
-    if (tenantSwitchInFlight.current) return;
-    tenantSwitchInFlight.current = true;
-    setOrganizationLoading(true);
-    setOrganizationError(null);
-    try {
-      await apiClient.post('/api/auth/switch-tenant', { tenantSlug: membership.tenantSlug });
-      redirectTo(`/t/${encodeURIComponent(membership.tenantSlug)}/`);
-    } catch {
-      tenantSwitchInFlight.current = false;
-      setOrganizationError('Could not open this organization. Your access may have changed. Try again.');
-      setOrganizationLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    if (!isOrganizationFinder || isAuthLoading || !isAuthenticated) return;
-    let cancelled = false;
-    setOrganizationLoading(true);
-    setOrganizationError(null);
-    apiClient.get<TenantDiscoveryMembership[]>('/api/auth/my-tenants')
-      .then((memberships) => {
-        if (cancelled) return;
-        const active = memberships.filter((membership) => membership.tenantStatus === 'active');
-        if (active.length === 1) {
-          void switchToAuthenticatedTenant(active[0]);
-        } else {
-          setOrganizationChoices(active);
-          setOrganizationStep(active.length ? 'account-tenants' : 'account-empty');
-          setOrganizationLoading(false);
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setOrganizationError('Could not load your organizations. Try again.');
-        setOrganizationLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [isOrganizationFinder, isAuthLoading, isAuthenticated, membershipAttempt, switchToAuthenticatedTenant]);
+    if (!isOrganizationFinder || isAuthLoading || !isAuthenticated || loginError || transitioningToPicker.current) return;
+    if (new URLSearchParams(location.search).has('error')) return;
+    transitioningToPicker.current = true;
+    navigate(ORGANIZATION_SELECTION_PATH, {
+      replace: true,
+      state: { destination: requestedOrganizationPath ?? takeOrganizationDestination() },
+    });
+  }, [isOrganizationFinder, isAuthLoading, isAuthenticated, loginError, location.search, navigate, requestedOrganizationPath]);
 
   useEffect(() => {
     if (!isOrganizationFinder || isAuthLoading || isAuthenticated || hasExchangedDiscoveryToken.current) return;
@@ -650,11 +628,7 @@ export default function Login() {
   if (isOrganizationFinder) {
     return (
       <PublicAuthShell
-        title={organizationStep === 'account-tenants' || organizationStep === 'tenants'
-          ? 'Choose an organization'
-          : organizationStep === 'account-empty'
-            ? 'No organization yet'
-            : 'Find your organization'}
+        title={organizationStep === 'tenants' ? 'Choose an organization' : 'Find your organization'}
         homePath="/"
         appearance="process"
       >
@@ -682,34 +656,8 @@ export default function Login() {
           subtitle={organizationNotice}
           style={{ marginBottom: 'var(--spacing-5)' }}
         />}
-        {isAuthLoading && <div role="status" aria-live="polite" style={{ padding: 'var(--spacing-4) 0' }}>
-          <InlineLoading description="Checking your account…" />
-        </div>}
-        {organizationLoading && <div role="status" aria-live="polite" style={{ padding: 'var(--spacing-4) 0' }}>
-          <InlineLoading description="Finding your organization…" />
-        </div>}
-
-        {isAuthenticated && organizationError && !organizationLoading && <Button type="button" kind="secondary" onClick={() => setMembershipAttempt((attempt) => attempt + 1)}>Retry</Button>}
-
-        {isAuthenticated && !organizationLoading && organizationStep === 'account-tenants' && <div>
-          <p className="eg-login-intro-copy">These are the organizations linked to your verified account.</p>
-          <div className="eg-login-provider-list">
-            {organizationChoices.map((tenant) => <Button
-              key={tenant.tenantId}
-              type="button"
-              kind="tertiary"
-              size="md"
-              className="eg-login-provider-button"
-              onClick={() => void switchToAuthenticatedTenant(tenant)}
-            >
-              <span className="eg-login-provider-button__action">{tenant.tenantName}</span>
-            </Button>)}
-          </div>
-        </div>}
-
-        {isAuthenticated && !organizationLoading && organizationStep === 'account-empty' && <div>
-          <p className="eg-login-intro-copy">Your account is verified, but it is not a member of an active organization. Ask an administrator for access or create one.</p>
-          <Button as={RouterLink} to="/cloud/onboarding" kind="primary">Create an organization</Button>
+        {(isAuthLoading || isAuthenticated || organizationLoading) && <div role="status" aria-label="Checking your account">
+          <SkeletonText paragraph lineCount={3} />
         </div>}
 
         {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-5)' }}>
@@ -724,7 +672,10 @@ export default function Login() {
               provider={{ ...provider, key: provider.id, organization: null, loginMethod: 'redirect', preferred: index === 0, loginDomains: [] }}
               primary={index === 0}
               disabled={false}
-              onClick={() => redirectTo(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/login')}`)}
+              onClick={() => {
+                rememberOrganizationDestination(requestedOrganizationPath);
+                redirectTo(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/login')}`);
+              }}
             />)}
           </div>
         </div>}
@@ -743,7 +694,7 @@ export default function Login() {
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && <>
           <form onSubmit={handleOrganizationEmailSubmit} noValidate>
           <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Continue with email</h2>
-          <p className="eg-login-intro-copy">Use a work or personal email linked to an organization. A verified work domain can open it directly; otherwise, an existing account receives a one-time link. Email alone does not grant access.</p>
+          <p className="eg-login-intro-copy">Use the email linked to your organization. A verified work domain can take you directly to sign-in.</p>
           <div style={{ marginBottom: 'var(--spacing-6)' }}>
             <TextInput
               id="organization-discovery-email"

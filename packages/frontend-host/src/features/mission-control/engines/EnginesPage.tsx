@@ -2012,7 +2012,9 @@ export default function Engines() {
             <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: 'var(--color-text-secondary)', maxWidth: '400px' }}>
               {manualEngineOnboardingAllowed
                 ? 'Get started by adding your first workflow engine connection'
-                : 'Engines are registered by external systems for this platform.'}
+                : cloudWorkspace
+                  ? 'There are no engines available in this organization.'
+                  : 'Engines are registered by external systems for this platform.'}
             </p>
           </div>
           {manualEngineOnboardingAllowed && (

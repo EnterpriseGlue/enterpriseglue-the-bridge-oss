@@ -69,7 +69,7 @@ async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | n
 }
 
 test.describe('Login experience screenshot gallery', () => {
-  test('uses global work-account sign-in before offering only authenticated organizations @identity-lifecycle', async ({ page, browserName }) => {
+  test('uses global work-account sign-in before offering only authenticated organizations @identity-lifecycle', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     let authenticated = false;
     let selectedTenant: string | null = null;
@@ -107,7 +107,7 @@ test.describe('Login experience screenshot gallery', () => {
       // provider callback return in the fixture without changing app routing.
       return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><script>location.replace("/login")</script>' });
     });
-    await page.route('**/api/auth/my-tenants', (route) => json(route, [
+    await page.route('**/api/auth/my-tenants**', (route) => json(route, [
       { tenantId: 'a', tenantSlug: 'alpha', tenantName: 'Alpha', tenantStatus: 'active', role: 'member' },
       { tenantId: 'b', tenantSlug: 'bravo', tenantName: 'Bravo', tenantStatus: 'active', role: 'member' },
       { tenantId: 'c', tenantSlug: 'disabled', tenantName: 'Disabled', tenantStatus: 'suspended', role: 'member' },
@@ -144,8 +144,9 @@ test.describe('Login experience screenshot gallery', () => {
     await captureManualScreenshot(page, '98-cloud-login-email-required.jpg');
     await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeFocused();
-    await expect(page.getByRole('button', { name: 'Bravo' })).toHaveClass(/eg-login-provider-button/);
+    const choices = page.getByRole('list', { name: 'Your organizations' });
+    await expect(choices.getByRole('link', { name: /Alpha/ })).toBeFocused();
+    await expect(choices.getByRole('link', { name: /Bravo/ })).toHaveClass(/cds--tile/);
     await captureManualScreenshot(page, '97-cloud-organization-chooser.jpg');
     await page.setViewportSize({ width: 320, height: 720 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -153,17 +154,16 @@ test.describe('Login experience screenshot gallery', () => {
     await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await page.evaluate(() => { document.documentElement.style.zoom = '1'; });
-    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
-    await expect(page.getByRole('button', { name: 'Alpha' })).toBeFocused();
-    await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
-    await expect(page.getByRole('button', { name: 'Bravo' })).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(choices.getByRole('link', { name: /Bravo/ })).toBeFocused();
     expect(providerReturnTo).toBe('/login');
-    await expect(page.getByRole('button', { name: 'Disabled' })).toHaveCount(0);
+    await expect(choices.getByText('Suspended')).toBeVisible();
+    await expect(choices.getByRole('link', { name: /Disabled/ })).toHaveCount(0);
     expect(selectedTenant).toBeNull();
-    await page.getByRole('button', { name: 'Bravo' }).click();
-    await expect(page.getByText('Could not open this organization. Your access may have changed. Try again.')).toBeVisible();
+    await choices.getByRole('link', { name: /Bravo/ }).click();
+    await expect(page.getByText('Could not open this organization. Try again or choose another organization.')).toBeVisible();
     expect(selectedTenant).toBe('bravo');
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/organizations\/select$/);
   });
 
   test('returning user: the linked method signs in and an unlinked method shows a stable error without reloading @identity-lifecycle', async ({ page }) => {

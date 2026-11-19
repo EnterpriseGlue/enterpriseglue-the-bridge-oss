@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import type { EnterpriseFrontendPlugin, FrontendPluginContext } from '@enterpriseglue/enterprise-plugin-api/frontend';
 import {
   Button,
@@ -127,7 +128,7 @@ export function createFrontendPluginContext(): FrontendPluginContext {
       InviteMemberModal,
       carbon: trustedModuleCarbonComponentsV1,
     },
-    hooks: { useAuth, useModal, useToast },
+    hooks: { useAuth, useModal, useToast, useNavigate },
     runtime: { react: React },
   };
 }
