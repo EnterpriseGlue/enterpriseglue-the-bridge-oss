@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.39.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.1...v0.39.0) (2026-11-19)
+
+### Changes
+
+- **runtime-logging:** Adds runtime log level and category controls, ECS-aligned JSON output, and safe TypeORM query diagnostics.
+- **mission-control:** Engine pickers show each engine's full friendly name on one readable line.
+- **project-git-settings:** The project Git settings token guide now shows instructions only for the Git provider in use instead of listing every provider.
+- **plugin-toolchain:** Build the plugin installer and manager acquisition tools with Go 1.26.11.
+- **login:** A returning user who signs in with a method their account has not connected now sees a clear, stable instruction to use the method they signed up with.
+- **tenant-workspace:** Reduces the work needed to open the dashboard and displays full engine names in the Mission Control engine selector.
+
+Full upgrade, compatibility and verification details: [v0.39.0 release notes](docs/releases/v0.39.0.md).
+
 ## [0.38.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.38.0...v0.38.1) (2026-11-16)
 
 ### Changes
