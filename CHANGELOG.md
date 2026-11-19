@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.0...v0.40.1) (2026-11-19)
 
+### Changes
 
-### Bug Fixes
+- **frontend:** Revalidates the browser entry document after an upgrade and opens verified workspaces while membership choices load.
 
-* **frontend:** revalidate app entry and open verified workspaces ([22d0307](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/22d03070e981c7580c1043e40c95039f8070bc2b))
-* **frontend:** revalidate app entry and open verified workspaces ([cecec13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cecec135df210058c09e11f63106a234a1d3ca8e))
+Full upgrade, compatibility and verification details: [v0.40.1 release notes](docs/releases/v0.40.1.md).
 
 ## [0.40.0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.39.0...v0.40.0) (2026-11-19)
 
