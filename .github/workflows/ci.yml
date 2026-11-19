@@ -1201,7 +1201,9 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
 
       - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          sudo bash scripts/ci-ubuntu-archive.sh
+          pnpm exec playwright install --with-deps chromium
 
       - name: Verify pooled evidence and disposable database runner contracts
         run: >-

@@ -31,7 +31,10 @@ jobs:
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with: { version: 11.0.8 }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - name: Install Chromium
+        run: |
+          sudo bash scripts/ci-ubuntu-archive.sh
+          pnpm exec playwright install --with-deps chromium
       - run: pnpm run test:oracle:nne:unit
       - run: node --test scripts/oracle-native-encryption-contract.test.mjs
       - name: Verify existing Oracle 21c Thin-mode database behavior
