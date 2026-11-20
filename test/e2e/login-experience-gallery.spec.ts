@@ -123,6 +123,56 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page.getByRole('button', { name: 'Sign in with Microsoft' })).toBeVisible();
     await expect(page.getByLabel('Email address')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
+    const main = page.getByRole('main', { name: 'Find your organization' });
+    for (const { width, columns, inset, headerGap } of [
+      { width: 1440, columns: 16, inset: 32, headerGap: 64 },
+      { width: 1056, columns: 16, inset: 32, headerGap: 64 },
+      { width: 768, columns: 8, inset: 32, headerGap: 64 },
+      { width: 320, columns: 4, inset: 16, headerGap: 32 },
+    ]) {
+      await page.setViewportSize({ width, height: 900 });
+      const geometry = await main.evaluate((grid) => {
+        const panel = grid.querySelector('.cds--tile')!.getBoundingClientRect();
+        const title = grid.querySelector('h1')!.getBoundingClientRect();
+        const email = grid.querySelector('input[type=email]')!.getBoundingClientRect();
+        const primary = grid.querySelector('button[type=submit]')!.getBoundingClientRect();
+        return {
+          columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+          center: (panel.left + panel.right) / 2,
+          inlineInset: title.left - panel.left,
+          topInset: title.top - panel.top,
+          headerGap: panel.top - document.querySelector('header')!.getBoundingClientRect().bottom,
+          aligned: title.left === email.left && email.left === primary.left && email.right === primary.right,
+          fitsViewport: document.documentElement.scrollWidth === document.documentElement.clientWidth,
+        };
+      });
+      expect(geometry.columns).toBe(columns);
+      expect(geometry.center).toBeCloseTo(width / 2, 0);
+      expect(geometry.inlineInset).toBe(inset);
+      expect(geometry.topInset).toBe(inset);
+      expect(geometry.headerGap).toBe(headerGap);
+      expect(geometry.aligned).toBe(true);
+      expect(geometry.fitsViewport).toBe(true);
+    }
+    await captureManualScreenshot(page, '96-cloud-login-entry-mobile.jpg', { stabilize: false });
+    await page.getByRole('button', { name: 'Use an organization name instead' }).click();
+    await expect(page.getByLabel('Organization name')).toBeFocused();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
+    await page.getByLabel('Organization name').fill('not a valid name');
+    await page.getByRole('button', { name: 'Use email instead' }).click();
+    await expect(page.getByLabel('Email address')).toBeFocused();
+    await page.getByRole('button', { name: 'Use an organization name instead' }).click();
+    const nameValidation = page.getByText('Use 1–63 lowercase letters, numbers, or hyphens');
+    await expect(nameValidation).toHaveCount(0);
+    await page.getByRole('button', { name: 'Continue', exact: true }).click();
+    await expect(nameValidation).toBeVisible();
+    await page.getByRole('button', { name: 'Use email instead' }).click();
+    await expect(page.getByLabel('Email address')).toBeFocused();
+    await page.setViewportSize({ width: 720, height: 900 });
+    await page.evaluate(() => { document.documentElement.style.zoom = '2'; });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
+    await page.evaluate(() => { document.documentElement.style.zoom = '1'; });
+    await page.setViewportSize({ width: 1440, height: 900 });
     const passkeyLink = page.getByRole('link', { name: 'Sign in with a passkey' });
     await expect(passkeyLink).toBeVisible();
     const passkeyBounds = await passkeyLink.boundingBox();

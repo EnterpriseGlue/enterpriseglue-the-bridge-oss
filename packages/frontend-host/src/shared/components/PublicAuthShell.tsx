@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Header, HeaderName, SkipToContent, Theme } from '@carbon/react';
+import { Column, Grid, Header, HeaderName, SkipToContent, Stack, Theme, Tile } from '@carbon/react';
 import type { PublicPlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js';
 import { apiClient } from '../api/client';
 import logoPng from '../../assets/logo.png';
@@ -163,6 +163,7 @@ interface PublicAuthShellProps {
   homePath?: string;
   panelSize?: 'default' | 'wide';
   appearance?: 'default' | 'process';
+  layout?: 'panel' | 'grid';
   children: React.ReactNode | ((branding: PublicAuthBrandingState) => React.ReactNode);
 }
 
@@ -200,6 +201,7 @@ export default function PublicAuthShell({
   homePath = '/',
   panelSize = 'default',
   appearance: requestedAppearance = 'process',
+  layout = 'panel',
   children,
 }: PublicAuthShellProps) {
   const workspaceHeader = useWorkspaceHeader();
@@ -207,6 +209,10 @@ export default function PublicAuthShell({
   const localBranding = usePublicAuthBranding(!workspaceHeader);
   const branding = workspaceHeader?.branding ?? localBranding;
   const headingId = 'public-auth-page-title';
+  const mainAttributes = { id: 'public-auth-main', 'aria-labelledby': headingId, tabIndex: -1 };
+  const gridLayout = layout === 'grid';
+  const heading = <h1 id={headingId} className={gridLayout ? 'eg-login-grid-title' : 'eg-login-title'} tabIndex={-1}>{title}</h1>;
+  const content = typeof children === 'function' ? children(branding) : children;
   // Give the standard login wordmark more presence without replacing custom fonts/sizes.
   const useLoginBrandDefaults = appearance === 'process' && !branding.titleFontFamily && branding.titleFontSize === 14;
 
@@ -224,16 +230,26 @@ export default function PublicAuthShell({
           </HeaderName>
         </Header>
       </Theme>}
-      <main id="public-auth-main" className="eg-login-page" aria-labelledby={headingId} tabIndex={-1}>
+      {gridLayout ? <Grid as="main" {...mainAttributes} className="eg-login-grid">
+        <Column sm={4} md={{ start: 2, span: 6 }} lg={{ start: 5, span: 8 }} xlg={{ start: 6, span: 6 }}>
+          <Tile className="eg-login-grid-panel">
+            <Stack gap={7}>
+              {heading}
+              {description && <p className="eg-login-grid-copy">{description}</p>}
+              <Stack gap={6}>{content}</Stack>
+            </Stack>
+          </Tile>
+        </Column>
+      </Grid> : <main {...mainAttributes} className="eg-login-page">
         {appearance === 'process' && <div className="eg-login-landscape" aria-hidden="true">
           <img src={processLandscape} alt="" />
         </div>}
         <section className={`eg-login-panel${panelSize === 'wide' ? ' eg-login-panel--wide' : ''}`}>
-          <h1 id={headingId} className="eg-login-title" tabIndex={-1}>{title}</h1>
+          {heading}
           {description && <p className="eg-public-auth-description">{description}</p>}
-          {typeof children === 'function' ? children(branding) : children}
+          {content}
         </section>
-      </main>
+      </main>}
     </div>
   );
   return appearance === 'process' ? <Theme theme="g100">{shell}</Theme> : shell;
