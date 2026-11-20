@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.3...v0.40.4) (2026-11-20)
+
+
+### Bug Fixes
+
+* **frontend:** load workspace dashboards progressively ([e9fb35a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e9fb35a06d4d9e49464da49f6bbfaaa492585aa4))
+* **frontend:** load workspace dashboards progressively ([eb49375](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/eb49375d1db24847b7601b56c07550181383e750))
+
 ## [0.40.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.2...v0.40.3) (2026-11-20)
 
 ### Changes
