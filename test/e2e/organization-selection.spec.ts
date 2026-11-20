@@ -165,7 +165,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
         }],
       })
     })
-    await page.route(`**/t/northwind${entryUrl}`, route => route.fulfill({
+    await page.route(url => url.pathname === `/t/northwind${entryUrl}`, route => route.fulfill({
       contentType: 'application/javascript',
       body: `export default {
         apiVersion: 'frontend.plugin.enterpriseglue.io/v1', pluginId: '${pluginId}', version: '${pluginVersion}',
