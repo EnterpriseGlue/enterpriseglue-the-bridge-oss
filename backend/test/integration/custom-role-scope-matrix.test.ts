@@ -222,11 +222,26 @@ describe('custom role scope matrix (database)', () => {
     expect(engineSetDecision.sources).toEqual(expect.arrayContaining([
       expect.objectContaining({ principalType: 'group', principalId: groupId, scopeType: 'engine_set', scopeId: engineSetId }),
     ]));
+    const [directSnapshot, groupSnapshot, otherTenantSnapshot] = await Promise.all([
+      permissionService.getCurrentUserPermissions(directUserId, tenantId),
+      permissionService.getCurrentUserPermissions(groupUserId, tenantId),
+      permissionService.getCurrentUserPermissions(groupUserId, `${tenantId}-other`),
+    ]);
+    expect(directSnapshot.projects.map(({ resourceId }) => resourceId)).toEqual([projectId]);
+    expect(groupSnapshot.engines).toEqual(expect.arrayContaining([
+      expect.objectContaining({ resourceId: engineSetEngineId, permissions: expect.arrayContaining([EnginePermissions.INSTANCE_VIEW]) }),
+      expect.objectContaining({ resourceId: runtimeEngineId, runtimePermissions: [EnginePermissions.INSTANCE_VIEW] }),
+    ]));
+    expect(otherTenantSnapshot.projects).toEqual([]);
+    expect(otherTenantSnapshot.engines).toEqual([]);
+
     const dataSource = await getDataSource();
     const materialization = await dataSource.getRepository(EngineSetMaterialization).findOneBy({ engineSetId, engineId: engineSetEngineId });
     expect(materialization).not.toBeNull();
     await dataSource.getRepository(EngineSetMaterialization).delete({ id: materialization!.id });
     await expect(check(EnginePermissions.INSTANCE_VIEW, groupUserId, 'engine', engineSetEngineId)).resolves.toBe(false);
+    const reducedSnapshot = await permissionService.getCurrentUserPermissions(groupUserId, tenantId);
+    expect(reducedSnapshot.engines.map(({ resourceId }) => resourceId)).not.toContain(engineSetEngineId);
     await dataSource.getRepository(EngineSetMaterialization).insert(materialization!);
     await expect(check(EnginePermissions.INSTANCE_VIEW, groupUserId, 'engine', engineSetEngineId)).resolves.toBe(true);
 

@@ -19,15 +19,13 @@ import {
 } from '@carbon/react'
 import { UserAvatar, FolderOpen, Chip, Activity, Checkmark, Time, WarningAlt } from '@carbon/icons-react'
 import { useDashboardFilterStore } from '../stores/dashboardFilterStore'
-import { apiClient } from '../shared/api/client'
 import { fetchList } from '../shared/api/fetchList';
 import { EngineSelector, useEngineSelection } from '../components/EngineSelector'
 import { useAuth } from '../shared/hooks/useAuth'
 import { ExtensionSlot } from '../enterprise/ExtensionSlot'
-import { canReadDashboard, dashboardContextQuery } from '../features/dashboard/dashboardQueries'
+import { canReadDashboard, dashboardContextQuery, dashboardStatsQuery } from '../features/dashboard/dashboardQueries'
 import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../shared/auth/guards'
-import type { DashboardStats } from '@enterpriseglue/shared/schemas/dashboard.js'
 import type { ProcessInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { PageHeader, PageLayout, PAGE_GRADIENTS } from '../shared/components/PageLayout'
 
@@ -238,11 +236,7 @@ export default function Dashboard() {
   const selectedEngineHasScopedRuntimeAccess = Boolean(selectedEngineId && ctx?.runtimeScopedEngineIds?.includes(selectedEngineId))
 
   // Fetch dashboard stats
-  const statsQuery = useQuery({
-    queryKey: ['dashboard-stats', scope],
-    queryFn: () => apiClient.get<DashboardStats>('/api/dashboard/stats'),
-    enabled: canViewDashboard,
-  })
+  const statsQuery = useQuery({ ...dashboardStatsQuery(scope), enabled: canViewDashboard })
 
   // Fetch users
   const usersQuery = useQuery({
