@@ -6,12 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.5...v0.40.6) (2026-11-20)
 
+### Changes
 
-### Bug Fixes
+- **dashboard:** Starts project and file totals earlier on workspace reload and reduces duplicate database reads during permission loading.
 
-* **dashboard:** keep project count request alive after sign-in ([fbb341a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fbb341a7d666ba9196d4505cf9e5c5e25b58960f))
-* **dashboard:** start project totals earlier on workspace reload ([f54ca61](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f54ca61a6b8722a2bbae1fd5851b56cb0fbf1365))
-* **dashboard:** start project totals earlier on workspace reload ([eb87935](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/eb87935504b603d87169606c8c978829887b192b))
+Full upgrade, compatibility and verification details: [v0.40.6 release notes](docs/releases/v0.40.6.md).
 
 ## [0.40.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.4...v0.40.5) (2026-11-20)
 
