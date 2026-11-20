@@ -3241,10 +3241,11 @@ class PermissionServiceClass {
   private async getCurrentUserPermissionsScoped(userId: string, tenantId?: string | null): Promise<CurrentUserPermissionsSnapshot> {
     const dataSource = await getDataSource();
     const generatedAt = Date.now();
-    const [projectIds, engineIds, groupIds, catalog] = await Promise.all([
-      this.getKnownProjectIds(dataSource, userId, tenantId),
-      this.getKnownEngineIds(dataSource, userId, tenantId),
-      this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId),
+    const discovery = this.getResourceDiscoveryPrincipal(dataSource, userId, tenantId);
+    const [projectIds, engineIds, { groupIds }, catalog] = await Promise.all([
+      this.getKnownProjectIds(dataSource, userId, tenantId, discovery),
+      this.getKnownEngineIds(dataSource, userId, tenantId, discovery),
+      discovery,
       this.getPermissionCatalog(dataSource),
     ]);
 
@@ -3476,7 +3477,18 @@ class PermissionServiceClass {
       .sort();
   }
 
-  private async getKnownProjectIds(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
+  private async getResourceDiscoveryPrincipal(dataSource: DataSource, userId: string, tenantId?: string | null) {
+    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
+    const hasTenantAssignment = await this.hasActiveTenantAssignment(dataSource, userId, groupIds, tenantId);
+    return { groupIds, hasTenantAssignment };
+  }
+
+  private async getKnownProjectIds(
+    dataSource: DataSource,
+    userId: string,
+    tenantId?: string | null,
+    discovery = this.getResourceDiscoveryPrincipal(dataSource, userId, tenantId),
+  ): Promise<string[]> {
     const ids = new Set<string>();
     const normalizedTenantId = normalizeTenantId(tenantId);
     const explicitGrantQb = dataSource.getRepository(PermissionGrant)
@@ -3486,14 +3498,12 @@ class PermissionServiceClass {
       .andWhere('grant.resourceType = :resourceType', { resourceType: 'project' })
       .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now: Date.now() });
     addTenantScopeFilter(explicitGrantQb, 'grant', tenantId);
-    const explicitGrants = await explicitGrantQb.getMany();
+    const [explicitGrants, { groupIds, hasTenantAssignment }] = await Promise.all([explicitGrantQb.getMany(), discovery]);
     const hasGlobalExplicitGrant = explicitGrants.some((grant) => grant.resourceId === null);
     explicitGrants.forEach((grant) => {
       if (grant.resourceId) ids.add(grant.resourceId);
     });
 
-    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
-    const hasTenantAssignment = await this.hasActiveTenantAssignment(dataSource, userId, groupIds, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
       .select(['assignment.scopeId'])
@@ -3503,34 +3513,30 @@ class PermissionServiceClass {
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
-    const assignments = await assignmentQb.getMany();
+    const projectRepo = dataSource.getRepository(Project);
+    const [assignments, inheritedProjects, explicitlyGrantedProjects] = await Promise.all([
+      assignmentQb.getMany(),
+      hasTenantAssignment && normalizedTenantId ? projectRepo.find({
+        where: tenantOwnedWhere({}, normalizedTenantId),
+        select: ['id'],
+      }) : [],
+      hasGlobalExplicitGrant ? projectRepo.find({
+        where: normalizedTenantId ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }] : undefined,
+        select: ['id'],
+      }) : [],
+    ]);
     assignments.forEach((assignment) => {
       const projectId = assignment.scopeId;
       if (projectId) ids.add(projectId);
     });
 
-    if (hasTenantAssignment && normalizedTenantId) {
-      const projects = await dataSource.getRepository(Project).find({
-        where: tenantOwnedWhere({}, normalizedTenantId),
-        select: ['id'],
-      });
-      projects.forEach((project) => ids.add(project.id));
-    }
-
-    if (hasGlobalExplicitGrant) {
-      const projects = await dataSource.getRepository(Project).find({
-        where: normalizedTenantId
-          ? [{ tenantId: normalizedTenantId }, { tenantId: IsNull() }]
-          : undefined,
-        select: ['id'],
-      });
-      projects.forEach((project) => ids.add(project.id));
-    }
+    inheritedProjects.forEach((project) => ids.add(project.id));
+    explicitlyGrantedProjects.forEach((project) => ids.add(project.id));
 
     if (!normalizedTenantId || ids.size === 0) {
       return Array.from(ids).sort();
     }
-    const visibleProjects = await dataSource.getRepository(Project).find({
+    const visibleProjects = await projectRepo.find({
       where: [
         { id: In(Array.from(ids)), tenantId: normalizedTenantId },
         { id: In(Array.from(ids)), tenantId: IsNull() },
@@ -3540,7 +3546,12 @@ class PermissionServiceClass {
     return visibleProjects.map((project) => project.id).sort();
   }
 
-  private async getKnownEngineIds(dataSource: DataSource, userId: string, tenantId?: string | null): Promise<string[]> {
+  private async getKnownEngineIds(
+    dataSource: DataSource,
+    userId: string,
+    tenantId?: string | null,
+    discovery = this.getResourceDiscoveryPrincipal(dataSource, userId, tenantId),
+  ): Promise<string[]> {
     const ids = new Set<string>();
     const normalizedTenantId = normalizeTenantId(tenantId);
     const explicitGrantQb = dataSource.getRepository(PermissionGrant)
@@ -3550,14 +3561,12 @@ class PermissionServiceClass {
       .andWhere('grant.resourceType = :resourceType', { resourceType: 'engine' })
       .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now: Date.now() });
     addTenantScopeFilter(explicitGrantQb, 'grant', tenantId);
-    const explicitGrants = await explicitGrantQb.getMany();
+    const [explicitGrants, { groupIds, hasTenantAssignment }] = await Promise.all([explicitGrantQb.getMany(), discovery]);
     const hasGlobalExplicitGrant = explicitGrants.some((grant) => grant.resourceId === null);
     explicitGrants.forEach((grant) => {
       if (grant.resourceId) ids.add(grant.resourceId);
     });
 
-    const groupIds = await this.getUserGroupIdsForEvaluation(dataSource, userId, tenantId);
-    const hasTenantAssignment = await this.hasActiveTenantAssignment(dataSource, userId, groupIds, tenantId);
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
       .select(['assignment.scopeId'])
@@ -3566,12 +3575,6 @@ class PermissionServiceClass {
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
-    const assignments = await assignmentQb.getMany();
-    const hasGlobalEngineAssignment = assignments.some((assignment) => assignment.scopeId === null);
-    assignments.forEach((assignment) => {
-      const engineId = assignment.scopeId;
-      if (engineId) ids.add(engineId);
-    });
 
     const engineSetAssignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
@@ -3580,7 +3583,25 @@ class PermissionServiceClass {
       .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
     this.addPrincipalAssignmentFilter(engineSetAssignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(engineSetAssignmentQb, 'assignment', tenantId);
-    const engineSetAssignments = await engineSetAssignmentQb.getMany();
+    // Runtime-resource assignments are not engine-wide grants, but the user
+    // must still be able to discover the containing central engine before a
+    // later route filters its process/decision resources.
+    const runtimeAssignmentQb = dataSource.getRepository(RbacRoleAssignment)
+      .createQueryBuilder('assignment')
+      .select(['assignment.scopeType', 'assignment.scopeId'])
+      .where('assignment.scopeType IN (:...scopeTypes)', {
+        scopeTypes: ['engine_runtime_resource', 'engine_runtime_resource_set'],
+      })
+      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
+    this.addPrincipalAssignmentFilter(runtimeAssignmentQb, 'assignment', userId, groupIds);
+    addTenantScopeFilter(runtimeAssignmentQb, 'assignment', tenantId);
+    const [assignments, engineSetAssignments, runtimeAssignments] = await Promise.all([
+      assignmentQb.getMany(), engineSetAssignmentQb.getMany(), runtimeAssignmentQb.getMany(),
+    ]);
+    const hasGlobalEngineAssignment = assignments.some((assignment) => assignment.scopeId === null);
+    assignments.forEach((assignment) => {
+      if (assignment.scopeId) ids.add(assignment.scopeId);
+    });
     const engineSetIds = Array.from(new Set(engineSetAssignments.map((assignment) => assignment.scopeId).filter((id): id is string => Boolean(id))));
     if (engineSetIds.length > 0) {
       const materializations = await dataSource.getRepository(EngineSetMaterialization).find({
@@ -3594,20 +3615,6 @@ class PermissionServiceClass {
       });
       materializations.forEach((materialization) => ids.add(materialization.engineId));
     }
-
-    // Runtime-resource assignments are not engine-wide grants, but the user
-    // must still be able to discover the containing central engine before a
-    // later route filters its process/decision resources.
-    const runtimeAssignmentQb = dataSource.getRepository(RbacRoleAssignment)
-      .createQueryBuilder('assignment')
-      .select(['assignment.scopeType', 'assignment.scopeId'])
-      .where('assignment.scopeType IN (:...scopeTypes)', {
-        scopeTypes: ['engine_runtime_resource', 'engine_runtime_resource_set'],
-      })
-      .andWhere('(assignment.expiresAt IS NULL OR assignment.expiresAt > :now)', { now: Date.now() });
-    this.addPrincipalAssignmentFilter(runtimeAssignmentQb, 'assignment', userId, groupIds);
-    addTenantScopeFilter(runtimeAssignmentQb, 'assignment', tenantId);
-    const runtimeAssignments = await runtimeAssignmentQb.getMany();
     const runtimeResourceIds = runtimeAssignments
       .filter((assignment) => assignment.scopeType === 'engine_runtime_resource')
       .map((assignment) => assignment.scopeId)

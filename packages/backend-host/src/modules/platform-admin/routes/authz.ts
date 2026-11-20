@@ -240,22 +240,23 @@ router.get('/api/authz/me/permissions', apiLimiter, requireCloudAccountOrTenantA
       }));
     }
     const tenantId = effectiveTenantId(req);
-    const snapshot = await permissionService.getCurrentUserPermissions(req.user!.userId, tenantId);
-    const [settings, engines] = await Promise.all([
-      platformSettingsService.get(),
-      snapshot.engines.length > 0
-        ? (await getDataSource()).getRepository(Engine).find({
-            where: { id: In(snapshot.engines.map(({ resourceId }) => resourceId)) },
-            select: {
-              id: true,
-              registrationSource: true,
-              sourceRef: true,
-              ownershipMode: true,
-              lifecycleStatus: true,
-            },
-          })
-        : Promise.resolve([]),
-    ]);
+    const snapshotWithEngines = permissionService.getCurrentUserPermissions(req.user!.userId, tenantId)
+      .then(async (snapshot) => {
+        const engines = snapshot.engines.length > 0
+          ? await (await getDataSource()).getRepository(Engine).find({
+              where: { id: In(snapshot.engines.map(({ resourceId }) => resourceId)) },
+              select: {
+                id: true,
+                registrationSource: true,
+                sourceRef: true,
+                ownershipMode: true,
+                lifecycleStatus: true,
+              },
+            })
+          : [];
+        return { snapshot, engines };
+      });
+    const [{ snapshot, engines }, settings] = await Promise.all([snapshotWithEngines, platformSettingsService.get()]);
     const availability = calculateCurrentUserActionAvailability(snapshot, settings, engines);
     const projectAvailability = new Map(availability.projects.map((item) => [item.resourceId, item.actionAvailability]));
     const engineAvailability = new Map(availability.engines.map((item) => [item.resourceId, item.actionAvailability]));

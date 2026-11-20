@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import type { DashboardContext } from '@enterpriseglue/shared/schemas/dashboard.js'
+import type { DashboardContext, DashboardStats } from '@enterpriseglue/shared/schemas/dashboard.js'
 import { apiClient } from '../../shared/api/client'
 import { evaluateActionSnapshot } from '../../shared/auth/guards'
 import type { CurrentUserPermissions } from '../../shared/types/auth'
@@ -13,5 +13,14 @@ export function dashboardContextQuery(scope: string) {
     queryKey: ['dashboard-context', scope],
     queryFn: () => apiClient.get<DashboardContext>('/api/dashboard/context'),
     staleTime: 60000,
+  })
+}
+
+export function dashboardStatsQuery(scope: string) {
+  return queryOptions({
+    queryKey: ['dashboard-stats', scope],
+    queryFn: ({ signal }) => apiClient.get<DashboardStats>('/api/dashboard/stats', undefined, { signal }),
+    // Let the dashboard use the response that arrived while its route loaded.
+    staleTime: 5_000,
   })
 }

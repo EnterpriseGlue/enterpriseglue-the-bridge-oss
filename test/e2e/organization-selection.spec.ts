@@ -115,10 +115,12 @@ test.describe('Cloud organization selection @organization-selection @identity-li
   test('renders dashboard sections as each request finishes while plugins load', async ({ page }) => {
     await installAccount(page, [alpha, bravo], false, alpha)
     const releasePermissions = Promise.withResolvers<void>()
+    const releaseCapabilities = Promise.withResolvers<void>()
     const releasePlugins = Promise.withResolvers<void>()
     const releaseEngines = Promise.withResolvers<void>()
     const releaseInstances = Promise.withResolvers<void>()
     const permissionRequest = Promise.withResolvers<void>()
+    const capabilitiesRequest = Promise.withResolvers<void>()
     const pluginRequest = Promise.withResolvers<void>()
     const engineRequest = Promise.withResolvers<void>()
     const instanceRequest = Promise.withResolvers<void>()
@@ -136,6 +138,11 @@ test.describe('Cloud organization selection @organization-selection @identity-li
     await page.route('**/api/authz/me/permissions', async route => {
       permissionRequest.resolve()
       await releasePermissions.promise
+      await route.fallback()
+    })
+    await page.route('**/api/tenancy/capabilities', async route => {
+      capabilitiesRequest.resolve()
+      await releaseCapabilities.promise
       await route.fallback()
     })
     await page.route('**/api/plugins/v1/frontend', async route => {
@@ -201,9 +208,12 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       .filter({ has: page.getByText(label, { exact: true }) })
     try {
       await page.goto('/t/northwind/')
-      await permissionRequest.promise
+      await Promise.all([permissionRequest.promise, capabilitiesRequest.promise])
       expect(dashboardReads).toEqual([])
       releasePermissions.resolve()
+      const statsReads = () => dashboardReads.filter(path => path.endsWith('/api/dashboard/stats'))
+      await expect.poll(statsReads).toHaveLength(1)
+      releaseCapabilities.resolve()
       await Promise.all([pluginRequest.promise, engineRequest.promise])
       await expect(dashboard(page)).toBeVisible()
       await expect(card('Projects').getByText('3', { exact: true })).toBeVisible()
@@ -219,6 +229,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       releaseInstances.resolve()
       await expect(card('Instances').getByText('1', { exact: true })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Process States' })).toBeVisible()
+      expect(statsReads()).toHaveLength(1)
       expect(dashboardReads.filter(path => path.endsWith('/engines-api/engines'))).toHaveLength(1)
       expect(dashboardReads.every(path => path.startsWith('/t/northwind/'))).toBe(true)
       const voyager = header(page).getByRole('link', { name: 'Voyager', exact: true })
@@ -229,6 +240,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       await expect(page.getByRole('heading', { name: 'Reporting workspace' })).toBeVisible()
     } finally {
       releasePermissions.resolve()
+      releaseCapabilities.resolve()
       releasePlugins.resolve()
       releaseEngines.resolve()
       releaseInstances.resolve()

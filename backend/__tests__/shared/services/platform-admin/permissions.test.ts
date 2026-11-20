@@ -1668,6 +1668,7 @@ describe('permissionService', () => {
 
     const snapshot = await permissionService.getCurrentUserPermissions('user-1');
 
+    expect(groupMembership.qb.getMany).toHaveBeenCalledTimes(1);
     expect(snapshot.userId).toBe('user-1');
     expect(snapshot.authorizationVersion).toBe('authz:test');
     expect(snapshot.platform).toEqual([]);
