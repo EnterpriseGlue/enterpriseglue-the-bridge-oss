@@ -137,8 +137,11 @@ function endpointFromPolicy(
       segment === '{tenant}' ? encodeURIComponent(tenantRef) : segment,
     )
     .join('/');
+  const basePath = endpoint.pathname;
+  let basePathEnd = basePath.length;
+  while (basePathEnd > 0 && basePath[basePathEnd - 1] === '/') basePathEnd--;
   endpoint.pathname = [
-    endpoint.pathname.replace(/\/+$/, ''),
+    basePath.slice(0, basePathEnd),
     boundPath,
     relativePath,
   ]

@@ -85,7 +85,9 @@ function membershipIdentity(directoryId: string, groupLinkId: string, userLinkId
 }
 
 function baseUrl(value: string): string {
-  return value.replace(/\/+$/, '');
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
 }
 
 function etag(version: number): string {
