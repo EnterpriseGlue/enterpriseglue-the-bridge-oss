@@ -82,12 +82,13 @@ describe('ScimService relational lifecycle', () => {
   }
 
   it('creates, filters, retrieves, and rejects unsafe email or external-id collisions', async () => {
-    const alice = await service.createUser(context, {
+    const alice = await service.createUser({ ...context, baseUrl: context.baseUrl + '///' }, {
       schemas: [SCIM_USER_SCHEMA], externalId: 'wd-100', userName: 'alice@example.test',
       name: { givenName: 'Alice', familyName: 'Ng' }, active: true,
       emails: [{ value: 'alice@example.test', primary: true }],
     });
     expect(alice).toMatchObject({ externalId: 'wd-100', userName: 'alice@example.test', active: true, meta: { version: 'W/"1"' } });
+    expect(alice.meta.location).toBe(`${context.baseUrl}/Users/${alice.id}`);
     const aliceLink = await dataSource.getRepository(ScimUserLink).findOneByOrFail({ id: alice.id });
     expect(await dataSource.getRepository(User).findOneByOrFail({ id: aliceLink.userId })).toMatchObject({
       email: 'alice@example.test', authProvider: 'scim', passwordHash: null, platformRole: 'user', isActive: true,

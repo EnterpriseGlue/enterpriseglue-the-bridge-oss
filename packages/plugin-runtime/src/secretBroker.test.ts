@@ -204,12 +204,14 @@ async function fixture() {
 describe('plugin secret-reference broker', () => {
   it('uses the secret without returning it and binds the signed tenant', async () => {
     const files = await fixture();
+    const brokerPolicy = policy(files.credentialFile);
+    brokerPolicy.entries[0].baseUrl = 'https://support.example/gateway///';
     const request = vi.fn(async (
       url: URL,
       init?: Parameters<PluginSecretBrokerFetchV1>[1],
     ) => {
       expect(String(url)).toBe(
-        'https://support.example/t/tenant-1/support-agent-api/v1/cases',
+        'https://support.example/gateway/t/tenant-1/support-agent-api/v1/cases',
       );
       expect(new Headers(init?.headers).get('authorization')).toBe(
         `Bearer ${secret}`,
@@ -233,7 +235,7 @@ describe('plugin secret-reference broker', () => {
       invocationToken: files.token,
       invocationPublicKey: files.keys.publicKey,
       expectedDeploymentRef: 'deployment-1',
-      policy: policy(files.credentialFile),
+      policy: brokerPolicy,
       replayStore: new MemoryReplayStore(),
       secretRoot: files.secretRoot,
       fetchImplementation: request,
