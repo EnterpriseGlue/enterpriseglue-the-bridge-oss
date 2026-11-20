@@ -280,6 +280,29 @@ test.describe('Cloud organization selection @organization-selection @identity-li
     expect(session.documentRequests()).toBe(count)
   })
 
+  test('leaves space below the header on desktop and narrow screens', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await installAccount(page, [alpha, bravo])
+    await signIn(page)
+    await expect(picker(page)).toBeVisible()
+
+    for (const { width, height, minimumGap } of [
+      { width: 1440, height: 900, minimumGap: 64 },
+      { width: 320, height: 640, minimumGap: 32 },
+    ]) {
+      await page.setViewportSize({ width, height })
+      const headerBounds = (await header(page).boundingBox())!
+      const headingBounds = (await picker(page).boundingBox())!
+      const gap = headingBounds.y - (headerBounds.y + headerBounds.height)
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth)
+      expect.soft(gap, `header gap at ${width}px`).toBeGreaterThanOrEqual(minimumGap)
+      expect.soft(scrollWidth, `page width at ${width}px`).toBeLessThanOrEqual(width)
+      await testInfo.attach(`organization-picker-${width}`, {
+        body: await page.screenshot(), contentType: 'image/png',
+      })
+    }
+  })
+
   test('shows real membership labels throughout the cloud account journey', async ({ page }) => {
     await installAccount(page, [alpha, bravo])
     await signIn(page)

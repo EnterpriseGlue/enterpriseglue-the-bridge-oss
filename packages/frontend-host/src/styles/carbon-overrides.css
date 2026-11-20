@@ -2583,7 +2583,13 @@
 .eg-organization-picker {
   inline-size: 100%;
   max-inline-size: 80rem;
-  padding-block: var(--cds-spacing-07);
+  padding-block: var(--spacing-10) var(--spacing-6);
+}
+
+@media (max-width: 42rem) {
+  .eg-organization-picker {
+    padding-block-start: var(--spacing-6);
+  }
 }
 
 .eg-organization-form {
