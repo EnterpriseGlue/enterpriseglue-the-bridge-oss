@@ -19,7 +19,8 @@ export function dashboardContextQuery(scope: string) {
 export function dashboardStatsQuery(scope: string) {
   return queryOptions({
     queryKey: ['dashboard-stats', scope],
-    queryFn: ({ signal }) => apiClient.get<DashboardStats>('/api/dashboard/stats', undefined, { signal }),
+    // The login redirect can unmount the initial dashboard before this read finishes.
+    queryFn: () => apiClient.get<DashboardStats>('/api/dashboard/stats'),
     // Let the dashboard use the response that arrived while its route loaded.
     staleTime: 5_000,
   })
