@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.5...v0.40.6) (2026-11-20)
+
+### Changes
+
+- **dashboard:** Starts project and file totals earlier on workspace reload and reduces duplicate database reads during permission loading.
+
+Full upgrade, compatibility and verification details: [v0.40.6 release notes](docs/releases/v0.40.6.md).
+
 ## [0.40.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.4...v0.40.5) (2026-11-20)
 
 ### Changes
