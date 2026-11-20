@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.5](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.4...v0.40.5) (2026-11-20)
+
+
+### Bug Fixes
+
+* **frontend:** align organization sign-in to the Carbon grid ([bf26412](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bf264124decd1258a0868407c7023b512e1cc778))
+* **frontend:** align organization sign-in to the Carbon grid ([48a71da](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/48a71dae141ca1652268d20e974bf8329cc40e53))
+
 ## [0.40.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.3...v0.40.4) (2026-11-20)
 
 ### Changes
