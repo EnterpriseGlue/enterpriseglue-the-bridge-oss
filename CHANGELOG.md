@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.2...v0.40.3) (2026-11-20)
 
+### Changes
 
-### Bug Fixes
+- **frontend:** Adds space below the header on the organization picker.
 
-* **frontend:** add space below the organization picker header ([7890c44](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7890c4419d9f56c4066b27da6442f01fb15272d1))
-* **frontend:** add space below the organization picker header ([728c99f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/728c99ff64fdcfcf57717ca9ad02efce4193422c))
+Full upgrade, compatibility and verification details: [v0.40.3 release notes](docs/releases/v0.40.3.md).
 
 ## [0.40.2](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.1...v0.40.2) (2026-11-19)
 
