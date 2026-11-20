@@ -253,6 +253,40 @@ describe('native plugin frontend host', () => {
     });
   });
 
+  it('discards a deferred plugin whose organization changes during activation', async () => {
+    let current = true;
+    let notifyActivation!: (host: FrontendPluginHostContextV1) => void;
+    const activationStarted = new Promise<FrontendPluginHostContextV1>((resolve) => { notifyActivation = resolve; });
+    let finishActivation!: (contributions: Record<string, never>) => void;
+    const activationResult = new Promise<Record<string, never>>((resolve) => { finishActivation = resolve; });
+    const deactivate = vi.fn();
+    const entryUrl = `/_enterpriseglue/plugins/${pluginId}/${version}/frontend/index.js`;
+    const importer = vi.fn(async () => ({
+      default: {
+        apiVersion: 'frontend.plugin.enterpriseglue.io/v1', pluginId, version, deactivate,
+        activate: (host: FrontendPluginHostContextV1) => {
+          notifyActivation(host);
+          return activationResult;
+        },
+      },
+    }));
+    const loading = activateNativePluginBootstrapV1({
+      apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1',
+      revision: 3,
+      issues: [],
+      plugins: [{ pluginId, version, displayName: 'Reference', manifest: manifest(), entryUrl }],
+    }, importer, undefined, { tenantSlug: 'northwind', isCurrent: () => current });
+
+    const startupHost = await activationStarted;
+    current = false;
+    await expect(startupHost.api.request(`${pluginId}.read`)).rejects.toMatchObject({ code: 'BROWSER_SESSION_CHANGED' });
+    finishActivation({});
+    await expect(loading).rejects.toMatchObject({ code: 'BROWSER_SESSION_CHANGED' });
+    expect(importer).toHaveBeenCalledWith(`/t/northwind${entryUrl}`);
+    expect(deactivate).toHaveBeenCalledOnce();
+    expect(getNativePluginRoutesV1('tenant')).toEqual([]);
+  });
+
   it('activates a plural namespaced module and exposes typed host contributions', async () => {
     let activatedHost: FrontendPluginHostContextV1 | undefined;
     const result = await activateNativePluginBootstrapV1(

@@ -732,6 +732,9 @@ export function getPublicRoutes(): RouteObject[] {
  * Creates the root redirect route (OSS: redirects to /t/default/)
  * For unified tenant routing, we redirect root to the default tenant path
  */
+export const APP_ROOT_ROUTE_ID = 'host-root-layout'
+export const TENANT_LAYOUT_ROUTE_ID = 'host-tenant-layout'
+
 export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): RouteObject {
   // Route ownership stays with the registered extension. Never send an account
   // without a tenant to an absent onboarding page or grant operator access.
@@ -742,6 +745,7 @@ export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): R
   const onboardingPath = onboardingRoute?.path ? `/${onboardingRoute.path.replace(/^\//, '')}` : undefined
   const cloudOrganizations = enterpriseChildren.some((route) => route.path?.replace(/^\//, '') === 'cloud/organizations')
   return {
+    id: APP_ROOT_ROUTE_ID,
     path: '/',
     element: (
       <ProtectedRoute>
@@ -770,6 +774,7 @@ export function createRootLayoutRoute(enterpriseChildren: RouteObject[] = []): R
  */
 export function createTenantLayoutRoute(enterpriseChildren: RouteObject[] = []): RouteObject {
   return {
+    id: TENANT_LAYOUT_ROUTE_ID,
     path: '/t/:tenantSlug',
     element: (
       <ProtectedRoute>
