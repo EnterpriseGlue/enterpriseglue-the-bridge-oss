@@ -1,5 +1,5 @@
 import React from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import { Dropdown, DropdownSkeleton } from '@carbon/react'
 import { useEngineSelectorStore } from '../stores/engineSelectorStore'
 import { getAccessibleEngines } from '../features/mission-control/engines/api/engines'
@@ -9,6 +9,15 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { AuthContext } from '../contexts/AuthContext'
 
 export const ENGINE_SELECTOR_QUERY_KEY = ['engines-selector'] as const
+
+export function engineInventoryQuery(scope: string) {
+  return queryOptions({
+    queryKey: [...ENGINE_SELECTOR_QUERY_KEY, scope],
+    queryFn: getAccessibleEngines,
+    staleTime: 60000,
+    retry: false,
+  })
+}
 
 export function engineSelectionScope(
   pathname: string,
@@ -68,13 +77,7 @@ export function useEngineSelection(enabled = true) {
     setSelectedEngineIdForScope,
   } = useEngineSelectorStore()
   const persistedEngineId = selectedEngineIdsByScope[scope]
-  const enginesQuery = useQuery({
-    queryKey: [...ENGINE_SELECTOR_QUERY_KEY, scope],
-    queryFn: getAccessibleEngines,
-    enabled,
-    staleTime: 60000,
-    retry: false,
-  })
+  const enginesQuery = useQuery({ ...engineInventoryQuery(scope), enabled })
 
   const engines = React.useMemo(
     () => enabled

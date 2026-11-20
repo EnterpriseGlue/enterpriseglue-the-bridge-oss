@@ -112,6 +112,129 @@ const dashboard = (page: Page) => page.getByRole('heading', { name: 'Dashboard',
 const account = (page: Page) => header(page).getByRole('button', { name: 'Account menu' })
 
 test.describe('Cloud organization selection @organization-selection @identity-lifecycle', () => {
+  test('renders dashboard sections as each request finishes while plugins load', async ({ page }) => {
+    await installAccount(page, [alpha, bravo], false, alpha)
+    const releasePermissions = Promise.withResolvers<void>()
+    const releasePlugins = Promise.withResolvers<void>()
+    const releaseEngines = Promise.withResolvers<void>()
+    const releaseInstances = Promise.withResolvers<void>()
+    const permissionRequest = Promise.withResolvers<void>()
+    const pluginRequest = Promise.withResolvers<void>()
+    const engineRequest = Promise.withResolvers<void>()
+    const instanceRequest = Promise.withResolvers<void>()
+    const pluginId = 'io.example.reporting'
+    const pluginVersion = '0.1.0'
+    const routeId = `${pluginId}.home`
+    const navId = `${pluginId}.nav`
+    const entryUrl = `/_enterpriseglue/plugins/${pluginId}/${pluginVersion}/frontend/index.js`
+    const relativePath = 'plugins/reporting'
+    const dashboardReads: string[] = []
+    page.on('request', request => {
+      const path = new URL(request.url()).pathname
+      if (path.includes('/api/dashboard/') || path.endsWith('/engines-api/engines')) dashboardReads.push(path)
+    })
+    await page.route('**/api/authz/me/permissions', async route => {
+      permissionRequest.resolve()
+      await releasePermissions.promise
+      await route.fallback()
+    })
+    await page.route('**/api/plugins/v1/frontend', async route => {
+      pluginRequest.resolve()
+      await releasePlugins.promise
+      await json(route, {
+        apiVersion: 'frontend-bootstrap.plugin.enterpriseglue.io/v1', revision: 1, issues: [],
+        plugins: [{
+          pluginId, version: pluginVersion, entryUrl, displayName: 'Reporting',
+          manifest: {
+            apiVersion: 'plugin.enterpriseglue.io/v1', kind: 'EnterpriseGluePlugin',
+            metadata: { id: pluginId, version: pluginVersion, displayName: 'Reporting', publisher: 'io.example' },
+            compatibility: { host: '^0.4.0', sdk: '^0.1.0', frontendProtocol: 1, requiredSlots: [] },
+            deployment: { frontend: {
+              entry: 'frontend/index.js', sha256: 'a'.repeat(64),
+              shared: { react: '19.2.6', reactDom: '19.2.6', router: '7.18.1', carbonReact: '1.107.0', pluginSdk: '0.1.0' },
+            } },
+            scope: { installation: 'deployment', enablement: 'tenant' },
+            permissions: { required: [], optional: [] }, network: { egressPolicy: 'none' },
+            entitlement: { provider: 'none' }, dependencies: [], conflicts: [],
+            events: { subscriptions: [] }, jobs: { fixedSchedules: [] },
+            contributions: [
+              { id: routeId, kind: 'route', scope: 'tenant', relativePath },
+              { id: navId, kind: 'navigation', routeId, section: 'main', destination: 'voyager' },
+            ],
+          },
+        }],
+      })
+    })
+    await page.route(`**/t/northwind${entryUrl}`, route => route.fulfill({
+      contentType: 'application/javascript',
+      body: `export default {
+        apiVersion: 'frontend.plugin.enterpriseglue.io/v1', pluginId: '${pluginId}', version: '${pluginVersion}',
+        activate: (host) => ({
+          routes: [{
+            id: '${routeId}', scope: 'tenant', relativePath: '${relativePath}',
+            component: () => host.shared.react.createElement('h1', null, 'Reporting workspace'),
+          }],
+          navigation: [{
+            id: '${navId}', label: 'Reporting', routeId: '${routeId}', section: 'main', destination: 'voyager',
+          }],
+        }),
+      }`,
+    }))
+    await page.route('**/engines-api/engines', async route => {
+      engineRequest.resolve()
+      await releaseEngines.promise
+      await json(route, [{ id: 'engine-a', name: 'Workspace engine' }])
+    })
+    await page.route('**/api/dashboard/context', route => json(route, {
+      canViewActiveUsers: false, canViewProcessData: true, canViewMetrics: true, runtimeScopedEngineIds: [],
+    }))
+    await page.route('**/api/dashboard/stats', route => json(route, {
+      totalProjects: 3, totalFiles: 4, fileTypes: { bpmn: 4, dmn: 0, form: 0 },
+    }))
+    await page.route(url => url.pathname.endsWith('/mission-control-api/process-instances'), async route => {
+      instanceRequest.resolve()
+      await releaseInstances.promise
+      await json(route, [{ id: 'instance-a', state: 'ACTIVE' }])
+    })
+
+    const card = (label: string) => page.locator('.eg-dashboard-kpi')
+      .filter({ has: page.getByText(label, { exact: true }) })
+    try {
+      await page.goto('/t/northwind/')
+      await permissionRequest.promise
+      expect(dashboardReads).toEqual([])
+      releasePermissions.resolve()
+      await Promise.all([pluginRequest.promise, engineRequest.promise])
+      await expect(dashboard(page)).toBeVisible()
+      await expect(card('Projects').getByText('3', { exact: true })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'File Structure' })).toBeVisible()
+      await expect(card('Engines')).toHaveAttribute('aria-busy', 'true')
+      await expect(card('Instances')).toHaveAttribute('aria-busy', 'true')
+
+      releaseEngines.resolve()
+      await instanceRequest.promise
+      await expect(card('Engines').getByText('1', { exact: true })).toBeVisible()
+      await expect(card('Instances')).toHaveAttribute('aria-busy', 'true')
+
+      releaseInstances.resolve()
+      await expect(card('Instances').getByText('1', { exact: true })).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Process States' })).toBeVisible()
+      expect(dashboardReads.filter(path => path.endsWith('/engines-api/engines'))).toHaveLength(1)
+      expect(dashboardReads.every(path => path.startsWith('/t/northwind/'))).toBe(true)
+      const voyager = header(page).getByRole('link', { name: 'Voyager', exact: true })
+      await voyager.click()
+      await expect(header(page).getByRole('link', { name: 'Reporting', exact: true })).toHaveCount(0)
+      releasePlugins.resolve()
+      await header(page).getByRole('link', { name: 'Reporting', exact: true }).click()
+      await expect(page.getByRole('heading', { name: 'Reporting workspace' })).toBeVisible()
+    } finally {
+      releasePermissions.resolve()
+      releasePlugins.resolve()
+      releaseEngines.resolve()
+      releaseInstances.resolve()
+    }
+  })
+
   test('keeps another tab from reversing an explicit organization switch', async ({ page, context }) => {
     const fixture = await installAccount(page, [alpha, bravo], false, alpha)
     const previous = await context.newPage()

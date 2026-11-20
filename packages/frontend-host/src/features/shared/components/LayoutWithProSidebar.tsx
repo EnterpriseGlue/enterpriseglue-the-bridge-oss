@@ -49,7 +49,7 @@ import {
 import type { PlatformBranding } from '@enterpriseglue/shared/schemas/platform-admin/platform-settings.js'
 import { resolveVoyagerNavigationVisibility } from '../../../shared/auth/voyagerNavigation'
 import {
-  getNativePluginNavigationV1,
+  useNativePluginNavigationV1,
   NativePluginSlotV1,
 } from '../../../plugins/nativePluginRuntime'
 import { createPortal } from 'react-dom'
@@ -340,7 +340,8 @@ export default function LayoutWithProSidebar() {
   const isMissionControlEnabled = useFeatureFlag('missionControl')
   const isEnginesEnabled = useFeatureFlag('engines')
 
-  const nativePluginNavItems = getNativePluginNavigationV1()
+  const installedPluginNavigation = useNativePluginNavigationV1()
+  const nativePluginNavItems = installedPluginNavigation
     .filter((item) => item.section === 'main' || item.section === 'tenant')
     .sort((left, right) => (left.order ?? 0) - (right.order ?? 0))
   const nativeVoyagerNavItems = nativePluginNavItems.filter((item) => item.destination === 'voyager')
@@ -684,7 +685,7 @@ export default function LayoutWithProSidebar() {
       .then((plugin) => {
         if (cancelled) return
         const legacyItems = normalizeEnterpriseNavItems((plugin as any)?.navItems)
-        const nativeItems: NavExtension[] = getNativePluginNavigationV1().map((item) => ({
+        const nativeItems: NavExtension[] = installedPluginNavigation.map((item) => ({
           id: `${item.pluginId}:${item.id}`,
           label: item.label,
           path: item.path,
@@ -708,7 +709,7 @@ export default function LayoutWithProSidebar() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [installedPluginNavigation])
 
   const productNavigation = <>
               <HeaderMenuButton

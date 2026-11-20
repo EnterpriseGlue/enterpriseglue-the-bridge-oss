@@ -51,7 +51,7 @@ vi.mock('@src/features/mission-control/shared/stores/decisionsFilterStore', () =
 }));
 vi.mock('@src/enterprise/extensionRegistry', () => ({ isMultiTenantEnabled: () => true }));
 vi.mock('@src/shared/api/client', () => ({ apiClient: { get: vi.fn().mockResolvedValue([]) } }));
-vi.mock('@src/plugins/nativePluginRuntime', () => ({ getNativePluginNavigationV1: () => [] }));
+vi.mock('@src/plugins/nativePluginRuntime', () => ({ useNativePluginNavigationV1: () => [] }));
 
 describe('ProSidebar', () => {
   beforeEach(() => {

@@ -51,7 +51,7 @@ import IdentityProvisioningSettingsTab from '../components/IdentityProvisioningS
 import IdentityMappingsSettingsTab from '../components/IdentityMappingsSettingsTab';
 import ConfigurationBundleSettingsTab from '../components/ConfigurationBundleSettingsTab';
 import RoleLibrarySettingsTab from '../components/RoleLibrarySettingsTab';
-import { getNativePluginSettingsV1 } from '../../../plugins/nativePluginRuntime';
+import { getNativePluginSettingsV1, NativePluginsReadyContext } from '../../../plugins/nativePluginRuntime';
 import { GitSettingsSection } from '../components/GitSettingsSection';
 import { ProjectsSettingsSection } from '../components/ProjectsSettingsSection';
 import { InviteDomainsSettingsSection } from '../components/InviteDomainsSettingsSection';
@@ -634,7 +634,8 @@ export default function PlatformSettingsPage({ section }: PlatformSettingsPagePr
     />
   );
 
-  const deploymentPluginSettings = getNativePluginSettingsV1('deployment');
+  const installedPluginsReady = useContext(NativePluginsReadyContext);
+  const deploymentPluginSettings = installedPluginsReady ? getNativePluginSettingsV1('deployment') : [];
   const pluginSettingsPath = (entry: (typeof deploymentPluginSettings)[number]) => {
     const relativePath = entry.relativePath.replace(/^\/+/, '');
     if (entry.routeScope === 'root') return `/${relativePath}`;

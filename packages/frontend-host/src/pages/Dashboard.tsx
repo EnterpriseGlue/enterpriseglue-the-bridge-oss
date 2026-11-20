@@ -24,9 +24,10 @@ import { fetchList } from '../shared/api/fetchList';
 import { EngineSelector, useEngineSelection } from '../components/EngineSelector'
 import { useAuth } from '../shared/hooks/useAuth'
 import { ExtensionSlot } from '../enterprise/ExtensionSlot'
+import { canReadDashboard, dashboardContextQuery } from '../features/dashboard/dashboardQueries'
 import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../shared/auth/guards'
-import type { DashboardContext, DashboardStats } from '@enterpriseglue/shared/schemas/dashboard.js'
+import type { DashboardStats } from '@enterpriseglue/shared/schemas/dashboard.js'
 import type { ProcessInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { PageHeader, PageLayout, PAGE_GRADIENTS } from '../shared/components/PageLayout'
 
@@ -91,17 +92,20 @@ function AccessibleBarChart({
   )
 }
 
-function DashboardKpi({ label, value, icon: Icon, tone = 'blue' }: {
+function DashboardKpi({ label, value, icon: Icon, tone = 'blue', loading = false }: {
   label: string
   value: React.ReactNode
   icon: React.ComponentType<{ size?: number; className?: string }>
   tone?: DashboardBarTone
+  loading?: boolean
 }) {
   return (
-    <div className="eg-dashboard-kpi">
+    <div className="eg-dashboard-kpi" aria-busy={loading}>
       <Icon size={24} className={`eg-dashboard-kpi__icon eg-dashboard-kpi__icon--${tone}`} />
       <span className="eg-dashboard-kpi__label">{label}</span>
-      <strong className="eg-dashboard-kpi__value">{value}</strong>
+      {loading
+        ? <div className="eg-dashboard-kpi__value"><SkeletonText width="3rem" /></div>
+        : <strong className="eg-dashboard-kpi__value">{value}</strong>}
     </div>
   )
 }
@@ -138,6 +142,19 @@ function DashboardTile({ children, onClick }: { children: React.ReactNode; onCli
 
 function DashboardChartTile({ children }: { children: React.ReactNode }) {
   return <Tile className="eg-dashboard-chart-tile">{children}</Tile>
+}
+
+function DashboardChartLoading({ label }: { label: string }) {
+  return (
+    <DashboardChartColumn>
+      <DashboardChartTile>
+        <div aria-busy="true" aria-label={label} role="group">
+          <SkeletonText heading width="45%" />
+          <SkeletonText paragraph lineCount={4} />
+        </div>
+      </DashboardChartTile>
+    </DashboardChartColumn>
+  )
 }
 
 function DashboardUnauthorized() {
@@ -181,8 +198,8 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { timePeriod, setTimePeriod } = useDashboardFilterStore()
   const { hasPlatformPermission, hasAnyEnginePermission, permissions, user } = useAuth()
-  const canReadDashboard = evaluateActionSnapshot(permissions, 'platform.dashboard.read', { type: 'platform', id: null }).allowed
-  const { engines, selectedEngineId, scope, isResolving, isError: enginesFailed } = useEngineSelection(canReadDashboard)
+  const canViewDashboard = canReadDashboard(permissions)
+  const { engines, selectedEngineId, scope, isResolving, isError: enginesFailed } = useEngineSelection(canViewDashboard)
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null
@@ -208,12 +225,7 @@ export default function Dashboard() {
   }, [timePeriod])
 
   // Fetch dashboard context for role-based visibility
-  const contextQuery = useQuery({
-    queryKey: ['dashboard-context', scope],
-    queryFn: () => apiClient.get<DashboardContext>('/api/dashboard/context'),
-    enabled: canReadDashboard,
-    staleTime: 60000,
-  })
+  const contextQuery = useQuery({ ...dashboardContextQuery(scope), enabled: canViewDashboard })
   const ctx = contextQuery.data
   const canViewActiveUsers = Boolean(ctx?.canViewActiveUsers) ||
     hasPlatformPermission(PlatformPermission.USERS_VIEW) ||
@@ -229,14 +241,14 @@ export default function Dashboard() {
   const statsQuery = useQuery({
     queryKey: ['dashboard-stats', scope],
     queryFn: () => apiClient.get<DashboardStats>('/api/dashboard/stats'),
-    enabled: canReadDashboard,
+    enabled: canViewDashboard,
   })
 
   // Fetch users
   const usersQuery = useQuery({
     queryKey: ['dashboard-users', scope],
     queryFn: () => fetchList<any>('/api/users'),
-    enabled: canReadDashboard && canViewActiveUsers,
+    enabled: canViewDashboard && canViewActiveUsers,
   })
 
   // Fetch process instances
@@ -251,13 +263,15 @@ export default function Dashboard() {
       engineId: selectedEngineId || undefined,
       startedAfter: timePeriod ? startedAfter : undefined,
     }),
-    enabled: canReadDashboard && !!selectedEngineId && canViewProcessData,
+    enabled: canViewDashboard && !!selectedEngineId && canViewProcessData,
   })
 
   // Compute stats
   const connectedEngines = engines.length
   const totalUsers = usersQuery.data?.length || 0
   const instances = instancesQuery.data || []
+  const runtimeLoading = isResolving || (Boolean(selectedEngineId) && instancesQuery.isLoading)
+  const runtimeReady = !enginesFailed && !isResolving && (!selectedEngineId || instancesQuery.isSuccess)
 
   const totalProjects = statsQuery.data?.totalProjects || 0
   const showGettingStarted = !statsQuery.isLoading && !isResolving && !statsQuery.isError && !enginesFailed && (totalProjects === 0 || connectedEngines === 0)
@@ -301,7 +315,7 @@ export default function Dashboard() {
     return `${seconds.toFixed(0)}s`
   }
 
-  if (!canReadDashboard) {
+  if (!canViewDashboard) {
     return <DashboardUnauthorized />
   }
 
@@ -348,7 +362,7 @@ export default function Dashboard() {
           <InlineNotification kind="warning" title="Process metrics are unavailable" subtitle="Process instances could not be loaded for the selected engine and time period." lowContrast hideCloseButton />
         )}
         <div className="eg-dashboard-controls" aria-label="Dashboard filters">
-          <EngineSelector size="sm" label="Engine" enabled={canReadDashboard} />
+          <EngineSelector size="sm" label="Engine" enabled={canViewDashboard} />
           <Dropdown
             id="time-period"
             label="Time period"
@@ -430,30 +444,33 @@ export default function Dashboard() {
 
       <Grid fullWidth narrow className="eg-dashboard-kpi-grid" aria-label="Platform key performance indicators">
         {canViewActiveUsers && (
-          <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/admin/users'))}><DashboardKpi label="Active Users" value={usersQuery.isLoading ? <SkeletonText width="3rem" /> : usersQuery.isError ? '—' : totalUsers} icon={UserAvatar} /></DashboardTile></DashboardKpiColumn>
+          <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/admin/users'))}><DashboardKpi label="Active Users" loading={usersQuery.isLoading} value={usersQuery.isError ? '—' : totalUsers} icon={UserAvatar} /></DashboardTile></DashboardKpiColumn>
         )}
-        <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/starbase'))}><DashboardKpi label="Projects" value={statsQuery.isLoading ? <SkeletonText width="3rem" /> : statsQuery.data?.totalProjects ?? '—'} icon={FolderOpen} tone="purple" /></DashboardTile></DashboardKpiColumn>
-        <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/engines'))}><DashboardKpi label="Engines" value={isResolving ? <SkeletonText width="3rem" /> : enginesFailed ? '—' : connectedEngines} icon={Chip} /></DashboardTile></DashboardKpiColumn>
+        <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/starbase'))}><DashboardKpi label="Projects" loading={statsQuery.isLoading} value={statsQuery.data?.totalProjects ?? '—'} icon={FolderOpen} tone="purple" /></DashboardTile></DashboardKpiColumn>
+        <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/engines'))}><DashboardKpi label="Engines" loading={isResolving} value={enginesFailed ? '—' : connectedEngines} icon={Chip} /></DashboardTile></DashboardKpiColumn>
         {canViewProcessData && (
-          <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/mission-control/processes'))}><DashboardKpi label="Instances" value={isResolving || instancesQuery.isLoading ? <SkeletonText width="3rem" /> : instancesQuery.isError ? '—' : instances.length} icon={Activity} tone="green" /></DashboardTile></DashboardKpiColumn>
+          <DashboardKpiColumn><DashboardTile onClick={() => safeNavigate(toTenantPath('/mission-control/processes'))}><DashboardKpi label="Instances" loading={runtimeLoading} value={runtimeReady ? instances.length : '—'} icon={Activity} tone="green" /></DashboardTile></DashboardKpiColumn>
         )}
-        {canViewMetrics && !(isResolving || instancesQuery.isLoading || instancesQuery.isError) && (
+        {canViewMetrics && (runtimeLoading || runtimeReady) && (
           <>
-            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Avg Duration" value={formatDuration(metrics.avgDurationMs)} icon={Time} /></DashboardTile></DashboardKpiColumn>
-            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Success Rate" value={`${metrics.successRate.toFixed(0)}%`} icon={Checkmark} tone={metrics.successRate >= 80 ? 'green' : metrics.successRate >= 50 ? 'orange' : 'red'} /></DashboardTile></DashboardKpiColumn>
-            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Failure Rate" value={`${metrics.errorRate.toFixed(1)}%`} icon={WarningAlt} tone={metrics.errorRate > 20 ? 'red' : metrics.errorRate > 10 ? 'orange' : 'green'} /></DashboardTile></DashboardKpiColumn>
+            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Avg Duration" loading={runtimeLoading} value={formatDuration(metrics.avgDurationMs)} icon={Time} /></DashboardTile></DashboardKpiColumn>
+            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Success Rate" loading={runtimeLoading} value={`${metrics.successRate.toFixed(0)}%`} icon={Checkmark} tone={metrics.successRate >= 80 ? 'green' : metrics.successRate >= 50 ? 'orange' : 'red'} /></DashboardTile></DashboardKpiColumn>
+            <DashboardKpiColumn><DashboardTile><DashboardKpi label="Failure Rate" loading={runtimeLoading} value={`${metrics.errorRate.toFixed(1)}%`} icon={WarningAlt} tone={metrics.errorRate > 20 ? 'red' : metrics.errorRate > 10 ? 'orange' : 'green'} /></DashboardTile></DashboardKpiColumn>
           </>
         )}
       </Grid>
 
       <Grid fullWidth narrow className="eg-dashboard-chart-grid">
+        {statsQuery.isLoading && <DashboardChartLoading label="Loading file structure" />}
         {hasFilesToReport && (
           <DashboardChartColumn><DashboardChartTile><AccessibleBarChart id="file-structure" title="File Structure" data={fileChartData} totalLabel={`Total: ${totalFiles} files`} /></DashboardChartTile></DashboardChartColumn>
         )}
-        {canViewProcessData && !(isResolving || instancesQuery.isLoading || instancesQuery.isError) && (
+        {runtimeLoading && canViewProcessData && <DashboardChartLoading label="Loading process states" />}
+        {canViewProcessData && runtimeReady && (
           <DashboardChartColumn><DashboardChartTile><AccessibleBarChart id="process-states" title="Process States" data={processStateData} /></DashboardChartTile></DashboardChartColumn>
         )}
-        {canViewMetrics && !(isResolving || instancesQuery.isLoading || instancesQuery.isError) && (
+        {runtimeLoading && canViewMetrics && <DashboardChartLoading label="Loading process summary" />}
+        {canViewMetrics && runtimeReady && (
           <DashboardChartColumn><DashboardChartTile><DashboardSummary active={instanceStates.active} incidents={instanceStates.incidents} completed={instanceStates.completed} total={instances.length} /></DashboardChartTile></DashboardChartColumn>
         )}
       </Grid>

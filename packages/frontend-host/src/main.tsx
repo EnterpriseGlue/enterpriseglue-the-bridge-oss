@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, matchRoutes, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@carbon/styles/css/styles.css'
 import '@ibm/plex-sans/css/ibm-plex-sans-default.css'
@@ -18,10 +18,14 @@ import { ErrorBoundary } from './shared/components/ErrorBoundary'
 
 // Authentication
 import { AuthProvider } from './contexts/AuthContext'
+import { useAuth } from './shared/hooks/useAuth'
+import { captureRequestSession } from './utils/httpInterceptor'
 import { ToastProvider } from './shared/notifications/ToastProvider'
+import { DashboardPrefetch } from './features/dashboard/DashboardPrefetch'
+import { tenantSlugForPath } from './features/organizations/organizationPaths'
 
 // Routes
-import { createAppRoutes } from './routes'
+import { APP_ROOT_ROUTE_ID, createAppRoutes, TENANT_LAYOUT_ROUTE_ID } from './routes'
 
 import { getEnterpriseFrontendPlugin } from './enterprise/loadEnterpriseFrontendPlugin'
 import { extensions } from './enterprise/extensionRegistry'
@@ -29,10 +33,11 @@ import { loadTrustedSystemFrontendModules } from './enterprise/trustedSystemFron
 import {
   getNativePluginRoutesV1,
   loadInstalledNativePluginsV1,
+  NativePluginsReadyContext,
 } from './plugins/nativePluginRuntime'
 import { HostContextualFlowProviderV1 } from './plugins/contextualFlowRuntime'
 import { getConfiguredSystemFrontendModules, initRuntimeConfig } from './runtimeConfig'
-import { initializeTenancyCapabilities } from './services/tenancy'
+import { getTenancyCapabilities, initializeTenancyCapabilities } from './services/tenancy'
 
 /**
  * Render a minimal, dependency-free error into #root when runtime configuration
@@ -88,25 +93,79 @@ export async function startApp() {
     return
   }
 
+  const initialPath = window.location.pathname
+  const initialSlug = tenantSlugForPath(initialPath)
+  const initialDashboard = initialSlug && (initialPath === `/t/${initialSlug}` || initialPath === `/t/${initialSlug}/`)
+    ? initialSlug
+    : undefined
+  let nativeRouteLoad: Promise<void> | undefined
+  let publishedNativeSession: string | undefined
   const tenancyReady = (async () => {
     await getEnterpriseFrontendPlugin()
     await loadTrustedSystemFrontendModules(getConfiguredSystemFrontendModules())
     await initializeTenancyCapabilities()
   })()
   const router = tenancyReady.then(async () => {
-    await loadInstalledNativePluginsV1()
-    return createBrowserRouter(createAppRoutes(
+    const deferNativePlugins = Boolean(initialDashboard && getTenancyCapabilities().mode === 'pooled')
+    if (!deferNativePlugins) await loadInstalledNativePluginsV1()
+    const routes = createAppRoutes(
       [...extensions.rootRoutes],
       [...extensions.tenantRoutes],
-      getNativePluginRoutesV1('root'),
-      getNativePluginRoutesV1('tenant'),
-    ))
+      deferNativePlugins ? [] : getNativePluginRoutesV1('root'),
+      deferNativePlugins ? [] : getNativePluginRoutesV1('tenant'),
+    )
+    const appRouter = createBrowserRouter(routes, deferNativePlugins ? {
+      async patchRoutesOnNavigation({ path }) {
+        // Built-in pages can open immediately. An unresolved deep link can
+        // still be matched against native routes that are being registered.
+        const matches = matchRoutes(routes, path)
+        const route = matches?.[matches.length - 1]?.route
+        if (!route || route.path?.includes('*')) await nativeRouteLoad
+      },
+    } : undefined)
+    return { appRouter, deferNativePlugins }
   })
   const qc = new QueryClient()
   const hasExplicitTenant = /^\/t\/[^/]+(?:\/|$)/.test(window.location.pathname)
 
+  function DeferredNativeRoutes({ appRouter }: { appRouter: ReturnType<typeof createBrowserRouter> }) {
+    const { user, permissions, isLoading, sessionRevision } = useAuth()
+    const tenantSlug = React.useSyncExternalStore(
+      appRouter.subscribe, () => tenantSlugForPath(appRouter.state.location.pathname),
+    )
+    const verifiedTenantSlug = user?.session?.tenant.slug
+    const [ready, setReady] = React.useState(false)
+    React.useEffect(() => {
+      if (ready || isLoading || !tenantSlug || tenantSlug !== verifiedTenantSlug) return
+      let cancelled = false
+      const session = captureRequestSession()
+      nativeRouteLoad = loadInstalledNativePluginsV1({
+        tenantSlug,
+        isCurrent: session.isCurrent,
+        isPublished: () => publishedNativeSession === session.key,
+      }).then(() => {
+        if (cancelled || !session.isCurrent()) return
+        appRouter.patchRoutes(APP_ROOT_ROUTE_ID, getNativePluginRoutesV1('root'))
+        appRouter.patchRoutes(TENANT_LAYOUT_ROUTE_ID, getNativePluginRoutesV1('tenant'))
+        publishedNativeSession = session.key
+        setReady(true)
+      }).catch(() => {
+        // A newer verified session owns the next attempt for an abandoned scope.
+        if (!cancelled && session.isCurrent()) console.error('[Plugin runtime] Deferred frontend routes could not be registered')
+      })
+      return () => { cancelled = true }
+    }, [appRouter, isLoading, permissions, ready, sessionRevision, tenantSlug, verifiedTenantSlug])
+
+    return (
+      <NativePluginsReadyContext.Provider value={ready}>
+        <RouterProvider router={appRouter} />
+      </NativePluginsReadyContext.Provider>
+    )
+  }
+
   function AppRouter() {
-    return <RouterProvider router={React.use(router)} />
+    const { appRouter, deferNativePlugins } = React.use(router)
+    return deferNativePlugins ? <DeferredNativeRoutes appRouter={appRouter} /> : <RouterProvider router={appRouter} />
   }
 
   function AppSession() {
@@ -115,6 +174,7 @@ export async function startApp() {
     if (!hasExplicitTenant) React.use(tenancyReady)
     return (
       <AuthProvider>
+        {initialDashboard && <DashboardPrefetch tenantSlug={initialDashboard} />}
         <FeatureFlagsProvider>
           <ToastProvider>
             <HostContextualFlowProviderV1>

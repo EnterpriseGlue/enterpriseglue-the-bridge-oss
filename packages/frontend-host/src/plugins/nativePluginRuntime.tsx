@@ -27,6 +27,7 @@ import {
 } from 'react-router-dom';
 
 import { apiClient } from '../shared/api/client';
+import { BrowserSessionChangedError } from '../utils/browserSession';
 import { isInvitationEnrollmentRoute } from '../utils/invitationRoute';
 import {
   pluginUiPreferencesV1,
@@ -118,6 +119,19 @@ const registry = new PluginFrontendRegistry();
 const activeModules = new Map<PluginId, PluginFrontendModuleV1>();
 const failureCircuit = new PluginFrontendFailureCircuitV1();
 let loadPromise: Promise<NativePluginLoadResultV1> | null = null;
+let loadScope: NativePluginStartupScope | undefined;
+
+export const NativePluginsReadyContext = React.createContext(true);
+
+interface NativePluginStartupScope {
+  tenantSlug: string;
+  isCurrent(): boolean;
+  isPublished?(): boolean;
+}
+
+function assertStartupScope(scope?: NativePluginStartupScope) {
+  if (scope && !scope.isCurrent()) throw new BrowserSessionChangedError();
+}
 
 function contributionNavigationPath(
   relativePath: string,
@@ -328,8 +342,14 @@ function hostContext(
   pluginId: PluginId,
   version: string,
   availability: ReadonlyMap<string, PluginContributionAvailabilityEntryV1>,
+  scope?: NativePluginStartupScope,
 ): FrontendPluginHostContextV1 {
   const shared = installSharedRuntime();
+  // Once the plugin is registered, its host APIs follow the active workspace
+  // as before. An unfinished activation must stay in the session that started it.
+  const assertHostScope = () => {
+    if (!scope?.isPublished?.()) assertStartupScope(scope);
+  };
   const locale =
     (typeof document !== 'undefined' &&
       document.documentElement.lang.trim()) ||
@@ -346,16 +366,22 @@ function hostContext(
   return {
     plugin: { id: pluginId, version },
     api: {
-      request: <T,>(
+      request: async <T,>(
         operationId: string,
         request?: Parameters<FrontendPluginHostContextV1['api']['request']>[1],
-      ) => requestPluginOperation<T>(pluginId, operationId, request),
-      stream: <T,>(
+      ) => {
+        assertHostScope();
+        return requestPluginOperation<T>(pluginId, operationId, request);
+      },
+      stream: async <T,>(
         operationId: string,
         request: Parameters<
           NonNullable<FrontendPluginHostContextV1['api']['stream']>
         >[1],
-      ) => streamPluginOperation<T>(pluginId, operationId, request),
+      ) => {
+        assertHostScope();
+        return streamPluginOperation<T>(pluginId, operationId, request);
+      },
     },
     availability: {
       get(contributionId) {
@@ -379,6 +405,7 @@ function hostContext(
     },
     navigation: {
       toContribution(contributionId, params = {}) {
+        assertHostScope();
         const rootRoute = registry
           .getRoutes('root')
           .find((candidate) => candidate.id === contributionId);
@@ -399,11 +426,13 @@ function hostContext(
         window.dispatchEvent(new PopStateEvent('popstate'));
       },
       back() {
+        assertHostScope();
         window.history.back();
       },
     },
     notifications: {
       show(input) {
+        assertHostScope();
         window.dispatchEvent(
           new CustomEvent('enterpriseglue:plugin-notification:v1', {
             detail: input,
@@ -496,17 +525,32 @@ async function defaultImporter(url: string): Promise<unknown> {
   return import(/* @vite-ignore */ url);
 }
 
+async function clearActiveNativePlugins() {
+  for (const module of activeModules.values()) {
+    try {
+      await module.deactivate?.();
+    } catch {
+      console.error('[Plugin runtime] A frontend plugin failed to deactivate');
+    }
+  }
+  activeModules.clear();
+  registry.clear();
+}
+
 export async function activateNativePluginBootstrapV1(
   input: unknown,
   importer: PluginImporter = defaultImporter,
   circuit: PluginFrontendFailureCircuitV1 = failureCircuit,
+  scope?: NativePluginStartupScope,
 ): Promise<NativePluginLoadResultV1> {
   // Native module imports cannot carry our API routing headers. Keep entry and
   // relative chunk requests on the canonical tenant path for the edge router.
   const tenantMatch = typeof window !== 'undefined'
     ? window.location.pathname.match(/^\/t\/([A-Za-z0-9_-]+)(?:\/|$)/)
     : null;
-  const assetPrefix = tenantMatch?.[1] ? `/t/${encodeURIComponent(tenantMatch[1])}` : '';
+  const tenantSlug = scope?.tenantSlug ?? tenantMatch?.[1];
+  const assetPrefix = tenantSlug ? `/t/${encodeURIComponent(tenantSlug)}` : '';
+  assertStartupScope(scope);
   if (!isBootstrap(input)) {
     return {
       revision: 0,
@@ -515,17 +559,8 @@ export async function activateNativePluginBootstrapV1(
     };
   }
 
-  for (const module of activeModules.values()) {
-    try {
-      await module.deactivate?.();
-    } catch {
-      // One plugin's cleanup failure must not block replacement of the full
-      // owner-aware registry. Plugin-provided exception content is omitted.
-      console.error('[Plugin runtime] A frontend plugin failed to deactivate');
-    }
-  }
-  activeModules.clear();
-  registry.clear();
+  await clearActiveNativePlugins();
+  assertStartupScope(scope);
   installSharedRuntime();
 
   const failures: NativePluginLoadFailureV1[] = [];
@@ -547,6 +582,7 @@ export async function activateNativePluginBootstrapV1(
     }
     let module: PluginFrontendModuleV1 | null = null;
     try {
+      assertStartupScope(scope);
       const manifest = parseEnterpriseGluePluginManifestV1(record.manifest);
       const frontend = manifest.deployment.frontend;
       if (
@@ -565,6 +601,7 @@ export async function activateNativePluginBootstrapV1(
         continue;
       }
       module = resolveModule(await importer(`${assetPrefix}${record.entryUrl}`));
+      assertStartupScope(scope);
       if (
         !module ||
         module.pluginId !== record.pluginId ||
@@ -583,8 +620,9 @@ export async function activateNativePluginBootstrapV1(
         record.contributionAvailability,
       );
       const contributions = await module.activate(
-        hostContext(record.pluginId, record.version, availability.entries),
+        hostContext(record.pluginId, record.version, availability.entries, scope),
       );
+      assertStartupScope(scope);
       registry.activate({
         pluginId: record.pluginId,
         version: record.version,
@@ -594,11 +632,15 @@ export async function activateNativePluginBootstrapV1(
       });
       activeModules.set(record.pluginId, module);
       circuit.clear(target);
-    } catch {
+    } catch (error) {
       try {
         await module?.deactivate?.();
       } catch {
         // Best-effort cleanup; never include plugin exception content.
+      }
+      if (error instanceof BrowserSessionChangedError || (scope && !scope.isCurrent())) {
+        await clearActiveNativePlugins();
+        throw new BrowserSessionChangedError();
       }
       recordFrontendFailure(
         failures,
@@ -631,30 +673,48 @@ function recordFrontendFailure(
   failures.push({ pluginId: target.pluginId, code });
 }
 
-export function loadInstalledNativePluginsV1(): Promise<NativePluginLoadResultV1> {
+export function loadInstalledNativePluginsV1(scope?: NativePluginStartupScope): Promise<NativePluginLoadResultV1> {
   if (typeof window !== 'undefined' && isInvitationEnrollmentRoute(window.location.pathname)) {
     // Do not query protected plugin inventory with an onboarding credential,
     // or cache an anonymous result as the later authenticated bootstrap.
     return Promise.resolve({ revision: 0, activePluginIds: [], failures: [] });
+  }
+  if (scope && loadScope && !loadScope.isCurrent() && loadPromise) {
+    const previous = loadPromise;
+    // Allow old activation to finish its cleanup before reusing the registry.
+    const retry = () => {
+      if (loadPromise === previous) loadPromise = null;
+      assertStartupScope(scope);
+      return loadInstalledNativePluginsV1(scope);
+    };
+    return previous.then(retry, retry);
   }
   if (!loadPromise) {
     const tenantMatch =
       typeof window !== 'undefined'
         ? window.location.pathname.match(/^\/t\/([A-Za-z0-9_-]+)(?:\/|$)/)
         : null;
-    const bootstrapApi = tenantMatch?.[1]
-      ? `/t/${encodeURIComponent(tenantMatch[1])}${FRONTEND_BOOTSTRAP_API}`
+    const tenantSlug = scope?.tenantSlug ?? tenantMatch?.[1];
+    const bootstrapApi = tenantSlug
+      ? `/t/${encodeURIComponent(tenantSlug)}${FRONTEND_BOOTSTRAP_API}`
       : FRONTEND_BOOTSTRAP_API;
+    loadScope = scope;
     loadPromise = apiClient
       .get<unknown>(bootstrapApi, undefined, {
         credentials: 'include',
       })
-      .then((bootstrap) => activateNativePluginBootstrapV1(bootstrap))
-      .catch(() => ({
-        revision: 0,
-        activePluginIds: [],
-        failures: [{ code: 'bootstrap_unavailable' as const }],
-      }));
+      .then((bootstrap) => activateNativePluginBootstrapV1(bootstrap, undefined, undefined, scope))
+      .catch((error) => {
+        if (scope && (error instanceof BrowserSessionChangedError || !scope.isCurrent())) {
+          loadPromise = null;
+          throw new BrowserSessionChangedError();
+        }
+        return {
+          revision: 0,
+          activePluginIds: [],
+          failures: [{ code: 'bootstrap_unavailable' as const }],
+        };
+      });
   }
   return loadPromise;
 }
@@ -748,6 +808,11 @@ export function getNativePluginNavigationV1(): NativePluginNavigationV1[] {
   );
 }
 
+export function useNativePluginNavigationV1(): NativePluginNavigationV1[] {
+  const ready = React.useContext(NativePluginsReadyContext);
+  return React.useMemo(() => ready ? getNativePluginNavigationV1() : [], [ready]);
+}
+
 /**
  * Returns settings surfaces declared by active signed plugins. Unlike
  * navigation contributions, these are deliberately rendered by the host's
@@ -793,9 +858,10 @@ export function NativePluginSlotV1<Slot extends PluginSlotIdV1>({
   contextualFlowSurface?: HostContextualFlowSurfaceV1;
 }) {
   const globalContextualFlowSurface = useGlobalContextualFlowSurfaceV1();
+  const ready = React.useContext(NativePluginsReadyContext);
   // Contextual host surfaces calculate this flag from their own FGA decision.
   // Do not let a plugin render an alternate path around a host-denied action.
-  if (context.disabled) return null;
+  if (!ready || context.disabled) return null;
   const contributions = registry.getSlotContributions(slot);
   if (contributions.length === 0) return null;
   return (

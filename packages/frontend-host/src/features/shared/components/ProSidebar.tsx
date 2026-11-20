@@ -33,7 +33,7 @@ import {
   MISSION_CONTROL_DECISIONS_ENGINE_PERMISSIONS,
   MISSION_CONTROL_PROCESSES_ENGINE_PERMISSIONS,
 } from '../../../shared/auth/permissions'
-import { getNativePluginNavigationV1 } from '../../../plugins/nativePluginRuntime'
+import { useNativePluginNavigationV1 } from '../../../plugins/nativePluginRuntime'
 
 // Legacy neon colors (no longer applied; sidebar now uses Carbon theme tokens)
 const NEON_COLORS = {
@@ -87,7 +87,7 @@ export default function ProSidebar() {
   const effectivePathname = tenantSlug ? (pathname.replace(/^\/t\/[^/]+/, '') || '/') : pathname
   const toTenantPath = (p: string) => (tenantSlug ? `${tenantPrefix}${p}` : p)
   const engineContextAvailable = !isMultiTenant || tenantSlug !== null
-  const missionControlPluginNavItems = getNativePluginNavigationV1()
+  const missionControlPluginNavItems = useNativePluginNavigationV1()
     .filter((item) => item.parentDestination === 'mission-control')
     .sort((left, right) =>
       (left.order ?? 100) - (right.order ?? 100) ||

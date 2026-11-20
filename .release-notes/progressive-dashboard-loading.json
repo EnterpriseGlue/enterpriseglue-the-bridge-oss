@@ -1,0 +1,57 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "progressive-dashboard-loading",
+  "type": "fix",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": [
+    "users"
+  ],
+  "summary": "Starts workspace dashboard queries early and displays each dashboard section as its data becomes available.",
+  "userImpact": [
+    "The built-in organization dashboard can open while installed frontend plugins initialize.",
+    "Dashboard values have independent loading states so completed sections can be used while other sections are still loading."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Early dashboard reads require a verified organization session and the existing dashboard permission."
+  ],
+  "documentation": [
+    "The dashboard uses the existing tenant-scoped API and preserves authorization for installed plugin routes."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous compatible application images."
+  ],
+  "validation": [
+    "Browser checks exercise dashboard data arriving independently of plugin loading and other dashboard requests."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.21.3",
+      "newVersion": "0.21.4",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The existing dashboard controls and workflow are unchanged."
+  }
+}
