@@ -1,6 +1,6 @@
 import { useState, FormEvent, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
-import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification, SkeletonText } from '@carbon/react';
+import { ActionableNotification, TextInput, PasswordInput, Button, Link as CarbonLink, InlineLoading, Loading, InlineNotification, SkeletonText, Stack } from '@carbon/react';
 import { useAuth } from '../shared/hooks/useAuth';
 import { apiClient, ApiError } from '../shared/api/client';
 import { parseApiError } from '../shared/api/apiErrorUtils';
@@ -630,7 +630,8 @@ export default function Login() {
       <PublicAuthShell
         title={organizationStep === 'tenants' ? 'Choose an organization' : 'Find your organization'}
         homePath="/"
-        appearance="process"
+        appearance="default"
+        layout="grid"
       >
         {loginError && <InlineNotification
           kind="error"
@@ -638,7 +639,6 @@ export default function Login() {
           hideCloseButton
           title={loginErrorLinkRequired ? 'This sign-in method isn’t connected to your account' : 'Work-account sign-in failed'}
           subtitle={sentence(loginError)}
-          style={{ marginBottom: 'var(--spacing-5)' }}
         />}
         {organizationError && <InlineNotification
           kind="error"
@@ -646,7 +646,6 @@ export default function Login() {
           hideCloseButton
           title="Organization unavailable"
           subtitle={organizationError}
-          style={{ marginBottom: 'var(--spacing-5)' }}
         />}
         {organizationNotice && <InlineNotification
           kind="info"
@@ -654,19 +653,20 @@ export default function Login() {
           hideCloseButton
           title="Check your email"
           subtitle={organizationNotice}
-          style={{ marginBottom: 'var(--spacing-5)' }}
         />}
         {(isAuthLoading || isAuthenticated || organizationLoading) && <div role="status" aria-label="Checking your account">
           <SkeletonText paragraph lineCount={3} />
         </div>}
 
-        {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <div style={{ marginBottom: 'var(--spacing-5)' }}>
-          <div className="eg-login-section-header">
-            <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Sign in with an account</h2>
-            <CarbonLink as={RouterLink} to="/signup" inline>Create an account</CarbonLink>
-          </div>
-          <p className="eg-login-intro-copy">We’ll show the organizations you can access after sign-in.</p>
-          <div className="eg-login-provider-list">
+        {!isAuthenticated && !isAuthLoading && organizationStep !== 'tenants' && cloudAccountProviders.length > 0 && <Stack gap={5}>
+          <Stack gap={3}>
+            <Stack orientation="horizontal" gap={3} className="eg-login-section-header">
+              <h2 className="eg-login-grid-subheading">Sign in with an account</h2>
+              <CarbonLink as={RouterLink} to="/signup" inline>Create an account</CarbonLink>
+            </Stack>
+            <p className="eg-login-grid-copy">We’ll show the organizations you can access after sign-in.</p>
+          </Stack>
+          <Stack gap={3}>
             {cloudAccountProviders.map((provider, index) => <LoginProviderButton
               key={provider.id}
               provider={{ ...provider, key: provider.id, organization: null, loginMethod: 'redirect', preferred: index === 0, loginDomains: [] }}
@@ -677,8 +677,8 @@ export default function Login() {
                 redirectTo(`/api/auth/cloud-signup/providers/${encodeURIComponent(provider.id)}/start?returnTo=${encodeURIComponent('/login')}`);
               }}
             />)}
-          </div>
-        </div>}
+          </Stack>
+        </Stack>}
         {!isAuthenticated && organizationStep !== 'tenants' && cloudProviderError && <ActionableNotification
           kind="error"
           lowContrast
@@ -688,14 +688,14 @@ export default function Login() {
           onActionButtonClick={loadCloudAccountProviders}
           title="Work-account sign-in unavailable"
           subtitle={cloudProviderError}
-          style={{ marginBottom: 'var(--spacing-5)' }}
         />}
 
-        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && <>
-          <form onSubmit={handleOrganizationEmailSubmit} noValidate>
-          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Continue with email</h2>
-          <p className="eg-login-intro-copy">Use the email linked to your organization. A verified work domain can take you directly to sign-in.</p>
-          <div style={{ marginBottom: 'var(--spacing-6)' }}>
+        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'email' && <form onSubmit={handleOrganizationEmailSubmit} noValidate>
+          <Stack gap={5}>
+            <Stack gap={3}>
+              <h2 className="eg-login-grid-subheading">Continue with email</h2>
+              <p className="eg-login-grid-copy">Use the email linked to your organization. A verified work domain can take you directly to sign-in.</p>
+            </Stack>
             <TextInput
               id="organization-discovery-email"
               labelText="Email address"
@@ -704,29 +704,27 @@ export default function Login() {
               autoComplete="email"
               value={email}
               onChange={(event) => { updateEmail(event.target.value); setOrganizationNotice(null); setOrganizationError(null); }}
-              onBlur={() => { if (email.trim()) touchFields('discoveryEmail'); }}
               invalid={Boolean(discoveryEmailError)}
               invalidText={discoveryEmailError || undefined}
               required
             />
-          </div>
-          <Button type="submit" kind="primary" size="md" className="eg-login-primary-action">Continue</Button>
-          <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationError(null); setOrganizationNotice(null); setOrganizationStep('workspace'); }}>
-            Use an organization name instead
-          </Button>
-          </form>
-          <Button as={RouterLink} to="/signup/email/signin" kind="ghost" size="md" className="eg-login-secondary-action">
-            Sign in with a passkey
-          </Button>
-          <Button as={RouterLink} to="/signup/email" kind="ghost" size="md" className="eg-login-secondary-action">
-            Email me a sign-in link
-          </Button>
-        </>}
+            <Button type="submit" kind="primary" size="md" className="eg-login-primary-action">Continue</Button>
+            <Stack gap="0" className="eg-login-grid-actions">
+              <Button type="button" kind="ghost" size="md" onClick={() => { setOrganizationError(null); setOrganizationNotice(null); setOrganizationStep('workspace'); }}>
+                Use an organization name instead
+              </Button>
+              <Button as={RouterLink} to="/signup/email/signin" kind="ghost" size="md">Sign in with a passkey</Button>
+              <Button as={RouterLink} to="/signup/email" kind="ghost" size="md">Email me a sign-in link</Button>
+            </Stack>
+          </Stack>
+        </form>}
 
         {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'workspace' && <form onSubmit={handleWorkspaceSubmit} noValidate>
-          <h2 className="eg-login-section-heading eg-login-section-heading--with-copy">Enter your organization name</h2>
-          <p className="eg-login-intro-copy">Use the name from your EnterpriseGlue URL, for example <strong>acme</strong> from <strong>/t/acme</strong>.</p>
-          <div style={{ marginBottom: 'var(--spacing-6)' }}>
+          <Stack gap={5}>
+            <Stack gap={3}>
+              <h2 className="eg-login-grid-subheading">Enter your organization name</h2>
+              <p className="eg-login-grid-copy">Use the name from your EnterpriseGlue URL, for example <strong>acme</strong> from <strong>/t/acme</strong>.</p>
+            </Stack>
             <TextInput
               id="organization-slug"
               labelText="Organization name"
@@ -734,21 +732,22 @@ export default function Login() {
               autoComplete="organization"
               value={workspace}
               onChange={(event) => { setWorkspace(event.target.value.toLowerCase()); setOrganizationError(null); }}
-              onBlur={() => touchFields('workspace')}
               invalid={Boolean(workspaceError)}
               invalidText={workspaceError || undefined}
               required
             />
-          </div>
-          <Button type="submit" kind="primary" size="md" className="eg-login-primary-action">Continue</Button>
-          <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationError(null); setOrganizationStep('email'); }}>
-            Use email instead
-          </Button>
+            <Button type="submit" kind="primary" size="md" className="eg-login-primary-action">Continue</Button>
+            <Stack gap="0" className="eg-login-grid-actions">
+              <Button type="button" kind="ghost" size="md" onClick={() => { setOrganizationError(null); setOrganizationStep('email'); }}>
+                Use email instead
+              </Button>
+            </Stack>
+          </Stack>
         </form>}
 
-        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'tenants' && <div>
-          <p className="eg-login-intro-copy">You’ll complete that organization’s own login and SSO requirements next.</p>
-          <div className="eg-login-provider-list">
+        {!isAuthenticated && !isAuthLoading && !organizationLoading && organizationStep === 'tenants' && <Stack gap={5}>
+          <p className="eg-login-grid-copy">You’ll complete that organization’s own login and SSO requirements next.</p>
+          <Stack gap={3}>
             {organizationChoices.map((tenant) => <Button
               key={tenant.tenantId}
               type="button"
@@ -759,11 +758,13 @@ export default function Login() {
             >
               <span className="eg-login-provider-button__action">{tenant.tenantName}</span>
             </Button>)}
-          </div>
-          <Button type="button" kind="ghost" size="md" className="eg-login-secondary-action" onClick={() => { setOrganizationChoices([]); setOrganizationStep('email'); }}>
-            Use a different email
-          </Button>
-        </div>}
+          </Stack>
+          <Stack gap="0" className="eg-login-grid-actions">
+            <Button type="button" kind="ghost" size="md" onClick={() => { setOrganizationChoices([]); setOrganizationStep('email'); }}>
+              Use a different email
+            </Button>
+          </Stack>
+        </Stack>}
       </PublicAuthShell>
     );
   }
