@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.3...v0.40.4) (2026-11-20)
 
+### Changes
 
-### Bug Fixes
+- **frontend:** Starts workspace dashboard queries early and displays each dashboard section as its data becomes available.
 
-* **frontend:** load workspace dashboards progressively ([e9fb35a](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e9fb35a06d4d9e49464da49f6bbfaaa492585aa4))
-* **frontend:** load workspace dashboards progressively ([eb49375](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/eb49375d1db24847b7601b56c07550181383e750))
+Full upgrade, compatibility and verification details: [v0.40.4 release notes](docs/releases/v0.40.4.md).
 
 ## [0.40.3](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.2...v0.40.3) (2026-11-20)
 
