@@ -9,6 +9,7 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 ### Changes
 
 - **dashboard:** Starts project and file totals earlier on workspace reload and reduces duplicate database reads during permission loading.
+- **security:** Bound the time needed to trim trailing slashes in SCIM and plugin secret broker URLs.
 
 Full upgrade, compatibility and verification details: [v0.40.6 release notes](docs/releases/v0.40.6.md).
 
