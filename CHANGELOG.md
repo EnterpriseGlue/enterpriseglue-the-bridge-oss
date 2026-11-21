@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.6...v0.40.7) (2026-11-21)
+
+
+### Bug Fixes
+
+* **ui:** correct account and organization Carbon patterns ([2062dd0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2062dd0e160105a54e5e6ab0852c6863b5c7fb02))
+* **ui:** correct account and organization Carbon patterns ([6963e45](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6963e459aac6107797b2b5fef79930d73dd2a944))
+
 ## [0.40.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.5...v0.40.6) (2026-11-20)
 
 ### Changes
