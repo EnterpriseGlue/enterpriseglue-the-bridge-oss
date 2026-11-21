@@ -387,6 +387,12 @@ registry state stop writes, and image recovery triggers toolchain publication
 after image success. Package publishers retain dependency order and verify
 existing canonical payloads before publishing missing versions.
 
+The toolchain publisher can use the protected workflow revision to recognize a
+reviewed name for the Carbon font build plugin in older frozen source. The
+front-end guard still checks external font removal, pinned font dependencies,
+and the font content security policy. The publisher restores the exact checker
+from the frozen checkout before preparing publication artifacts.
+
 Before the GitHub release exists, retry the original explicit `release-please`
 dispatch with its frozen source, tag, release PR and required code PRs, adding
 only the reviewed `recovery_prs`. A created GitHub release does not establish

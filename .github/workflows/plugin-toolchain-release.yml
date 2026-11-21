@@ -206,10 +206,32 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Keep the frozen source and artifacts. The protected publication
+          # workflow can correct a static check's recognition of the same
+          # external-font removal without editing the frontend build.
+          [[ "$GITHUB_WORKFLOW_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REF" ]]
+          git fetch --no-tags --depth=1 origin "$GITHUB_WORKFLOW_SHA"
+          guard_script=scripts/check-frontend-self-contained.mjs
+          guard_helper="$RUNNER_TEMP/release-publication-frontend-guard.mjs"
+          guard_for_gates="$RUNNER_TEMP/frontend-self-contained-for-publication.mjs"
+          original_guard="$RUNNER_TEMP/frozen-frontend-self-contained.mjs"
+          git show "$GITHUB_WORKFLOW_SHA:scripts/release-publication-frontend-guard.mjs" > "$guard_helper"
+          node "$guard_helper" "$GITHUB_WORKSPACE" "$guard_for_gates"
+          git diff --exit-code -- "$guard_script"
+          cp "$guard_script" "$original_guard"
+          restore_guard() {
+            cp "$original_guard" "$guard_script"
+            git diff --exit-code -- "$guard_script"
+          }
+          trap restore_guard EXIT
+          cp "$guard_for_gates" "$guard_script"
           pnpm guard:paid-plugin-boundary
           pnpm test:plugin-platform
           pnpm typecheck:plugin-platform
           pnpm test:plugin-platform:helm
+          restore_guard
+          trap - EXIT
 
       - name: Authenticate to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0

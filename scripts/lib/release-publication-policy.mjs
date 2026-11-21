@@ -82,6 +82,7 @@ export function isPublicationRepairPath(path) {
   const allowed = [
     /^scripts\/(?:lib\/)?release-publication-[a-z0-9.-]+\.(?:mjs|sh|json)$/,
     /^scripts\/check-plugin-toolchain-release-policy\.mjs$/,
+    /^scripts\/frontend-dependency-boundary\.test\.mjs$/,
     /^scripts\/ci-change-classifier(?:\.test)?\.mjs$/,
     /^scripts\/release-(?:notes(?:\.test)?|canary-workflow\.test|candidate-workflow\.test|batch-integration\.test)\.mjs$/,
     /^scripts\/prepare-release-notes-pr\.sh$/,
