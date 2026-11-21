@@ -3830,15 +3830,18 @@ class PermissionServiceClass {
     }) => void
   ): Promise<number> {
     try {
-      const values = await Promise.all(columns.map(async (column) => {
-        const qb = dataSource.getRepository(entity as any)
-          .createQueryBuilder(alias)
-          .select(`MAX(${alias}.${column})`, 'value');
-        configure?.(qb);
-        const row = await qb.getRawOne();
-        const value = Number(row?.value ?? 0);
+      const qb = dataSource.getRepository(entity as any).createQueryBuilder(alias).select([]);
+      const aggregateAliases = columns.map((column, index) => {
+        const aggregateAlias = `max_timestamp_${index}`;
+        qb.addSelect(`MAX(${alias}.${column})`, aggregateAlias);
+        return aggregateAlias;
+      });
+      configure?.(qb);
+      const row = await qb.getRawOne();
+      const values = aggregateAliases.map((aggregateAlias) => {
+        const value = Number(row?.[aggregateAlias] ?? 0);
         return Number.isFinite(value) ? value : 0;
-      }));
+      });
       return Math.max(0, ...values);
     } catch {
       return 0;
