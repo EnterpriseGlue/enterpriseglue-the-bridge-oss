@@ -7,7 +7,11 @@
   "breaking": false,
   "audiences": ["users"],
   "summary": "Loads public sign-in options while the organization finder checks the browser session.",
-  "userImpact": ["Google and Microsoft sign-in buttons can appear as soon as the signed-out organization finder is ready."],
+  "userImpact": [
+    "Google and Microsoft sign-in buttons can appear as soon as the signed-out organization finder is ready.",
+    "Dashboard setup actions appear as their data comes in and reflect what the signed-in account can do.",
+    "Restricted project actions explain whom to ask for access."
+  ],
   "upgrade": {"required": false, "instructions": []},
   "configuration": [],
   "api": {"compatibility": "none", "changes": []},
@@ -16,7 +20,7 @@
   "documentation": [],
   "knownLimitations": [],
   "rollback": ["Redeploy the preceding compatible frontend image."],
-  "validation": ["Organization finder tests cover sharing the preloaded provider list and retrying a failed lookup."],
+  "validation": ["Organization finder and dashboard tests cover preload reuse, retries and permission-aware progressive setup."],
   "packages": [
     {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.21.12", "newVersion": "0.21.13", "impact": "patch"}
   ],

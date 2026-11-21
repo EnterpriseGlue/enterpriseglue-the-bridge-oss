@@ -22,7 +22,7 @@ const authContext = vi.hoisted(() => ({ tenantId: null as string | null }));
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = { userId: 'owner-1', email: 'owner@example.com' };
-    req.tenant = { tenantId: authContext.tenantId };
+    req.tenant = { tenantId: authContext.tenantId, tenantSlug: authContext.tenantId ? 'customer' : undefined };
     next();
   },
 }));
@@ -54,6 +54,7 @@ vi.mock('@enterpriseglue/shared/constants/roles.js', () => ({
 }));
 
 vi.mock('@enterpriseglue/shared/services/email/index.js', () => ({
+  getEmailConfigForTenant: vi.fn().mockResolvedValue(null),
   sendInvitationEmail: vi.fn(),
 }));
 
@@ -641,6 +642,8 @@ describe('engines management routes', () => {
   });
 
   it('creates an invitation for a non-existent engine user', async () => {
+    authContext.tenantId = 'tenant-default';
+    const { invitationService } = await import('@enterpriseglue/shared/services/invitations.js');
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
         where: vi.fn().mockReturnThis(),
@@ -667,6 +670,19 @@ describe('engines management routes', () => {
       inviteUrl: 'http://localhost:5173/t/default/invite/token-1',
       oneTimePassword: 'RevealMe123!',
     }));
+    expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-default',
+      tenantSlug: 'customer',
+    }));
+  });
+
+  it('uses the resolved organization to read engine invitation capabilities', async () => {
+    authContext.tenantId = 'tenant-default';
+    const { invitationService } = await import('@enterpriseglue/shared/services/invitations.js');
+    const response = await request(app).get('/engines-api/engines/e1/members/capabilities');
+
+    expect(response.status).toBe(200);
+    expect(invitationService.isLocalLoginDisabled).toHaveBeenCalledWith('tenant-default');
   });
 
   it('rejects delegate role on the generic engine members endpoint', async () => {

@@ -356,8 +356,9 @@ router.get(
   requireAction('project.members.invite', { resourceResolver: 'project.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
     try {
-      const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
-      const ssoRequired = await invitationService.isLocalLoginDisabled();
+      const tenantId = req.tenant?.tenantId;
+      const emailConfig = await getEmailConfigForTenant(tenantId);
+      const ssoRequired = await invitationService.isLocalLoginDisabled(tenantId);
 
       res.json({
         ssoRequired,
@@ -547,6 +548,7 @@ router.post(
         userId: String(invitation.userId),
         email: invitation.email,
         tenantSlug: invitation.tenantSlug,
+        tenantId: req.tenant?.tenantId,
         resourceType: 'project',
         resourceId: projectId,
         resourceName: project?.name || invitation.resourceName || projectId,
@@ -685,11 +687,12 @@ router.post(
       }
 
       const project = await projectRepo.findOne({ where: { id: projectId }, select: ['name'] });
-      const tenantSlug = String(req.params.tenantSlug || '').trim() || 'default';
+      const tenantSlug = req.tenant?.tenantSlug || String(req.params.tenantSlug || '').trim() || 'default';
       const inviteResult = await invitationService.createInvitation({
         userId: pendingUser.id,
         email: emailLower,
         tenantSlug,
+        tenantId: req.tenant?.tenantId,
         resourceType: 'project',
         resourceId: projectId,
         resourceName: project?.name || projectId,

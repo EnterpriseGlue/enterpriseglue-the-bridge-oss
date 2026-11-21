@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '@test/mocks/server';
 import { apiClient } from '@src/shared/api/client';
+import * as tenancy from '@src/services/tenancy';
 import ProjectOverview, { getBulkPermissionDenial } from '@src/features/starbase/pages/ProjectOverview';
 import type { ProjectMemberAccessView } from '@enterpriseglue/shared/schemas/platform-admin/project-member.js';
 
@@ -151,6 +152,22 @@ describe('ProjectOverview actions', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('gives organization members plain guidance for restricted project actions', async () => {
+    vi.spyOn(tenancy, 'getTenancyCapabilities').mockReturnValue({ ...tenancy.getTenancyCapabilities(), mode: 'pooled' });
+    authMocks.hasPlatformPermission.mockReturnValue(false);
+    const user = userEvent.setup();
+    renderWithProviders();
+
+    const newProject = await screen.findByRole('button', { name: 'New project' });
+    expect(newProject).toBeDisabled();
+    expect(newProject).toHaveAttribute('title', 'Ask an organization administrator for access to create projects.');
+    await screen.findByText('Alpha Project');
+    await user.click(await screen.findByRole('button', { name: 'Options' }));
+    const rename = (await screen.findByText('Rename', { exact: true })).closest('button');
+    expect(rename).toBeDisabled();
+    expect(rename).toHaveAttribute('title', 'Ask a project owner for access.');
   });
 
   it('opens create project modal from toolbar', async () => {

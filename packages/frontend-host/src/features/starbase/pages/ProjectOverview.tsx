@@ -12,6 +12,7 @@ import { useModal } from '../../../shared/hooks/useModal'
 import { NoDataState, ErrorState } from '../../shared/components'
 import { useInlineRename } from '../hooks/useInlineRename'
 import { useAuth } from '../../../shared/hooks/useAuth'
+import { getTenancyCapabilities } from '../../../services/tenancy'
 import { syncProjectBatch } from '../../git/api/syncProject'
 import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
 import { getBrowserSessionRevision } from '../../../utils/browserSession'
@@ -205,6 +206,7 @@ export default function ProjectOverview() {
   const location = useLocation()
   const { pathname } = location
   const { hasPlatformPermission, hasProjectPermission, permissions, user, sessionRevision } = useAuth()
+  const showAccessDiagnostics = getTenancyCapabilities().mode !== 'pooled' || user?.platformRole === 'admin'
   const authority = JSON.stringify([user?.session?.principal.id || user?.id || null, user?.session?.tenant.id || null, sessionRevision ?? null, permissionSnapshotAuthorityKey(permissions)])
 
   const authoritySession = React.useRef({ authority, revision: getBrowserSessionRevision() })
@@ -467,7 +469,9 @@ export default function ProjectOverview() {
   )
   const createProjectUnavailableReason = createProjectDecision.allowed || hasPlatformPermission(PlatformPermission.PROJECT_CREATE)
     ? null
-    : `Missing permission ${PlatformPermission.PROJECT_CREATE}`
+    : showAccessDiagnostics
+      ? `Missing permission ${PlatformPermission.PROJECT_CREATE}`
+      : 'Ask an organization administrator for access to create projects.'
 
   const didHandleOpenCreateProject = React.useRef(false)
   React.useEffect(() => {
@@ -492,8 +496,8 @@ export default function ProjectOverview() {
       { type: 'project', id: project.id }
     ).allowed) return null
     if (hasProjectPermission(project.id, permission)) return null
-    return `Missing permission ${permission}`
-  }, [hasProjectPermission, permissions])
+    return showAccessDiagnostics ? `Missing permission ${permission}` : 'Ask a project owner for access.'
+  }, [hasProjectPermission, permissions, showAccessDiagnostics])
 
   const gitSettingsCanManageConnection = React.useMemo(() => {
     if (!gitSettingsProjectId) return false
@@ -522,20 +526,22 @@ export default function ProjectOverview() {
   const getProjectBulkActionUnavailableReason = React.useCallback((projects: Project[], action: ProjectOverviewBulkAction): string | null => {
     const permissionIds = getProjectOverviewBulkActionPermissions(action, pushEnabled, pullEnabled)
     const actionId = getProjectOverviewBulkActionId(action)
-    return getBulkPermissionReason(
+    const reason = getBulkPermissionReason(
       projects,
       action,
       permissionIds,
       membershipByProjectId,
       (project, permission) => hasProjectActionOrPermission(project, actionId, permission)
     )
-  }, [hasProjectActionOrPermission, membershipByProjectId, pullEnabled, pushEnabled])
+    return reason && !showAccessDiagnostics ? 'You do not have access to this action for every selected project.' : reason
+  }, [hasProjectActionOrPermission, membershipByProjectId, pullEnabled, pushEnabled, showAccessDiagnostics])
 
   const getProjectBulkActionDiagnosticDecision = React.useCallback((
     projects: Project[],
     action: ProjectOverviewBulkAction,
     reason?: string | null
   ): UiAuthzDecision | null => {
+    if (!showAccessDiagnostics) return null
     const permissionIds = getProjectOverviewBulkActionPermissions(action, pushEnabled, pullEnabled)
     const actionId = getProjectOverviewBulkActionId(action)
     return buildProjectOverviewBulkDiagnosticDecision(
@@ -546,7 +552,7 @@ export default function ProjectOverview() {
       membershipByProjectId,
       (project, permission) => hasProjectActionOrPermission(project, actionId, permission)
     )
-  }, [hasProjectActionOrPermission, membershipByProjectId, pullEnabled, pushEnabled])
+  }, [hasProjectActionOrPermission, membershipByProjectId, pullEnabled, pushEnabled, showAccessDiagnostics])
 
   const bulkSyncUnavailableReason = React.useMemo(() => {
     if (bulkSyncProjects.length === 0) return null
@@ -556,16 +562,21 @@ export default function ProjectOverview() {
     const required = getProjectSyncPermissionForDirection(bulkDirection)
     // Membership presentation may still be loading; it cannot override a known
     // action restriction or missing directional permission at dispatch.
-    if (bulkSyncProjects.some(project => !hasProjectActionOrPermission(project, 'project.git.sync.run', required))) return `Missing permission ${required} or sync is restricted for a selected project`
+    if (bulkSyncProjects.some(project => !hasProjectActionOrPermission(project, 'project.git.sync.run', required))) {
+      return showAccessDiagnostics
+        ? `Missing permission ${required} or sync is restricted for a selected project`
+        : 'Git sync is unavailable for one or more selected projects.'
+    }
 
     const permissionId = getProjectSyncPermissionForDirection(bulkDirection)
-    return getBulkPermissionReason(
+    const reason = getBulkPermissionReason(
       bulkSyncProjects,
       'sync',
       [permissionId],
       membershipByProjectId,
       (project, permission) => hasProjectActionOrPermission(project, 'project.git.sync.run', permission)
     )
+    return reason && !showAccessDiagnostics ? 'Git sync is unavailable for one or more selected projects.' : reason
   }, [
     anySyncEnabled,
     bulkDirection,
@@ -574,10 +585,11 @@ export default function ProjectOverview() {
     membershipByProjectId,
     pullEnabled,
     pushEnabled,
+    showAccessDiagnostics,
   ])
 
   const bulkSyncDiagnosticDecision = React.useMemo(() => {
-    if (!bulkSyncUnavailableReason || bulkSyncProjects.length === 0) return null
+    if (!showAccessDiagnostics || !bulkSyncUnavailableReason || bulkSyncProjects.length === 0) return null
     const permissionId = getProjectSyncPermissionForDirection(bulkDirection)
     return buildProjectOverviewBulkDiagnosticDecision(
       bulkSyncProjects,
@@ -593,6 +605,7 @@ export default function ProjectOverview() {
     bulkSyncUnavailableReason,
     hasProjectActionOrPermission,
     membershipByProjectId,
+    showAccessDiagnostics,
   ])
 
   const openCreateProject = React.useCallback(() => {
@@ -620,6 +633,7 @@ export default function ProjectOverview() {
   }, [engineAccessProject?.id, hasProjectPermission, permissions])
   const requestEngineAccessUnavailableReason = canRequestEngineAccess
     ? null
+    : !showAccessDiagnostics ? 'Ask a project owner to connect an engine.'
     : evaluateActionSnapshot(
       permissions,
       'project-engine-target.access.request',

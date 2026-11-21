@@ -45,7 +45,7 @@ vi.mock('@enterpriseglue/shared/db/data-source.js', () => ({
 vi.mock('@enterpriseglue/shared/middleware/auth.js', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
     req.user = authMocks.currentUser;
-    req.tenant = { tenantId: authMocks.tenantId };
+    req.tenant = { tenantId: authMocks.tenantId, tenantSlug: authMocks.tenantId ? 'customer' : undefined };
     next();
   },
 }));
@@ -197,6 +197,7 @@ describe('starbase members routes', () => {
   });
 
   it('returns project member invite capabilities', async () => {
+    authMocks.tenantId = 'tenant-default';
     const { invitationService } = await import('@enterpriseglue/shared/services/invitations.js');
     (getEmailConfigForTenant as unknown as Mock).mockResolvedValue({ provider: 'smtp' });
     (invitationService.isLocalLoginDisabled as Mock).mockResolvedValue(true);
@@ -206,6 +207,7 @@ describe('starbase members routes', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ssoRequired: true, emailConfigured: true });
+    expect(invitationService.isLocalLoginDisabled).toHaveBeenCalledWith('tenant-default');
   });
 
   it('returns direct-add mode for an existing non-member user lookup', async () => {
@@ -904,6 +906,7 @@ describe('starbase members routes', () => {
   });
 
   it('creates an invitation for a non-existent project user', async () => {
+    authMocks.tenantId = 'tenant-default';
     const userRepo = {
       createQueryBuilder: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnThis(),
@@ -940,6 +943,8 @@ describe('starbase members routes', () => {
       oneTimePassword: 'RevealMe123!',
     }));
     expect(invitationService.createInvitation).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 'tenant-default',
+      tenantSlug: 'customer',
       deliveryMethod: 'email',
     }));
   });

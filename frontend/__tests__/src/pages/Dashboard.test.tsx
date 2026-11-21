@@ -18,7 +18,7 @@ const authMocks = vi.hoisted(() => ({
   },
 }));
 
-const engineSelectorMocks = vi.hoisted(() => ({ selectedEngineId: null as string | null }));
+const engineSelectorMocks = vi.hoisted(() => ({ selectedEngineId: null as string | null, isResolving: false }));
 
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -30,7 +30,7 @@ vi.mock('@src/shared/hooks/useAuth', () => ({
 
 vi.mock('@src/components/EngineSelector', () => ({
   EngineSelector: () => <div data-testid="engine-selector" />,
-  useEngineSelection: () => ({ engines: [], selectedEngineId: engineSelectorMocks.selectedEngineId, scope: 'dashboard-test' }),
+  useEngineSelection: () => ({ engines: [], selectedEngineId: engineSelectorMocks.selectedEngineId, scope: 'dashboard-test', isResolving: engineSelectorMocks.isResolving }),
 }));
 
 vi.mock('@src/shared/api/client', () => ({
@@ -100,6 +100,23 @@ describe('Dashboard', () => {
     authMocks.hasPlatformPermission.mockReturnValue(false);
     authMocks.hasAnyEnginePermission.mockReturnValue(false);
     engineSelectorMocks.selectedEngineId = null;
+    engineSelectorMocks.isResolving = false;
+  });
+
+  it('reveals project setup while engines load and omits an unavailable engine action', async () => {
+    authMocks.permissions.platform.push('project:create');
+    engineSelectorMocks.isResolving = true;
+    mockDashboardApi({ totalFiles: 0 });
+
+    const view = renderDashboard();
+
+    expect(await screen.findByRole('button', { name: 'Create project' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add engine' })).not.toBeInTheDocument();
+    engineSelectorMocks.isResolving = false;
+    view.unmount();
+    renderDashboard();
+    expect(await screen.findByRole('button', { name: 'Create project' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add engine' })).not.toBeInTheDocument();
   });
 
   it('does not fetch dashboard data when dashboard read permission is missing', async () => {

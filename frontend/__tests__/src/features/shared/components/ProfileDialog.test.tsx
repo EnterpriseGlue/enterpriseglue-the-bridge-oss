@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProfileDialog } from '@src/features/shared/components/ProfileDialog';
+import * as tenancy from '@src/services/tenancy';
 
 const fixtures = vi.hoisted(() => ({
   user: { id: 'ada', email: 'ada@example.test', firstName: 'Ada', lastName: 'Lovelace', isEmailVerified: true },
@@ -23,6 +24,20 @@ function open() {
 
 describe('Profile sign-in method recovery', () => {
   beforeEach(() => { vi.clearAllMocks(); });
+
+  it('omits platform access details for a standard organization account', async () => {
+    const capability = vi.spyOn(tenancy, 'getTenancyCapabilities')
+      .mockReturnValue({ ...tenancy.getTenancyCapabilities(), mode: 'pooled' });
+    fixtures.get.mockResolvedValue({ providers: [] });
+
+    try {
+      open();
+      expect(await screen.findByRole('dialog', { name: 'My profile' })).toBeVisible();
+      expect(screen.queryByText('Platform access')).not.toBeInTheDocument();
+    } finally {
+      capability.mockRestore();
+    }
+  });
 
   it('retries methods locally while preserving edited names', async () => {
     let attempts = 0;

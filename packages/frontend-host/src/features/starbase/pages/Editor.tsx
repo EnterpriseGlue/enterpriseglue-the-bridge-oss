@@ -44,6 +44,7 @@ import { BridgeAccessNotice } from '../../../shared/auth/BridgeAccessNotice'
 import { matchesDeployedEditorBaseline } from '../utils/missionControlEditorSelection'
 import { permissionSnapshotAuthorityKey } from '../../../contexts/authSessionPermissions'
 import { useAuth } from '../../../shared/hooks/useAuth'
+import { getTenancyCapabilities } from '../../../services/tenancy'
 import { ProjectPermission } from '../../../shared/auth/permissions'
 import { evaluateActionSnapshot } from '../../../shared/auth/guards'
 import { toSafeInternalPath } from '../../../utils/safeNavigation'
@@ -112,6 +113,10 @@ export default function Editor() {
   const location = useLocation() as { state?: any; search: string; pathname: string }
   const { notify } = useToast()
   const { user, hasProjectPermission, isLoading: authIsLoading, permissions, sessionRevision } = useAuth()
+  const showAccessDiagnostics = getTenancyCapabilities().mode !== 'pooled' || user?.platformRole === 'admin'
+  const editAccessUnavailable = showAccessDiagnostics
+    ? `Missing permission ${ProjectPermission.FILES_EDIT}`
+    : 'Ask a project owner for access to edit this diagram.'
   const queryClient = useQueryClient()
   const currentUserId = String(user?.id || '')
   // View / Hotfix mode state
@@ -205,9 +210,7 @@ export default function Editor() {
   const canReleaseProjectGitLock = gitLocksReleaseDecision.allowed || hasProjectPermission(currentProjectId, ProjectPermission.FILES_EDIT)
   const canHeartbeatProjectGitLock = gitLocksHeartbeatDecision.allowed || hasProjectPermission(currentProjectId, ProjectPermission.FILES_EDIT)
   const editorPermissionReadOnly = Boolean(currentProjectId) && !projectWriteAuthorizationPending && !canEditCurrentFile
-  const editorWriteUnavailableReason = editorPermissionReadOnly
-    ? `Missing permission ${ProjectPermission.FILES_EDIT}`
-    : null
+  const editorWriteUnavailableReason = editorPermissionReadOnly ? editAccessUnavailable : null
   const collaborationLockUnavailableReason = React.useMemo(() => {
     if (!currentProjectId || projectWriteAuthorizationPending) return null
     if (!canReadProjectGitLocks) return gitLocksReadDecision.reason || `Missing permission ${ProjectPermission.FILES_VIEW}`
@@ -2378,7 +2381,7 @@ export default function Editor() {
             lowContrast
             kind="info"
             title="Read-only editor"
-            subtitle={editorWriteUnavailableReason || `Missing permission ${ProjectPermission.FILES_EDIT}`}
+            subtitle={editorWriteUnavailableReason || editAccessUnavailable}
           />
         </div>
       )}

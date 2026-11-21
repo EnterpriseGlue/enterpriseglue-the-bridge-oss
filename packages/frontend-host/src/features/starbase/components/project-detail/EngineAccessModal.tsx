@@ -87,7 +87,11 @@ export function EngineAccessModal({
                 This project can deploy BPMN/DMN files to these engines.
               </p>
               {engineAccessQ.data.accessedEngines.length === 0 ? (
-                <p style={{ fontSize: 13, color: 'var(--cds-text-secondary)' }}>No engines connected yet. Request access below to deploy your processes.</p>
+                <p style={{ fontSize: 13, color: 'var(--cds-text-secondary)' }}>
+                  {canRequestEngineAccess
+                    ? 'No engines connected yet. Request access below to deploy your processes.'
+                    : 'No engines connected yet. Ask a project owner to connect an engine.'}
+                </p>
               ) : (
                 <Table size="sm">
                   <TableHead>

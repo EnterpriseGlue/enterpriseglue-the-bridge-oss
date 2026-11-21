@@ -25,6 +25,7 @@ import { useAuth } from '../shared/hooks/useAuth'
 import { ExtensionSlot } from '../enterprise/ExtensionSlot'
 import { canReadDashboard, dashboardContextQuery, dashboardStatsQuery } from '../features/dashboard/dashboardQueries'
 import { EnginePermission, PlatformPermission } from '../shared/auth/permissions'
+import { getTenancyCapabilities } from '../services/tenancy'
 import { evaluateActionSnapshot } from '../shared/auth/guards'
 import type { ProcessInstance } from '@enterpriseglue/shared/schemas/mission-control/process.js'
 import { PageHeader, PageLayout, PAGE_GRADIENTS } from '../shared/components/PageLayout'
@@ -171,7 +172,7 @@ function DashboardError({ onRetry }: { onRetry: () => void }) {
       <PageHeader
         icon={Activity}
         title="Dashboard"
-        subtitle="Real-time overview of your platform activity"
+        subtitle={getTenancyCapabilities().mode === 'pooled' ? 'Overview of your organization’s activity' : 'Real-time overview of your platform activity'}
         gradient={PAGE_GRADIENTS.blue}
         variant="productive"
       />
@@ -197,6 +198,7 @@ export default function Dashboard() {
   const { timePeriod, setTimePeriod } = useDashboardFilterStore()
   const { hasPlatformPermission, hasAnyEnginePermission, permissions, user } = useAuth()
   const canViewDashboard = canReadDashboard(permissions)
+  const canAddEngine = evaluateActionSnapshot(permissions, 'engine.inventory.create', { type: 'platform' }).allowed
   const { engines, selectedEngineId, scope, isResolving, isError: enginesFailed, refetch: retryEngines } = useEngineSelection(canViewDashboard)
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
@@ -268,7 +270,15 @@ export default function Dashboard() {
   const runtimeReady = !enginesFailed && !isResolving && (!selectedEngineId || instancesQuery.isSuccess)
 
   const totalProjects = statsQuery.data?.totalProjects || 0
-  const showGettingStarted = !statsQuery.isLoading && !isResolving && !statsQuery.isError && !enginesFailed && (totalProjects === 0 || connectedEngines === 0)
+  const needsProject = statsQuery.isSuccess && totalProjects === 0
+  const needsEngine = !isResolving && !enginesFailed && connectedEngines === 0
+  const canCreateProject = evaluateActionSnapshot(permissions, 'project.projects.create', { type: 'platform' }).allowed ||
+    hasPlatformPermission(PlatformPermission.PROJECT_CREATE)
+  const canManageTenantSettings = evaluateActionSnapshot(permissions, 'tenant.settings.manage', {
+    type: 'tenant', id: user?.session?.tenant.id || null,
+  }).allowed
+  const showDefaultGettingStarted = (needsProject && canCreateProject) || (needsEngine && canAddEngine)
+  const showGettingStarted = showDefaultGettingStarted || (needsEngine && canManageTenantSettings)
 
   const instanceStates = React.useMemo(() => ({
     active: instances.filter(i => i.state === 'ACTIVE' && !i.hasIncident).length,
@@ -387,19 +397,16 @@ export default function Dashboard() {
           name="dashboard-getting-started"
           props={{
             tenantSlug,
-            needsProject: totalProjects === 0,
-            needsEngine: connectedEngines === 0,
-            canCreateProject: evaluateActionSnapshot(permissions, 'project.projects.create', { type: 'platform' }).allowed ||
-              hasPlatformPermission(PlatformPermission.PROJECT_CREATE),
+            needsProject,
+            needsEngine,
+            canCreateProject,
             canConnectProject: evaluateActionSnapshot(permissions, 'project.create.git.create', { type: 'platform' }).allowed,
-            canManageTenantSettings: evaluateActionSnapshot(permissions, 'tenant.settings.manage', {
-              type: 'tenant', id: user?.session?.tenant.id || null,
-            }).allowed,
+            canManageTenantSettings,
             openCreateProject: (connectToGit = false) => safeNavigate(toTenantPath('/starbase'), {
               state: { openCreateProject: true, connectToGit },
             }),
           }}
-          fallback={(
+          fallback={showDefaultGettingStarted && (
             <Tile className="eg-dashboard-get-started">
               <div className="eg-dashboard-get-started__content">
                 <div>
@@ -409,7 +416,7 @@ export default function Dashboard() {
                   </p>
                 </div>
                 <div className="eg-dashboard-get-started__actions">
-                  {totalProjects === 0 && (
+                  {needsProject && canCreateProject && (
                     <Button
                       kind="primary"
                       size="sm"
@@ -418,7 +425,7 @@ export default function Dashboard() {
                       Create project
                     </Button>
                   )}
-                  {connectedEngines === 0 && (
+                  {needsEngine && canAddEngine && (
                     <Button
                       kind="secondary"
                       size="sm"
