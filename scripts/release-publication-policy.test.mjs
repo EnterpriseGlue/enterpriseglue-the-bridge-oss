@@ -15,7 +15,8 @@ const publicationContext = { eventName: 'workflow_dispatch', ref: 'refs/heads/ma
 
 test('the publisher static-contract checker is a narrow publication-control repair path, without admitting scanner or payload changes',()=>{
   assert.equal(isPublicationRepairPath('scripts/check-plugin-toolchain-release-policy.mjs'),true)
-  for(const path of ['scripts/check-plugin-toolchain-release-policy.mjs.backup','scripts/check-plugin-platform-production-images.sh','backend/Dockerfile.prod','pnpm-lock.yaml','.trivyignore','packages/backend-host/package.json'])assert.equal(isPublicationRepairPath(path),false,path)
+  assert.equal(isPublicationRepairPath('scripts/frontend-dependency-boundary.test.mjs'),true)
+  for(const path of ['scripts/check-plugin-toolchain-release-policy.mjs.backup','scripts/frontend-dependency-boundary.mjs','scripts/check-plugin-platform-production-images.sh','backend/Dockerfile.prod','frontend/src/main.tsx','pnpm-lock.yaml','.trivyignore','packages/backend-host/package.json'])assert.equal(isPublicationRepairPath(path),false,path)
 })
 
 test('closed-PR history retains every page and pending-release field without retrieving PR bodies', () => {

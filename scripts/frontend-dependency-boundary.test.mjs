@@ -31,7 +31,8 @@ test('Spanner keeps additive peer compatibility while build and production use t
 test('the frontend runtime host belongs to its production graph', () => {
   assert.equal(frontend.dependencies['@enterpriseglue/frontend-host'], 'workspace:*');
   assert.equal(frontend.devDependencies['@enterpriseglue/frontend-host'], undefined);
-  assert.match(readFileSync(new URL('../frontend/src/main.tsx', import.meta.url), 'utf8'), /from ['"]@enterpriseglue\/frontend-host\/main['"]/);
+  const entrypoint = readFileSync(new URL('../frontend/src/main.tsx', import.meta.url), 'utf8');
+  assert.match(entrypoint, /(?:\bfrom\s+['"]@enterpriseglue\/frontend-host\/main['"]|\bimport\(\s*['"]@enterpriseglue\/frontend-host\/main['"]\s*\))/);
 });
 
 test('the production browser workspace closure has no mail, database, or server libraries', () => {
