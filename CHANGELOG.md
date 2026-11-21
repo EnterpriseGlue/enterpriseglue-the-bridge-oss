@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.7...v0.40.8) (2026-11-21)
+
+### Changes
+
+- **authorization:** Batches authorization-version timestamp reads by table to reduce database work during organization startup.
+- **frontend:** Loads runtime configuration alongside the frontend application and defers PDF export code until it is needed.
+
+Full upgrade, compatibility and verification details: [v0.40.8 release notes](docs/releases/v0.40.8.md).
+
 ## [0.40.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.6...v0.40.7) (2026-11-21)
 
 ### Changes
