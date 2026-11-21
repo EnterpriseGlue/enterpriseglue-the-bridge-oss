@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.8...v0.40.9) (2026-11-21)
+
+
+### Bug Fixes
+
+* avoid duplicate setup requests in verified workspaces ([2859f13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2859f134ceb3792416516e6cf597a11f69d89852))
+* improve workspace text rendering and member access labels ([728f855](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/728f85558930a881f39834dd9738458d9268d6ec))
+* reuse loaded memberships in the account menu switcher ([61acb6f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/61acb6fc1d9b393a55c2c38ca3840a995d018ceb))
+* reuse loaded memberships in the account menu switcher ([417ceeb](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/417ceeba67531f748435836dbd222916c819dae5))
+* speed up workspace rendering and clarify project access ([f4306ec](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f4306ecc7fad678a7d253238876a2c25d1059401))
+
 ## [0.40.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.7...v0.40.8) (2026-11-21)
 
 ### Changes
