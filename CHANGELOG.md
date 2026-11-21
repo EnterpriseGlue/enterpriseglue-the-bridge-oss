@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.8...v0.40.9) (2026-11-21)
+
+### Changes
+
+- **frontend:** Opens the account menu’s organization switcher from the memberships already loaded for the signed-in account.
+- **frontend:** Speeds up verified workspace entry and makes project member access easier to read.
+
+Full upgrade, compatibility and verification details: [v0.40.9 release notes](docs/releases/v0.40.9.md).
+
 ## [0.40.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.7...v0.40.8) (2026-11-21)
 
 ### Changes
