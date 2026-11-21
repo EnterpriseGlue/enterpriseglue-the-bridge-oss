@@ -2,7 +2,12 @@
  * Thin shell entry point — delegates to @enterpriseglue/frontend-host.
  * Vite resolves the package via file: dependency and bundles it.
  */
-import { startApp } from '@enterpriseglue/frontend-host/main'
+import { initRuntimeConfig } from '@enterpriseglue/frontend-host/runtimeConfig'
 import '../../packages/frontend-host/src/styles/split-pane.css'
 
-startApp()
+// Start the same-origin, uncached configuration request while the application
+// modules download and initialize. The host still gates API use on validation.
+const runtimeConfigReady = initRuntimeConfig()
+void runtimeConfigReady.catch(() => undefined)
+
+void import('@enterpriseglue/frontend-host/main').then(({ startApp }) => startApp(runtimeConfigReady))

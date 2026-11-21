@@ -1,0 +1,35 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "overlap-runtime-configuration-startup",
+  "type": "fix",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": ["users", "operators"],
+  "summary": "Loads runtime configuration alongside the frontend application and defers PDF export code until it is needed.",
+  "userImpact": ["The browser can validate configuration while it loads and initializes the application."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": ["The frontend shell can pass its in-progress runtime configuration load to the existing host startup function."]
+  },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["Frontend API and plugin initialization still wait for validated same-origin configuration. The config request still rejects redirects and bypasses HTTP caching."],
+  "documentation": ["Updated the production bundle-budget check to include modules requested immediately at startup."],
+  "knownLimitations": [],
+  "rollback": ["Redeploy the preceding compatible frontend image."],
+  "validation": [
+    "Production bundle budget, frontend unit suite and Chromium organization-selection and login browser checks.",
+    "Compared production builds with the same simulated API latency in cold and warm Chromium sessions. Verified that invalid required configuration still prevents API use."
+  ],
+  "packages": [
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.21.8", "newVersion": "0.21.9", "impact": "patch" }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The deployment configuration and user workflow are unchanged."
+  }
+}

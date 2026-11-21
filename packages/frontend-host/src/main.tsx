@@ -83,11 +83,11 @@ function renderRuntimeConfigError(error: unknown): void {
   root.replaceChildren(container)
 }
 
-export async function startApp() {
+export async function startApp(runtimeConfigReady?: Promise<void>) {
   // Resolve runtime configuration before anything (plugins, API clients) reads
   // it. Must run ahead of the plugin loads below, which may issue API requests.
   try {
-    await initRuntimeConfig()
+    await (runtimeConfigReady ?? initRuntimeConfig())
   } catch (error) {
     renderRuntimeConfigError(error)
     return
