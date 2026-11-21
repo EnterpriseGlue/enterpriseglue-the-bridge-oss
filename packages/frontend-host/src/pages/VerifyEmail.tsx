@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom';
-import { Button, InlineLoading, InlineNotification } from '@carbon/react';
+import { Button, Column, Grid, InlineLoading, InlineNotification } from '@carbon/react';
 import { apiClient } from '../shared/api/client';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
 
@@ -21,7 +21,10 @@ export default function VerifyEmail() {
 
   useEffect(() => {
     const token = searchParams.get('token');
-    let redirectTimer: ReturnType<typeof setInterval> | undefined;
+    let active = true;
+    setStatus('verifying');
+    setError('');
+    setCountdown(5);
 
     if (!token) {
       setStatus('error');
@@ -35,6 +38,7 @@ export default function VerifyEmail() {
       { token }
     )
       .then((data) => {
+        if (!active) return;
         if (!data || typeof data !== 'object') {
           setStatus('error');
           setError('Verification failed');
@@ -42,18 +46,7 @@ export default function VerifyEmail() {
         }
         if (!data.code && !data.error) {
           setStatus('success');
-          // Start countdown to redirect
-          redirectTimer = setInterval(() => {
-            setCountdown((prev) => {
-              if (prev <= 1) {
-                if (redirectTimer) clearInterval(redirectTimer);
-                navigate(loginPath);
-                return 0;
-              }
-              return prev - 1;
-            });
-          }, 1000);
-          
+          return;
         }
         if (data.code === 'TOKEN_EXPIRED') {
           setStatus('expired');
@@ -63,14 +56,25 @@ export default function VerifyEmail() {
         setError(data.error || 'Verification failed');
       })
       .catch((err) => {
+        if (!active) return;
         console.error('Verification error:', err);
         setStatus('error');
         setError('Failed to verify email. Please try again.');
       });
     return () => {
-      if (redirectTimer) clearInterval(redirectTimer);
+      active = false;
     };
-  }, [searchParams, navigate, loginPath]);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (status !== 'success') return;
+    const timer = setInterval(() => setCountdown((remaining) => Math.max(0, remaining - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [status]);
+
+  useEffect(() => {
+    if (status === 'success' && countdown === 0) navigate(loginPath);
+  }, [countdown, loginPath, navigate, status]);
 
   const title = status === 'verifying'
     ? 'Verifying your email'
@@ -82,25 +86,43 @@ export default function VerifyEmail() {
 
   return (
     <PublicAuthShell title={title} homePath={tenantSlug ? `${tenantPrefix}/` : '/'}>
+      <Grid fullWidth className="eg-verification-grid">
       {status === 'verifying' ? (
-        <InlineLoading description="Verifying your email…" />
+        <Column sm={4} md={8} lg={16}>
+          <InlineLoading description="Verifying your email…" />
+        </Column>
       ) : status === 'success' ? <>
-        <InlineNotification kind="success" lowContrast hideCloseButton title="Email address verified" subtitle="You can now log in to your account." />
-        <p style={{ color: 'var(--cds-text-secondary)' }}>Redirecting to login in {countdown} second{countdown !== 1 ? 's' : ''}…</p>
-        <div className="eg-public-auth-actions"><Button onClick={() => navigate(loginPath)}>Go to login now</Button></div>
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification kind="success" lowContrast hideCloseButton title="Email address verified" subtitle="You can now log in to your account." />
+        </Column>
+        <Column sm={4} md={8} lg={16}>
+          <p className="eg-verification-countdown">Redirecting to login in {countdown} second{countdown !== 1 ? 's' : ''}…</p>
+        </Column>
+        <Column sm={4} md={8} lg={16}>
+          <div className="eg-public-auth-actions"><Button onClick={() => navigate(loginPath)}>Go to login now</Button></div>
+        </Column>
       </> : status === 'expired' ? <>
-        <InlineNotification kind="warning" lowContrast hideCloseButton title="This link has expired" subtitle="Verification links are valid for 24 hours. Request a new link to continue." />
-        <div className="eg-public-auth-actions">
-          <Button onClick={() => navigate(resendPath)}>Request new link</Button>
-          <Button kind="secondary" onClick={() => navigate(loginPath)}>Go to login</Button>
-        </div>
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification kind="warning" lowContrast hideCloseButton title="This link has expired" subtitle="Verification links are valid for 24 hours. Request a new link to continue." />
+        </Column>
+        <Column sm={4} md={8} lg={16}>
+          <div className="eg-public-auth-actions">
+            <Button onClick={() => navigate(resendPath)}>Request new link</Button>
+            <Button kind="secondary" onClick={() => navigate(loginPath)}>Go to login</Button>
+          </div>
+        </Column>
       </> : <>
-        <InlineNotification kind="error" lowContrast hideCloseButton title="Email was not verified" subtitle={error || 'The verification link may be invalid or may already have been used.'} />
-        <div className="eg-public-auth-actions">
-          <Button onClick={() => navigate(resendPath)}>Request new link</Button>
-          <Button kind="secondary" onClick={() => navigate(loginPath)}>Go to login</Button>
-        </div>
+        <Column sm={4} md={8} lg={16}>
+          <InlineNotification kind="error" lowContrast hideCloseButton title="Email was not verified" subtitle={error || 'The verification link may be invalid or may already have been used.'} />
+        </Column>
+        <Column sm={4} md={8} lg={16}>
+          <div className="eg-public-auth-actions">
+            <Button onClick={() => navigate(resendPath)}>Request new link</Button>
+            <Button kind="secondary" onClick={() => navigate(loginPath)}>Go to login</Button>
+          </div>
+        </Column>
       </>}
+      </Grid>
     </PublicAuthShell>
   );
 }

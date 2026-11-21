@@ -773,11 +773,11 @@ test.describe('Native pooled tenancy with segregated SSO', () => {
       const accountPanel = header.getByRole('region', { name: 'Account settings' });
       await expect(accountPanel.getByText('Alpha Industries', { exact: true })).toBeVisible();
       await accountPanel.getByRole('button', { name: 'Switch organization' }).click();
-      const organizationList = accountPanel.getByRole('list', { name: 'Your organizations' });
-      await expect(organizationList.getByRole('link', { name: /Alpha Industries/ })).toBeFocused();
-      const bravoChoice = organizationList.getByRole('link', { name: /Bravo Services/ });
+      const organizationList = accountPanel.getByRole('listbox', { name: 'Your organizations' });
+      await expect(organizationList.getByRole('option', { name: /Alpha Industries/ })).toBeFocused();
+      const bravoChoice = organizationList.getByRole('option', { name: /Bravo Services/ });
       await expect(bravoChoice).toBeVisible();
-      await expect(organizationList.getByRole('link', { name: /Charlie Operations/ })).toBeVisible();
+      await expect(organizationList.getByRole('option', { name: /Charlie Operations/ })).toBeVisible();
       await admin.keyboard.press('ArrowDown');
       await expect(bravoChoice).toBeFocused();
       await captureManualScreenshot(admin, '05-tenant-picker-with-memberships.jpg', { stabilize: false });

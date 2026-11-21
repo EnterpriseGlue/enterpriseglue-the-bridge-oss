@@ -8,10 +8,10 @@ import type { FrontendPluginContext } from '@enterpriseglue/enterprise-plugin-ap
  * satisfying the contract interfaces defined in `@enterpriseglue/enterprise-plugin-api`.
  *
  * The host builds this context in loadEnterpriseFrontendPlugin.ts (lines 125-138)
- * and passes it to the EE plugin via `plugin.init(context)`.
+ * and passes it to an owning plugin via `plugin.init(context)`.
  *
  * If someone removes or renames a host export that the contract promises,
- * this test fails — preventing silent breaks for EE consumers.
+ * this test fails, preventing silent breaks for plugin consumers.
  */
 
 describe('Frontend host contract conformance', () => {
@@ -126,6 +126,7 @@ describe('Frontend host contract conformance', () => {
     expect(context.components.InviteMemberModal).toBeDefined();
     expect(Object.keys(context.components.carbon ?? {}).sort()).toEqual([
       'Button',
+      'Checkbox',
       'Column',
       'Form',
       'Grid',
@@ -133,6 +134,9 @@ describe('Frontend host contract conformance', () => {
       'InlineNotification',
       'Link',
       'ListItem',
+      'NumberInput',
+      'RadioButton',
+      'RadioButtonGroup',
       'Stack',
       'Tag',
       'TextInput',

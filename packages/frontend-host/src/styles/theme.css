@@ -17,7 +17,15 @@
   --eg-color-dark-blue: #0c2655;
   --eg-color-dark-gray: #1c1b1d;
   --eg-color-black: #000000;
+}
 
+/* Resolve the bridge at every Carbon theme boundary, rather than inheriting
+   colors that were computed in the root theme. */
+:root,
+.cds--white,
+.cds--g10,
+.cds--g90,
+.cds--g100 {
   /* ============================================
      VOYAGER APPLICATION COLORS
      Based on IBM Carbon Design System
@@ -65,7 +73,9 @@
   --color-icon-primary: var(--cds-icon-primary, #161616);
   --color-icon-secondary: var(--cds-icon-secondary, #525252);
   --color-icon-tertiary: var(--cds-icon-tertiary, #8d8d8d);
+}
 
+:root {
   /* ============================================
      TYPOGRAPHY - ENTERPRISEGLUE.AI
      ============================================ */

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -249,5 +249,42 @@ describe('Dashboard', () => {
       expect(screen.getByText('Process States')).toBeInTheDocument();
       expect(screen.getByText('Summary')).toBeInTheDocument();
     });
+  });
+
+  it.each([
+    [[], '0%', 'eg-dashboard-kpi__icon--red'],
+    [[{ id: 'canceled', state: 'CANCELED' }], '0%', 'eg-dashboard-kpi__icon--red'],
+  ])('retains zero success rates for empty and canceled process collections', async (instances, value, tone) => {
+    engineSelectorMocks.selectedEngineId = 'engine-central';
+    authMocks.hasAnyEnginePermission.mockReturnValue(true);
+    mockDashboardApi({ totalFiles: 0 });
+    const original = vi.mocked(apiClient.get).getMockImplementation()!;
+    vi.mocked(apiClient.get).mockImplementation((url: string) => url === '/mission-control-api/process-instances'
+      ? Promise.resolve(instances) : original(url));
+    renderDashboard();
+    const card = (await screen.findByText('Success Rate')).closest('.eg-dashboard-kpi') as HTMLElement;
+    await waitFor(() => expect(within(card).getByText(value as string)).toBeInTheDocument());
+    expect(card.querySelector('svg')).toHaveClass(tone as string);
+    expect(screen.queryByText(/Filters apply to process activity/)).not.toBeInTheDocument();
+    expect(screen.queryByText('No finished processes in this period.')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Time period' })).toBeInTheDocument();
+  });
+
+  it('recovers project statistics without refetching the dashboard authorization context', async () => {
+    let attempts = 0;
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/api/dashboard/context') return { canViewActiveUsers: false, canViewProcessData: false, canViewMetrics: false };
+      if (url === '/api/dashboard/stats') {
+        if (++attempts === 1) throw new Error('Temporary outage');
+        return { totalProjects: 7, totalFiles: 0, fileTypes: {} };
+      }
+      return [];
+    });
+    renderDashboard();
+    await screen.findByText('Project statistics are unavailable');
+    screen.getByRole('button', { name: 'Retry project statistics' }).click();
+    await waitFor(() => expect(screen.queryByText('Project statistics are unavailable')).not.toBeInTheDocument());
+    expect(attempts).toBe(2);
+    expect(vi.mocked(apiClient.get).mock.calls.filter(([url]) => url === '/api/dashboard/context')).toHaveLength(1);
   });
 });

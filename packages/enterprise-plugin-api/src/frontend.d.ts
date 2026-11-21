@@ -185,6 +185,11 @@ export interface PluginAuthContext {
  */
 export interface PluginCarbonComponentsV1 {
   Button: ComponentType<any>;
+  /** Form controls added after the initial v1 kit; consumers feature-detect them. */
+  Checkbox?: ComponentType<any>;
+  NumberInput?: ComponentType<any>;
+  RadioButton?: ComponentType<any>;
+  RadioButtonGroup?: ComponentType<any>;
   Column: ComponentType<any>;
   Form: ComponentType<any>;
   Grid: ComponentType<any>;

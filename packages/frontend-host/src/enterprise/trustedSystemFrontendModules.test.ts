@@ -18,6 +18,9 @@ describe('trusted system frontend modules', () => {
       ownerId: descriptor.ownerId,
       async activate(context) {
         expect(context.runtime?.react.createElement).toBeTypeOf('function');
+        for (const name of ['Checkbox', 'NumberInput', 'RadioButton', 'RadioButtonGroup'] as const) {
+          expect(context.components.carbon?.[name]).toBeDefined();
+        }
         return {
           tenantRoutes: [{ path: 'admin/releases' }],
           navItems: [{ id: 'cloud-releases', label: 'Releases & updates', path: '/admin/releases', scope: 'tenant', section: 'tenant-admin', requiresTenantAdmin: true }],

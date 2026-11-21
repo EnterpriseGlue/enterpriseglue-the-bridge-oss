@@ -109,7 +109,7 @@ function DashboardKpi({ label, value, icon: Icon, tone = 'blue', loading = false
 }
 
 function DashboardKpiColumn({ children }: { children: React.ReactNode }) {
-  return <Column sm={4} md={2} lg={4}>{children}</Column>
+  return <Column sm={2} md={2} lg={4}>{children}</Column>
 }
 
 function DashboardChartColumn({ children }: { children: React.ReactNode }) {
@@ -197,7 +197,7 @@ export default function Dashboard() {
   const { timePeriod, setTimePeriod } = useDashboardFilterStore()
   const { hasPlatformPermission, hasAnyEnginePermission, permissions, user } = useAuth()
   const canViewDashboard = canReadDashboard(permissions)
-  const { engines, selectedEngineId, scope, isResolving, isError: enginesFailed } = useEngineSelection(canViewDashboard)
+  const { engines, selectedEngineId, scope, isResolving, isError: enginesFailed, refetch: retryEngines } = useEngineSelection(canViewDashboard)
 
   const tenantSlugMatch = location.pathname.match(/^\/t\/([^/]+)(?:\/|$)/)
   const tenantSlug = tenantSlugMatch?.[1] ? sanitizePathParam(decodeURIComponent(tenantSlugMatch[1])) : null
@@ -344,23 +344,36 @@ export default function Dashboard() {
       />
       <div className="eg-dashboard-content">
         {statsQuery.isError && (
+          <div className="eg-dashboard-recovery">
           <InlineNotification kind="error" title="Project statistics are unavailable" subtitle="Project and file totals could not be loaded. Other available dashboard data is still shown." lowContrast hideCloseButton />
+          <Button kind="tertiary" size="sm" disabled={statsQuery.isFetching} onClick={() => { void statsQuery.refetch() }}>Retry project statistics</Button>
+          </div>
         )}
         {enginesFailed && (
+          <div className="eg-dashboard-recovery">
           <InlineNotification kind="error" title="Engine summary is unavailable" subtitle="Connected engine totals could not be loaded. Other available dashboard data is still shown." lowContrast hideCloseButton />
+          <Button kind="tertiary" size="sm" onClick={() => { void retryEngines() }}>Retry engine summary</Button>
+          </div>
         )}
         {usersQuery.isError && (
+          <div className="eg-dashboard-recovery">
           <InlineNotification kind="warning" title="Active user total is unavailable" subtitle="The user directory could not be loaded for this dashboard view." lowContrast hideCloseButton />
+          <Button kind="tertiary" size="sm" disabled={usersQuery.isFetching} onClick={() => { void usersQuery.refetch() }}>Retry user total</Button>
+          </div>
         )}
         {instancesQuery.isError && (
+          <div className="eg-dashboard-recovery">
           <InlineNotification kind="warning" title="Process metrics are unavailable" subtitle="Process instances could not be loaded for the selected engine and time period." lowContrast hideCloseButton />
+          <Button kind="tertiary" size="sm" disabled={instancesQuery.isFetching} onClick={() => { void instancesQuery.refetch() }}>Retry process metrics</Button>
+          </div>
         )}
-        <div className="eg-dashboard-controls" aria-label="Dashboard filters">
-          <EngineSelector size="sm" label="Engine" enabled={canViewDashboard} />
+        <div className="eg-dashboard-controls" role="group" aria-label="Process activity filters">
+          <EngineSelector size="sm" label="Engine" showLabel enabled={canViewDashboard} />
           <Dropdown
             id="time-period"
             label="Time period"
-            titleText=""
+            titleText="Time period"
+            aria-label="Time period"
             size="sm"
             items={[{ id: 7, label: 'Last 7 days' }, { id: 30, label: 'Last 30 days' }, { id: 90, label: 'Last 90 days' }]}
             itemToString={(item: any) => item?.label || ''}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, InlineLoading, InlineNotification, Modal, Tag, TextInput } from '@carbon/react'
+import { Button, InlineLoading, InlineNotification, Modal, Tag, TextInput, Theme } from '@carbon/react'
 import { Link as LinkIcon } from '@carbon/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
@@ -42,6 +42,7 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
   })
 
   const connectIdentityProvider = (providerId: string) => {
+    if (profileHasChanges || profileSaving) return
     const returnTo = pathname
     try {
       redirectToApi(`/api/auth/me/identity-providers/${encodeURIComponent(providerId)}/link?returnTo=${encodeURIComponent(returnTo)}`)
@@ -91,10 +92,12 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
   }
 
   return (
+    <Theme theme="g10">
     <Modal
+      className="eg-profile-dialog"
       open={open}
-      modalHeading="My Profile"
-      primaryButtonText={profileSaving ? 'Saving...' : 'Save Changes'}
+      modalHeading="My profile"
+      primaryButtonText={profileSaving ? 'Saving…' : 'Save changes'}
       secondaryButtonText="Cancel"
       primaryButtonDisabled={profileSaving || !profileHasChanges}
       onRequestClose={handleCloseProfile}
@@ -112,14 +115,14 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-5)' }}>
         <div>
-          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Email</div>
+          <div style={{ fontSize: '12px', color: 'var(--cds-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Email</div>
           <div style={{ fontSize: '14px' }}>{user?.email || ''}</div>
         </div>
 
         <div>
-          <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Role</div>
+          <div style={{ fontSize: '12px', color: 'var(--cds-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Platform access</div>
           <Tag type={platformAdminMenuVisible ? 'purple' : 'gray'} size="sm">
-            {platformAdminMenuVisible ? 'Platform Admin' : 'User'}
+            {platformAdminMenuVisible ? 'Administrative features' : 'Standard features'}
           </Tag>
         </div>
 
@@ -129,14 +132,14 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
 
         <TextInput
           id="profile-first-name"
-          labelText="First Name"
+          labelText="First name"
           value={profileFirstName}
           onChange={(e) => setProfileFirstName(e.target.value)}
         />
 
         <TextInput
           id="profile-last-name"
-          labelText="Last Name"
+          labelText="Last name"
           value={profileLastName}
           onChange={(e) => setProfileLastName(e.target.value)}
         />
@@ -145,16 +148,22 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
           <h3 id="profile-sign-in-methods-heading" className="cds--type-heading-compact-01" style={{ marginBottom: 'var(--spacing-3)' }}>
             Sign-in methods
           </h3>
+          {profileHasChanges && <p id="profile-sign-in-draft-help" className="cds--type-body-compact-01" style={{ marginBottom: 'var(--spacing-3)' }}>
+            Save your name changes before connecting another sign-in method.
+          </p>}
           {identityProviderLinksQ.isLoading ? (
             <InlineLoading description="Loading sign-in methods" />
           ) : identityProviderLinksQ.isError ? (
+            <>
             <InlineNotification
               kind="error"
               lowContrast
               hideCloseButton
               title="Sign-in methods unavailable"
-              subtitle="Refresh the page and try again."
+              subtitle="Try loading your sign-in methods again."
             />
+            <Button kind="tertiary" size="sm" disabled={identityProviderLinksQ.isFetching} onClick={() => { void identityProviderLinksQ.refetch() }}>Retry sign-in methods</Button>
+            </>
           ) : identityProviderLinksQ.data?.providers.length ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)' }}>
               {identityProviderLinksQ.data.providers.map((provider) => (
@@ -166,7 +175,10 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
                   {provider.linked ? (
                     <Tag type="green" size="sm">Connected</Tag>
                   ) : (
-                    <Button kind="tertiary" size="sm" renderIcon={LinkIcon} onClick={() => connectIdentityProvider(provider.id)}>
+                    <Button kind="tertiary" size="sm" renderIcon={LinkIcon}
+                      disabled={profileHasChanges || profileSaving}
+                      aria-describedby={profileHasChanges ? 'profile-sign-in-draft-help' : undefined}
+                      onClick={() => connectIdentityProvider(provider.id)}>
                       Connect
                     </Button>
                   )}
@@ -183,5 +195,6 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
         </section>
       </div>
     </Modal>
+    </Theme>
   )
 }

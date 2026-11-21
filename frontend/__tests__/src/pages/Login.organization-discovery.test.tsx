@@ -221,12 +221,12 @@ describe('pooled organization discovery login', () => {
     renderSelection();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Choose an organization' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Alpha/ })).toBeVisible();
-    expect(screen.getByRole('link', { name: /Bravo/ })).toBeVisible();
+    expect(screen.getByRole('option', { name: /Alpha/ })).toBeVisible();
+    expect(screen.getByRole('option', { name: /Bravo/ })).toBeVisible();
     expect(screen.getByText('Suspended')).toBeVisible();
     expect(screen.queryByRole('link', { name: /Charlie/ })).not.toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('link', { name: /Bravo/ }));
+    await user.click(screen.getByRole('option', { name: /Bravo/ }));
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/t/bravo/', { replace: true }));
     expect(apiClient.post).toHaveBeenCalledWith('/api/auth/switch-tenant', { tenantSlug: 'bravo' });
   });
@@ -272,9 +272,9 @@ describe('pooled organization discovery login', () => {
     (apiClient.post as any).mockRejectedValue(new ApiError(403, 'Forbidden', '{"code":"FORBIDDEN"}'));
     renderSelection();
 
-    await user.click(await screen.findByRole('link', { name: /Bravo/ }));
+    await user.click(await screen.findByRole('option', { name: /Bravo/ }));
     expect(await screen.findByText('Could not open this organization. Try again or choose another organization.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Alpha/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Alpha/ })).toBeInTheDocument();
     expect(navigateMock).not.toHaveBeenCalled();
   });
 });

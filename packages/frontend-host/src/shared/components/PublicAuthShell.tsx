@@ -200,12 +200,11 @@ export default function PublicAuthShell({
   description,
   homePath = '/',
   panelSize = 'default',
-  appearance: requestedAppearance = 'process',
+  appearance = 'process',
   layout = 'panel',
   children,
 }: PublicAuthShellProps) {
   const workspaceHeader = useWorkspaceHeader();
-  const appearance = workspaceHeader ? 'default' : requestedAppearance;
   const localBranding = usePublicAuthBranding(!workspaceHeader);
   const branding = workspaceHeader?.branding ?? localBranding;
   const headingId = 'public-auth-page-title';

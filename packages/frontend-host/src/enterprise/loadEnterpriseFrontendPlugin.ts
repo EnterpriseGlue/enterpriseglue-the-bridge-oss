@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import type { EnterpriseFrontendPlugin, FrontendPluginContext } from '@enterpriseglue/enterprise-plugin-api/frontend';
 import {
   Button,
+  Checkbox,
   Column,
   Form,
   Grid,
@@ -9,6 +10,9 @@ import {
   InlineNotification,
   Link,
   ListItem,
+  NumberInput,
+  RadioButton,
+  RadioButtonGroup,
   Stack,
   Tag,
   TextInput,
@@ -36,6 +40,7 @@ const injectedPluginGlobal = '__ENTERPRISEGLUE_FRONTEND_PLUGIN__';
 
 export const trustedModuleCarbonComponentsV1 = Object.freeze({
   Button,
+  Checkbox,
   Column,
   Form,
   Grid,
@@ -43,6 +48,9 @@ export const trustedModuleCarbonComponentsV1 = Object.freeze({
   InlineNotification,
   Link,
   ListItem,
+  NumberInput,
+  RadioButton,
+  RadioButtonGroup,
   Stack,
   Tag,
   TextInput,

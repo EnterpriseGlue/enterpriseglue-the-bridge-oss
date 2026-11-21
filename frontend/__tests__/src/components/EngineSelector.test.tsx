@@ -60,6 +60,15 @@ describe('EngineSelector', () => {
     useEngineSelectorStore.setState({ selectedEngineId: undefined, activeScope: undefined, selectedEngineIdsByScope: {} });
   });
 
+  it('shows one engine as labelled context without an unnecessary picker', async () => {
+    vi.mocked(getAccessibleEngines).mockResolvedValue([engines[0]]);
+    render(<EngineSelector showLabel />, { wrapper: createWrapper() });
+    const context = await screen.findByRole('group', { name: 'Engine' });
+    expect(context).toHaveTextContent('Zulu');
+    expect(screen.queryByTestId('engine-dropdown')).not.toBeInTheDocument();
+    expect(dropdownSpy).not.toHaveBeenCalled();
+  });
+
   it('resolves a missing selection to the first accessible engine in stable order', async () => {
     vi.mocked(getAccessibleEngines).mockResolvedValue(engines);
 
