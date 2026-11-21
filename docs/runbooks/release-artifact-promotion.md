@@ -176,6 +176,11 @@ move or recreate the tag.
   does not make an earlier chart comparison mismatch safe. A conflicting
   candidate requires a reviewed source fix and newly qualified queue candidate;
   never overwrite the existing candidate or public semantic tag.
+- When Rekor reports an equivalent entry while signing, candidate staging
+  checks for a registry signature from the expected GitHub workflow on the
+  exact digest. If the signature is absent, Cosign starts one fresh keyless
+  signing attempt and verifies the result. Invalid signatures, other registry
+  errors, and another signing failure stop qualification.
 - Manual `Release Candidate Stage` recovery accepts only the current protected
   `main` commit and its matching `release_tag`. This supports a release commit
   that has already reached `main` without allowing a privileged workflow to
