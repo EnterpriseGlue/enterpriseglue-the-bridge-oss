@@ -22,6 +22,7 @@ import { useAuth } from './shared/hooks/useAuth'
 import { captureRequestSession } from './utils/httpInterceptor'
 import { ToastProvider } from './shared/notifications/ToastProvider'
 import { DashboardPrefetch } from './features/dashboard/DashboardPrefetch'
+import { preloadCloudAccountProviders } from './features/organizations/cloudAccountProviders'
 import { tenantSlugForPath } from './features/organizations/organizationPaths'
 
 // Routes
@@ -103,7 +104,10 @@ export async function startApp(runtimeConfigReady?: Promise<void>) {
   const tenancyReady = (async () => {
     await getEnterpriseFrontendPlugin()
     await loadTrustedSystemFrontendModules(getConfiguredSystemFrontendModules())
-    await initializeTenancyCapabilities()
+    const capabilities = await initializeTenancyCapabilities()
+    if (capabilities.mode === 'pooled' && capabilities.organizationDiscoveryEnabled && /^\/login\/?$/.test(initialPath)) {
+      preloadCloudAccountProviders()
+    }
   })()
   const router = tenancyReady.then(async () => {
     const deferNativePlugins = Boolean(initialDashboard && getTenancyCapabilities().mode === 'pooled')
