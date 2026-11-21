@@ -2,8 +2,8 @@ apiVersion: v2
 name: enterpriseglue-host
 description: Cloud-neutral production topology for the EnterpriseGlue OSS host
 type: application
-version: 0.1.86
-appVersion: "0.40.6"
+version: 0.1.87
+appVersion: "0.40.7"
 kubeVersion: ">=1.29.0-0"
 annotations:
   enterpriseglue.io/api-config-bundle-contract: v2

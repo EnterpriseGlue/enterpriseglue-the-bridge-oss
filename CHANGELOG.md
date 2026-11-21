@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.6...v0.40.7) (2026-11-21)
 
+### Changes
 
-### Bug Fixes
+- **frontend:** Corrects account, organization and dashboard feedback, accessibility, spacing and Carbon component patterns.
 
-* **ui:** correct account and organization Carbon patterns ([2062dd0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/2062dd0e160105a54e5e6ab0852c6863b5c7fb02))
-* **ui:** correct account and organization Carbon patterns ([6963e45](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6963e459aac6107797b2b5fef79930d73dd2a944))
+Full upgrade, compatibility and verification details: [v0.40.7 release notes](docs/releases/v0.40.7.md).
 
 ## [0.40.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.5...v0.40.6) (2026-11-20)
 
