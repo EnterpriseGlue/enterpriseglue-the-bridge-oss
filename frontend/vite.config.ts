@@ -121,6 +121,8 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: enterpriseGlueManualChunk,
+          // Keep shared build helpers out of on-demand vendor chunks.
+          onlyExplicitManualChunks: true,
         },
       },
     },

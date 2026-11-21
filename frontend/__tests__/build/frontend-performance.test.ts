@@ -36,12 +36,13 @@ describe('frontend delivery performance', () => {
     expect(enterpriseGlueManualChunk('/workspace/node_modules/react/index.css?used')).toBeUndefined()
   })
 
-  it('measures only the static public entry graph and rejects budget regressions', async () => {
+  it('includes the immediately imported application and excludes its lazy routes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'enterpriseglue-bundle-budget-'))
     try {
       await mkdir(join(directory, 'assets'))
       await Promise.all([
         writeFile(join(directory, 'assets/entry.js'), 'e'.repeat(100)),
+        writeFile(join(directory, 'assets/app.js'), 'a'.repeat(150)),
         writeFile(join(directory, 'assets/react.js'), 'r'.repeat(200)),
         writeFile(join(directory, 'assets/lazy.js'), 'l'.repeat(5000)),
         writeFile(join(directory, 'assets/entry.css'), 'c'.repeat(80)),
@@ -50,17 +51,22 @@ describe('frontend delivery performance', () => {
         'index.html': {
           file: 'assets/entry.js',
           isEntry: true,
+          dynamicImports: ['_app.js'],
+          css: ['assets/entry.css'],
+        },
+        '_app.js': {
+          file: 'assets/app.js',
+          isDynamicEntry: true,
           imports: ['_react.js'],
           dynamicImports: ['lazy.tsx'],
-          css: ['assets/entry.css'],
         },
         '_react.js': { file: 'assets/react.js' },
         'lazy.tsx': { file: 'assets/lazy.js', isDynamicEntry: true },
       })
 
       expect(measurement).toMatchObject({
-        initialJavaScriptRequests: 2,
-        initialJavaScriptRawBytes: 300,
+        initialJavaScriptRequests: 3,
+        initialJavaScriptRawBytes: 450,
         initialCssRawBytes: 80,
         largestInitialJavaScriptFile: 'assets/react.js',
       })

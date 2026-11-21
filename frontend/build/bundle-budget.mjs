@@ -19,6 +19,9 @@ function collectInitialManifestKeys(manifest, entryKey) {
     for (const importedKey of chunk.imports ?? []) visit(importedKey)
   }
   visit(entryKey)
+  // The shell imports the application immediately. Include that graph in the
+  // startup budget while leaving the application's on-demand routes out.
+  for (const applicationKey of manifest[entryKey].dynamicImports ?? []) visit(applicationKey)
   return initialKeys
 }
 
