@@ -1597,6 +1597,42 @@ describe('permissionService', () => {
     });
   });
 
+  it('reads authorization timestamps once per table and keeps the latest valid timestamp', async () => {
+    let latestEngineTimestamp = '41';
+    const priorEngineTimestamps = { max_timestamp_0: '22', max_timestamp_1: null, max_timestamp_2: 'invalid' };
+    const readAggregate = vi.fn((alias: string) => Promise.resolve(alias === 'engine'
+      ? { ...priorEngineTimestamps, max_timestamp_3: latestEngineTimestamp }
+      : { max_timestamp_0: '30' }));
+    const aggregateColumns = vi.fn();
+    const dataSource = {
+      getRepository: () => ({
+        createQueryBuilder: (alias: string) => {
+          const query = {
+            select: () => query,
+            addSelect: (column: string, resultAlias: string) => {
+              aggregateColumns(column, resultAlias);
+              return query;
+            },
+            where: () => query,
+            andWhere: () => query,
+            getRawOne: () => readAggregate(alias),
+          };
+          return query;
+        },
+      }),
+    };
+    const userScope = { userId: 'user-1', tenantId: 'tenant-1', projectIds: [], engineIds: ['engine-1'], groupIds: [] };
+    const versionFor = () => (permissionService as any).getAuthorizationVersion(dataSource, userScope);
+    const firstVersion = await versionFor();
+    expect(firstVersion).toMatch(/^authz:41:/);
+    expect(readAggregate).toHaveBeenCalledTimes(13);
+    expect(readAggregate.mock.calls.filter(([alias]) => alias === 'engine')).toHaveLength(1);
+    expect(aggregateColumns).toHaveBeenCalledWith('MAX(engine.externalUpdatedAt)', 'max_timestamp_3');
+
+    latestEngineTimestamp = '51';
+    expect(await versionFor()).toBe(firstVersion.replace('authz:41:', 'authz:51:'));
+  });
+
   it('returns current user permission snapshots for canonical project and engine scopes', async () => {
     const projectAssignmentQb = {
       select: vi.fn().mockReturnThis(),
