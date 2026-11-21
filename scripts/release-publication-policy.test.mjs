@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process'
 import test from 'node:test'
 import { readPublicationApi } from './release-publication-approval.mjs'
 import './release-publication-record.test.mjs'
+import './release-publication-frontend-guard.test.mjs'
 import { detailedNotesMarker, resolveReleasePublication, validateReleasePublicationApproval, isPublicationRepairPath } from './lib/release-publication-policy.mjs'
 
 const sha = 'a'.repeat(40)
