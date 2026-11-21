@@ -23,13 +23,13 @@ function rememberLastOrganization(principal: string, tenant: string) {
   catch { /* storage is a convenience */ }
 }
 
-export function useOrganizationMemberships(selection: boolean, enabled = true) {
+function useOrganizationMemberships(selection: boolean) {
   const { user, isLoading } = useAuth()
   return useQuery({
     queryKey: membershipQueryKey(user?.id, selection),
     queryFn: () => apiClient.get<OrganizationMembership[]>('/api/auth/my-tenants',
       selection ? { includeSelectionHints: 'true' } : undefined),
-    enabled: enabled && Boolean(user?.id) && !isLoading,
+    enabled: Boolean(user?.id) && !isLoading,
     staleTime: 60_000,
     retry: false,
   })
