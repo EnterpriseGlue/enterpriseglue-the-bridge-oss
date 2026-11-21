@@ -94,7 +94,7 @@ test('browser dependency boundary contracts select CI controls and preserve depe
 });
 
 test('candidate artifact helpers select release readiness without application or database fan-out', () => {
-  for (const path of ['scripts/release-candidate-artifacts.sh', 'scripts/release-candidate-workflow.test.mjs']) {
+  for (const path of ['scripts/release-candidate-artifacts.sh', 'scripts/release-candidate-sign.sh', 'scripts/release-candidate-workflow.test.mjs']) {
     const result = classifyChangedFiles([path]);
     assert.equal(result.workflow_or_release, true);
     assert.equal(result.unknown_high_risk, false);

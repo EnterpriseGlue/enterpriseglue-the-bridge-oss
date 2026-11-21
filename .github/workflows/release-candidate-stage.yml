@@ -647,11 +647,11 @@ jobs:
         env:
           BOOTSTRAP_IMAGE: ghcr.io/enterpriseglue/enterpriseglue-managed-shard-bootstrap
           BOOTSTRAP_DIGEST: ${{ steps.build.outputs.digest }}
-          COSIGN_EXPERIMENTAL: '1'
+          CERTIFICATE_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/release-candidate-stage.yml@refs/heads/main
         run: |
           set -euo pipefail
           [[ "$BOOTSTRAP_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
-          cosign sign --yes --registry-referrers-mode=oci-1-1 "$BOOTSTRAP_IMAGE@$BOOTSTRAP_DIGEST"
+          bash scripts/release-candidate-sign.sh "$BOOTSTRAP_IMAGE@$BOOTSTRAP_DIGEST" "$CERTIFICATE_IDENTITY"
 
       - name: Attest exact bootstrap subject provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.2.0
@@ -922,7 +922,7 @@ jobs:
           SOURCE_REF: ${{ needs.resolve.outputs.source_ref }}
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
-          COSIGN_EXPERIMENTAL: '1'
+          CERTIFICATE_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/release-candidate-stage.yml@refs/heads/main
         run: |
           set -euo pipefail
           payload="$GITHUB_WORKSPACE/.artifacts/release-candidate-payload"
@@ -948,7 +948,7 @@ jobs:
           manager_ref="$(stage_image "$manager_tag" packages/plugin-manager/Dockerfile "$manager_version")"
 
           for subject in "$installer_ref" "$manager_ref"; do
-            cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
+            bash scripts/release-candidate-sign.sh "$subject" "$CERTIFICATE_IDENTITY"
             docker run --rm --volume "$HOME/.docker:/root/.docker:ro" \
               "$TRIVY_IMAGE" image --quiet --exit-code 1 --severity HIGH,CRITICAL "$subject"
           done
@@ -982,7 +982,7 @@ jobs:
           manager_chart_ref="$(stage_chart "$chart_output/enterpriseglue-plugin-manager-$manager_chart_version.tgz" enterpriseglue-plugin-manager "$manager_chart_version")"
 
           for subject in "$host_chart_ref" "$runtime_chart_ref" "$rbac_chart_ref" "$manager_chart_ref"; do
-            cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
+            bash scripts/release-candidate-sign.sh "$subject" "$CERTIFICATE_IDENTITY"
           done
           {
             echo "installer_ref=$installer_ref"
@@ -1113,11 +1113,8 @@ jobs:
           digest="$(oras resolve "$repository:$tag")"
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           subject="$repository@$digest"
-          cosign sign --yes --registry-referrers-mode=oci-1-1 "$subject"
-          cosign verify \
-            --certificate-identity "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/release-candidate-stage.yml@refs/heads/main" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-            "$subject" >/dev/null
+          bash scripts/release-candidate-sign.sh "$subject" \
+            "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/.github/workflows/release-candidate-stage.yml@refs/heads/main"
           echo "candidate_ref=$subject" >> "$GITHUB_OUTPUT"
 
       - name: Retain the signed candidate receipt
