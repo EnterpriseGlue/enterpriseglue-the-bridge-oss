@@ -9,7 +9,7 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { PublicAuthHeaderBrand, usePublicAuthBranding } from '../../shared/components/PublicAuthShell'
 import { ProfileDialog } from '../shared/components/ProfileDialog'
 import { OrganizationList } from './OrganizationList'
-import { OrganizationSessionProvider, useOrganizationMemberships, useOrganizationSession, type OrganizationMembership } from './OrganizationSession'
+import { OrganizationSessionProvider, useOrganizationSession, type OrganizationMembership } from './OrganizationSession'
 import { ORGANIZATION_SELECTION_PATH, tenantSlugForPath } from './organizationPaths'
 import { WorkspaceHeaderContext } from './workspaceHeaderContext'
 
@@ -26,7 +26,6 @@ function WorkspaceHeader() {
   const panel = useRef<HTMLDivElement>(null)
   const [expanded, setExpanded] = useState(false)
   const [switching, setSwitching] = useState(false)
-  const switchOptions = useOrganizationMemberships(true, switching)
   const [error, setError] = useState('')
   const tenantPath = tenantSlugForPath(location.pathname)
   const active = tenantPath && memberships.data?.find((item) =>
@@ -107,13 +106,13 @@ function WorkspaceHeader() {
                       setSwitching((current) => !current)
                     }
                   }}>Switch organization</Button>}
-                  {switching && switchOptions.isPending && <SkeletonText paragraph lineCount={3} />}
-                  {switching && switchOptions.isError && <>
+                  {switching && memberships.isPending && <SkeletonText paragraph lineCount={3} />}
+                  {switching && memberships.isError && <>
                     <InlineNotification kind="error" lowContrast hideCloseButton title="Could not load your organizations" />
-                    <Button kind="secondary" size="sm" onClick={() => { void switchOptions.refetch() }}>Retry</Button>
+                    <Button kind="secondary" size="sm" onClick={() => { void memberships.refetch() }}>Retry</Button>
                   </>}
-                  {switching && switchOptions.data && <OrganizationList
-                    memberships={switchOptions.data} lastOrganization={lastOrganization} onChoose={choose} busy={transitioning}
+                  {switching && memberships.data && <OrganizationList
+                    memberships={memberships.data} lastOrganization={lastOrganization} onChoose={choose} busy={transitioning}
                   />}
                   {error && <InlineNotification kind="error" lowContrast hideCloseButton title={error} />}
                   <Button kind="ghost" size="sm" onClick={() => {

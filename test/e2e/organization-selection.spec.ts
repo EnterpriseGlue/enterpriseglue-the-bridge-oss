@@ -264,6 +264,13 @@ test.describe('Cloud organization selection @organization-selection @identity-li
 
   test('keeps another tab from reversing an explicit organization switch', async ({ page, context }) => {
     const fixture = await installAccount(page, [alpha, bravo], false, alpha)
+    const selectionHintReads: string[] = []
+    page.on('request', (request) => {
+      const url = new URL(request.url())
+      if (url.pathname.endsWith('/api/auth/my-tenants') && url.searchParams.get('includeSelectionHints') === 'true') {
+        selectionHintReads.push(url.pathname)
+      }
+    })
     const previous = await context.newPage()
     await previous.goto('/t/northwind/')
     await expect(dashboard(previous)).toBeVisible()
@@ -276,6 +283,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
     await expect(page).toHaveURL(/\/t\/westmere\/$/)
     await expect(dashboard(page)).toBeVisible()
     await expect(picker(previous)).toBeVisible()
+    expect(selectionHintReads).toEqual([])
     await expect(previous.getByText('Your organization changed in another tab. Choose an organization to continue.')).toBeVisible()
     await expect(dashboard(previous)).toHaveCount(0)
     expect(fixture.switches).toEqual(['westmere'])
