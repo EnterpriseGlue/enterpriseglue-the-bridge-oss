@@ -17,7 +17,7 @@
   "api": {"compatibility": "none", "changes": []},
   "database": {"migrations": [], "rollbackSupported": true, "notes": []},
   "security": ["The lookup contains public global provider labels. Session verification and provider validation remain unchanged."],
-  "documentation": [],
+  "documentation": ["Release notes describe the faster sign-in options and permission-aware setup guidance."],
   "knownLimitations": [],
   "rollback": ["Redeploy the preceding compatible frontend image."],
   "validation": ["Organization finder and dashboard tests cover preload reuse, retries and permission-aware progressive setup."],

@@ -9,11 +9,56 @@ import {
   AUTHZ_OPENAPI_EXTENSION_KEY,
   AUTHZ_OPENAPI_EXEMPTION_KEY,
   getAuthzActionDefinition,
+  scanBackendAuthzRoutes,
   validateAuthzRouteInventory,
 } from '@enterpriseglue/shared/authz/index.js';
 
 describe('authorization route inventory validation', () => {
   const generateOpenApi = useOpenApiFixture();
+
+  it.each([
+    ['starbase/routes/members.ts', '/starbase-api/projects/{projectId}'],
+    ['engines/routes/management.ts', '/engines-api/engines/{engineId}'],
+  ])('documents compatibility and organization URLs for %s invitation routes', (filePath, basePath) => {
+    const content = readFileSync(new URL(
+      `../../../../packages/backend-host/src/modules/${filePath}`, import.meta.url,
+    ), 'utf8');
+    const routes = scanBackendAuthzRoutes([{ filePath, content }]).routes;
+    const document = generateOpenApi();
+    for (const [method, path, status] of [
+      ['GET', `${basePath}/members/capabilities`, '200'],
+      ['POST', `${basePath}/members`, '201'],
+      ['POST', `${basePath}/pending-invites/{invitationId}/reissue`, '200'],
+    ]) {
+      expect(routes).toContainEqual(expect.objectContaining({
+        method, normalizedRoute: path, authenticated: true,
+      }));
+      const operation = document.paths[path]?.[method.toLowerCase()];
+      expect(operation?.[AUTHZ_OPENAPI_EXTENSION_KEY]).toBeDefined();
+      expect(operation?.servers).toEqual([
+        expect.objectContaining({ url: '/t/{tenantSlug}', variables: { tenantSlug: expect.any(Object) } }),
+        expect.objectContaining({ url: '/' }),
+      ]);
+      const schema = operation?.responses[status]?.content['application/json']?.schema;
+      if (method === 'GET') {
+        expect(schema?.properties).toMatchObject({
+          ssoRequired: { type: 'boolean' }, emailConfigured: { type: 'boolean' },
+        });
+      } else if (status === '201') {
+        expect(operation?.requestBody.content['application/json'].schema.properties).toMatchObject({
+          email: { type: 'string', format: 'email' }, deliveryMethod: { enum: ['email', 'manual'] },
+        });
+        expect(schema?.anyOf).toContainEqual(expect.objectContaining({
+          properties: expect.objectContaining({ invited: { type: 'boolean', enum: [true] } }),
+        }));
+      } else {
+        expect(schema?.properties).toMatchObject({
+          inviteUrl: { type: 'string' }, oneTimePassword: { type: 'string' },
+        });
+      }
+    }
+  });
+
   it('isolates contract mutations from the baseline used by other checks', () => {
     const baseline = generateOpenApi();
     const modified = generateOpenApi();
