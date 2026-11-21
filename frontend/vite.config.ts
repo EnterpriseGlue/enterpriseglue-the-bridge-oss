@@ -35,7 +35,7 @@ function urlReferencesHostname(source: string, expectedHostname: string): boolea
 
 function configureCarbonFontFaces() {
   return {
-    postcssPlugin: 'enterpriseglue-carbon-font-faces',
+    postcssPlugin: 'enterpriseglue-strip-external-carbon-font-faces',
     AtRule(atRule: {
       name: string
       nodes?: Array<{ type: string; prop?: string; value?: string }>
@@ -43,16 +43,17 @@ function configureCarbonFontFaces() {
       remove(): void
       append(declaration: { prop: string; value: string }): void
     }) {
-      if (atRule.name !== 'font-face') return
-      if (urlReferencesHostname(atRule.toString(), externalCarbonFontHostname)) {
-        atRule.remove()
-        return
-      }
+      if (atRule.name === 'font-face') {
+        if (urlReferencesHostname(atRule.toString(), externalCarbonFontHostname)) {
+          atRule.remove()
+          return
+        }
 
-      const fontFamily = atRule.nodes?.find((node) => node.prop === 'font-family')?.value
-      const fontDisplay = atRule.nodes?.find((node) => node.prop === 'font-display')
-      if (fontFamily && /^["']?IBM Plex (Sans(?: Arabic)?|Mono)["']?$/i.test(fontFamily) && !fontDisplay) {
-        atRule.append({ prop: 'font-display', value: 'swap' })
+        const fontFamily = atRule.nodes?.find((node) => node.prop === 'font-family')?.value
+        const fontDisplay = atRule.nodes?.find((node) => node.prop === 'font-display')
+        if (fontFamily && /^["']?IBM Plex (Sans(?: Arabic)?|Mono)["']?$/i.test(fontFamily) && !fontDisplay) {
+          atRule.append({ prop: 'font-display', value: 'swap' })
+        }
       }
     },
   }
