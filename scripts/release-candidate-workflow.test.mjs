@@ -116,9 +116,80 @@ test('candidate staging qualifies every public artifact before recording success
   assert.match(stage, /infra\/docker\/managed-shard-bootstrap\/Dockerfile/)
   assert.match(stage, /run-managed-shard-bootstrap-postgres\.sh/)
   assert.match(stage, /verify-oci-image-metadata\.mjs managedShardBootstrap/)
-  assert.match(stage, /cosign sign --yes --registry-referrers-mode=oci-1-1 "\$BOOTSTRAP_IMAGE@\$BOOTSTRAP_DIGEST"/)
-  assert.match(stage, /cosign verify/)
+  assert.match(stage, /release-candidate-sign\.sh "\$BOOTSTRAP_IMAGE@\$BOOTSTRAP_DIGEST" "\$CERTIFICATE_IDENTITY"/)
+  assert.match(stage, /release-candidate-sign\.sh "\$subject" \\\n\s+"\$GITHUB_SERVER_URL\/\$GITHUB_REPOSITORY\/\.github\/workflows\/release-candidate-stage\.yml@refs\/heads\/main"/)
+  for (const component of ['BACKEND', 'FRONTEND']) {
+    assert.ok(dockerReusable.includes('release-candidate-sign.sh "$' + component + '_IMAGE@$' + component + '_DIGEST" "$CERTIFICATE_IDENTITY"'))
+  }
   assert.match(stage, /results\.every\(\(result\) => result === 'success'\)/)
+})
+
+test('candidate signing requires verified proof and bounds recovery from an equivalent log entry', async t => {
+  const subject = 'ghcr.io/enterpriseglue/candidate@sha256:' + 'a'.repeat(64)
+  const identity = 'https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/.github/workflows/release-candidate-stage.yml@refs/heads/main'
+  const cases = [
+    ['success', 'ok', 'ok', 'sign verify', 0],
+    ['signature already published', 'conflict', 'ok', 'sign verify', 0],
+    ['fresh signing required', 'conflict ok', 'missing ok', 'sign verify sign verify', 0],
+    ['second conflict', 'conflict conflict', 'missing', 'sign verify sign', 1],
+    ['identity mismatch during recovery', 'conflict', 'invalid', 'sign verify', 1],
+    ['registry denied during recovery', 'conflict', 'denied', 'sign verify', 1],
+    ['other signing failure', 'denied', 'ok', 'sign', 1],
+    ['brief registry read delay', 'ok', 'missing ok', 'sign verify verify', 0],
+    ['signature stays absent', 'ok', 'missing missing', 'sign verify verify', 1],
+    ['invalid signature after signing', 'ok', 'invalid', 'sign verify', 1],
+    ['tag in place of digest', 'ok', 'ok', '', 1],
+  ]
+  for (const [name, sign, verify, calls, status] of cases) {
+    await t.test(name, async () => {
+      const directory = await mkdtemp(path.join(tmpdir(), 'eg-candidate-sign-'))
+      try {
+        await writeFile(path.join(directory, 'cosign'), `#!/usr/bin/env node
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const [mode, ...args] = process.argv.slice(2)
+const { EXPECTED_SUBJECT: subject, EXPECTED_IDENTITY: identity } = process.env
+if (mode === 'sign') {
+  assert.deepEqual(args, ['--yes', '--registry-referrers-mode=oci-1-1', subject])
+  assert.equal(process.env.COSIGN_EXPERIMENTAL, '1')
+} else {
+  assert.equal(mode, 'verify')
+  assert.deepEqual(args, ['--certificate-identity', identity, '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com', subject])
+}
+fs.appendFileSync('calls', mode + '\\n')
+const [outcome, ...outcomes] = fs.readFileSync(mode, 'utf8').trim().split(' ')
+fs.writeFileSync(mode, outcomes.join(' '))
+if (outcome === 'ok') process.exit(0)
+const messages = {
+  conflict: 'Error: signing [' + subject + ']: signing digest: signing bundle: error signing bundle: [POST /api/v1/log/entries][409] createLogEntryConflict {"code":409,"message":"an equivalent entry already exists in the transparency log"}',
+  missing: 'Error: no signatures found\\nerror during command execution: no signatures found',
+  invalid: 'Error: certificate identity mismatch',
+  denied: 'Error: registry response HTTP 403'
+}
+assert.ok(messages[outcome])
+console.error(messages[outcome])
+process.exit(1)
+`, { mode: 0o700 })
+        await writeFile(path.join(directory, 'sleep'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o700 })
+        await writeFile(path.join(directory, 'sign'), sign)
+        await writeFile(path.join(directory, 'verify'), verify)
+        await writeFile(path.join(directory, 'calls'), '')
+        const result = spawnSync('bash', [
+          new URL('./release-candidate-sign.sh', import.meta.url).pathname,
+          name === 'tag in place of digest' ? subject.split('@')[0] + ':latest' : subject,
+          identity,
+        ], {
+          cwd: directory,
+          env: { ...process.env, PATH: directory + path.delimiter + process.env.PATH, EXPECTED_SUBJECT: subject, EXPECTED_IDENTITY: identity },
+          encoding: 'utf8',
+        })
+        assert.equal(result.status, status, result.stderr)
+        assert.equal((await readFile(path.join(directory, 'calls'), 'utf8')).trim().replaceAll('\n', ' '), calls)
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    })
+  }
 })
 
 test('real variable transport runs in the required existing pinned-engine qualification', async () => {

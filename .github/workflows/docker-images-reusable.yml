@@ -359,10 +359,10 @@ jobs:
 
       - name: Sign immutable application image
         env:
-          COSIGN_EXPERIMENTAL: '1'
+          CERTIFICATE_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/docker-images-reusable.yml@${{ github.ref }}
         run: >-
-          cosign sign --yes --registry-referrers-mode=oci-1-1
-          "${{ steps.component.outputs.image }}@${{ steps.digest.outputs.digest }}"
+          bash scripts/release-candidate-sign.sh
+          "${{ steps.component.outputs.image }}@${{ steps.digest.outputs.digest }}" "$CERTIFICATE_IDENTITY"
 
       - name: Attest application image provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.2.0
@@ -494,14 +494,15 @@ jobs:
 
       - name: Sign assembled application image manifests
         env:
-          COSIGN_EXPERIMENTAL: '1'
+          CERTIFICATE_IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/docker-images-reusable.yml@${{ github.ref }}
           BACKEND_IMAGE: ${{ needs.prepare.outputs.backend_image }}
           FRONTEND_IMAGE: ${{ needs.prepare.outputs.frontend_image }}
           BACKEND_DIGEST: ${{ steps.digests.outputs.backend_digest }}
           FRONTEND_DIGEST: ${{ steps.digests.outputs.frontend_digest }}
         run: |
-          cosign sign --yes --registry-referrers-mode=oci-1-1 "$BACKEND_IMAGE@$BACKEND_DIGEST"
-          cosign sign --yes --registry-referrers-mode=oci-1-1 "$FRONTEND_IMAGE@$FRONTEND_DIGEST"
+          set -euo pipefail
+          bash scripts/release-candidate-sign.sh "$BACKEND_IMAGE@$BACKEND_DIGEST" "$CERTIFICATE_IDENTITY"
+          bash scripts/release-candidate-sign.sh "$FRONTEND_IMAGE@$FRONTEND_DIGEST" "$CERTIFICATE_IDENTITY"
 
       - name: Attest assembled backend image provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.2.0
