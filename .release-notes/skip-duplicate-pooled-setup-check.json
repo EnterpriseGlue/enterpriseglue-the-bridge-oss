@@ -1,0 +1,56 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "skip-duplicate-pooled-setup-check",
+  "type": "fix",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "operators"
+  ],
+  "summary": "Removes a duplicate setup request when an active platform administrator opens a verified organization workspace.",
+  "userImpact": [
+    "The dashboard can show results as soon as the workspace reads finish."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "none",
+    "changes": []
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Workspace access still requires matching authenticated session context and permission checks."
+  ],
+  "documentation": [],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the preceding compatible frontend image."
+  ],
+  "validation": [
+    "Frontend unit tests preserve the setup guard for standalone deployments and delegated administrators.",
+    "Chromium and Firefox open and reload an authenticated pooled workspace with no duplicate setup request."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.21.10",
+      "newVersion": "0.21.11",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The improvement requires no user or administrator action."
+  }
+}

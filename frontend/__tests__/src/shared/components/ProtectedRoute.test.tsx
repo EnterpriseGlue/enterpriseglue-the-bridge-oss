@@ -6,6 +6,9 @@ import { ProtectedRoute } from '@src/shared/components/ProtectedRoute';
 
 const tenancy = vi.hoisted(() => ({ pooled: false }));
 vi.mock('@src/enterprise/extensionRegistry', () => ({ isMultiTenantEnabled: () => tenancy.pooled }));
+vi.mock('@src/services/tenancy', () => ({
+  getTenancyCapabilities: () => ({ mode: tenancy.pooled ? 'pooled' : 'single' }),
+}));
 
 vi.mock('@src/shared/hooks/useAuth', () => ({
   useAuth: vi.fn(),
@@ -216,6 +219,35 @@ describe('ProtectedRoute', () => {
     await waitFor(() => {
       expect(screen.getByText('Navigate:/admin/settings')).toBeInTheDocument();
     });
+  });
+
+  it.each([
+    { pooled: true, role: 'admin', sessionSlug: 'alpha', redundant: true },
+    { pooled: true, role: 'user', sessionSlug: 'alpha', redundant: false },
+    { pooled: true, role: 'admin', sessionSlug: 'another', redundant: false },
+    { pooled: false, role: 'admin', sessionSlug: 'alpha', redundant: false },
+  ])('reuses the setup witness only for the verified pooled administrator ($pooled, $role, $sessionSlug)', async ({ pooled, role, sessionSlug, redundant }) => {
+    tenancy.pooled = pooled;
+    await mockUseAuth({
+      user: { id: 'user-1', isActive: true, platformRole: role, session: { tenant: { id: 'tenant-1', slug: sessionSlug } } },
+      isAuthenticated: true,
+      permissions: { userId: 'user-1', platform: ['platform:settings:manage'], projects: [], engines: [] },
+    });
+    const { apiClient } = await import('@src/shared/api/client');
+    vi.mocked(apiClient.get).mockResolvedValue({ isConfigured: true });
+
+    render(
+      <MemoryRouter initialEntries={['/t/alpha/']}>
+        <ProtectedRoute><div>Dashboard</div></ProtectedRoute>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument();
+    if (redundant) {
+      expect(apiClient.get).not.toHaveBeenCalled();
+    } else {
+      expect(apiClient.get).toHaveBeenCalledExactlyOnceWith('/api/admin/setup-status');
+    }
   });
 
   it('skips setup check when skipSetupCheck is true', async () => {

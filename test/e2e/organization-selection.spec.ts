@@ -76,7 +76,7 @@ async function installAccount(page: Page, memberships: Array<typeof alpha & { la
     if (path === '/api/authz/me/permissions') return json(route, {
       userId: 'workspace-account', tenantId: selected?.tenantId ?? null,
       platform: ['platform:dashboard:view', 'platform:tenants:self-create', 'project:create',
-        ...(operator ? ['platform:tenants:view'] : [])],
+        ...(operator ? ['platform:tenants:view', 'platform:settings:manage'] : [])],
       projects: [], engines: [], tenant: null, authorizationVersion: 'browser-workspace-fixture', generatedAt: Date.now(),
     })
     if (path === '/api/auth/my-tenants') return authenticated
@@ -112,6 +112,21 @@ const dashboard = (page: Page) => page.getByRole('heading', { name: 'Dashboard',
 const account = (page: Page) => header(page).getByRole('button', { name: 'Account menu' })
 
 test.describe('Cloud organization selection @organization-selection @identity-lifecycle', () => {
+  test('opens a verified administrator workspace without waiting on platform setup', async ({ page }) => {
+    await installAccount(page, [alpha, bravo], true, alpha)
+    const setupRequests: string[] = []
+    await page.route('**/api/admin/setup-status', (route) => {
+      setupRequests.push(route.request().url())
+      return json(route, { isConfigured: false })
+    })
+
+    await page.goto('/t/northwind/')
+    await expect(dashboard(page)).toBeVisible()
+    await page.reload()
+    await expect(dashboard(page)).toBeVisible()
+    expect(setupRequests).toEqual([])
+  })
+
   test('renders dashboard sections as each request finishes while plugins load', async ({ page }) => {
     await installAccount(page, [alpha, bravo], false, alpha)
     const releasePermissions = Promise.withResolvers<void>()
