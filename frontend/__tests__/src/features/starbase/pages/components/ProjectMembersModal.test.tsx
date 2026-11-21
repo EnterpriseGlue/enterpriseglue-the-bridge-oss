@@ -158,7 +158,7 @@ describe('ProjectMembersModal', () => {
       onRemoveScopedAssignment,
     });
 
-    expect(screen.getByText('Scoped RBAC assignments')).toBeInTheDocument();
+    expect(screen.getByText('Project role assignments')).toBeInTheDocument();
     expect(screen.getByText('Group: group-1')).toBeInTheDocument();
     expect(screen.getByText('Project Reviewer')).toBeInTheDocument();
     expect(screen.getByText('Lineage: Manual assignment; Source ref manual-entry')).toBeInTheDocument();
@@ -166,6 +166,23 @@ describe('ProjectMembersModal', () => {
     await userEvent.click(screen.getByRole('button', { name: /remove/i }));
 
     expect(onRemoveScopedAssignment).toHaveBeenCalledWith(expect.objectContaining({ id: 'assignment-1' }));
+  });
+
+  it('shows the named project role and omits assignment diagnostics in an organization workspace', () => {
+    renderMembersModal({
+      scopedAssignmentsVisible: true,
+      showAccessDiagnostics: false,
+      scopedRoleNamesById: new Map([['custom.project.reviewer', 'Project Reviewer']]),
+      scopedRoleAssignments: [scopedAssignment({
+        principalDisplayName: 'Release Reviewers',
+        sourceRef: 'private-source-reference',
+      })],
+    });
+
+    expect(screen.getByText('Project role assignments')).toBeInTheDocument();
+    expect(screen.getByText('Release Reviewers')).toBeInTheDocument();
+    expect(screen.getByText('Project Reviewer')).toBeInTheDocument();
+    expect(screen.queryByText(/private-source-reference|lineage|legacy|rbac/i)).not.toBeInTheDocument();
   });
 
   it('shows SSO-managed scoped assignment rows as source-managed in SSO-managed mode', () => {

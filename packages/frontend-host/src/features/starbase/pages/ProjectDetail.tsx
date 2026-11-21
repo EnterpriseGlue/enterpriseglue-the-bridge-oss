@@ -4,6 +4,7 @@ import { useTenantNavigate } from '../../../shared/hooks/useTenantNavigate'
 import { sanitizePathParam } from '../../../shared/utils/sanitize'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useAuth } from '../../../shared/hooks/useAuth'
+import { getTenancyCapabilities } from '../../../services/tenancy'
 import {
   Button,
   DataTableSkeleton,
@@ -2042,6 +2043,7 @@ export default function ProjectDetail() {
           canAssignScopedAccess={canAssignScopedProjectAccess}
           projectAccessAuthority={projectAccessAuthority}
           scopedAssignmentsVisible={canAssignScopedProjectAccess || canInspectScopedProjectLineage}
+          showAccessDiagnostics={getTenancyCapabilities().mode !== 'pooled' || user?.platformRole === 'admin'}
           scopedAssignmentsLoading={projectRoleAssignmentsQ.isLoading}
           scopedAssignmentsError={projectRoleAssignmentsQ.isError}
           scopedRoleAssignments={scopedProjectRoleAssignments}

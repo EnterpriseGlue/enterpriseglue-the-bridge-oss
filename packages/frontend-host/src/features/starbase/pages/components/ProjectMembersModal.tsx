@@ -61,10 +61,13 @@ export function getCanonicalProjectOwnerMemberIds(assignments: ProjectScopedRole
   return memberIds
 }
 
-function formatScopedAssignmentPrincipal(assignment: ProjectScopedRoleAssignmentRow): string {
+function formatScopedAssignmentPrincipal(assignment: ProjectScopedRoleAssignmentRow, members: ProjectMember[]): string {
+  if (assignment.principalDisplayName) return assignment.principalDisplayName
   const type = scopedAssignmentPrincipalType(assignment)
   const id = scopedAssignmentPrincipalId(assignment)
-  return `${ASSIGNMENT_PRINCIPAL_TYPE_LABELS[type]}: ${id || 'unknown'}`
+  const user = type === 'user' ? members.find((member) => member.userId === id)?.user : undefined
+  const name = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') : ''
+  return name || user?.email || `${ASSIGNMENT_PRINCIPAL_TYPE_LABELS[type]}: ${id || 'unknown'}`
 }
 
 function formatProjectScopedRoleName(
@@ -186,6 +189,7 @@ interface ProjectMembersModalProps {
   canAssignScopedAccess?: boolean
   projectAccessAuthority?: AccessAuthorityMode
   scopedAssignmentsVisible?: boolean
+  showAccessDiagnostics?: boolean
   scopedAssignmentsLoading?: boolean
   scopedAssignmentsError?: boolean
   scopedRoleAssignments?: ProjectScopedRoleAssignmentRow[]
@@ -226,6 +230,7 @@ export const ProjectMembersModal = ({
   canAssignScopedAccess = false,
   projectAccessAuthority = 'manual',
   scopedAssignmentsVisible = false,
+  showAccessDiagnostics = true,
   scopedAssignmentsLoading = false,
   scopedAssignmentsError = false,
   scopedRoleAssignments = [],
@@ -422,7 +427,7 @@ export const ProjectMembersModal = ({
                                         </>
                                       )}
                                     </div>
-                                    {customRoleLineages.length > 0 ? (
+                                    {showAccessDiagnostics && customRoleLineages.length > 0 ? (
                                       <div style={{ marginTop: 6, color: 'var(--cds-text-secondary, #6f6f6f)', fontSize: 12, overflowWrap: 'anywhere' }}>
                                         Lineage: {customRoleLineages.join(' | ')}
                                       </div>
@@ -481,25 +486,19 @@ export const ProjectMembersModal = ({
 
                 {scopedAssignmentsVisible ? (
                   <div style={{ marginTop: 'var(--spacing-5)', padding: 'var(--spacing-4)', background: 'var(--cds-layer-02)', borderRadius: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--spacing-3)', marginBottom: 'var(--spacing-3)' }}>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>Scoped RBAC assignments</div>
-                        <div style={{ fontSize: 12, color: 'var(--cds-text-secondary)' }}>
-                          Principal-scoped access from the authorization model. Legacy project members remain listed above during migration.
-                        </div>
-                      </div>
-                      <Tag type="gray" size="sm">{scopedRoleAssignments.length} scoped</Tag>
-                    </div>
+                    <h3 className="cds--type-heading-compact-01" style={{ marginBottom: 'var(--cds-spacing-03)' }}>
+                      Project role assignments
+                    </h3>
                     {scopedAssignmentsLoading ? (
                       <DataTableSkeleton showHeader={false} showToolbar={false} rowCount={3} columnCount={3} headers={[
-                        { key: 'principal', header: 'Principal' },
+                        { key: 'principal', header: 'Account or group' },
                         { key: 'role', header: 'Role' },
                         { key: 'source', header: 'Source' },
                       ] as any} />
                     ) : scopedAssignmentsError ? (
-                      <InlineNotification lowContrast kind="error" title="Failed to load scoped assignments" hideCloseButton />
+                      <InlineNotification lowContrast kind="error" title="Could not load project role assignments" hideCloseButton />
                     ) : scopedRoleAssignments.length === 0 ? (
-                      <div style={{ color: 'var(--cds-text-secondary)', fontSize: 13 }}>No scoped RBAC assignments yet.</div>
+                      <div style={{ color: 'var(--cds-text-secondary)', fontSize: 13 }}>No project role assignments yet.</div>
                     ) : (
                       <div style={{ display: 'grid', gap: 'var(--spacing-2)' }}>
                         {scopedRoleAssignments.map((assignment) => (
@@ -517,7 +516,7 @@ export const ProjectMembersModal = ({
                           >
                             <div style={{ minWidth: 0 }}>
                               <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500 }}>
-                                {formatScopedAssignmentPrincipal(assignment)}
+                                {formatScopedAssignmentPrincipal(assignment, members)}
                               </div>
                               <div style={{ color: 'var(--cds-text-secondary)', fontSize: 12 }}>
                                 {ASSIGNMENT_PRINCIPAL_TYPE_LABELS[scopedAssignmentPrincipalType(assignment)]}
@@ -527,9 +526,11 @@ export const ProjectMembersModal = ({
                               <Tag type={assignment.roleId.startsWith('system.') ? 'blue' : 'cyan'} size="sm">
                                 {formatProjectScopedRoleName(assignment, scopedRoleNamesById)}
                               </Tag>
-                              <Tag type={tagTypeForAssignmentSource(assignment.source)} size="sm">
-                                {assignment.source}
-                              </Tag>
+                              {showAccessDiagnostics ? (
+                                <Tag type={tagTypeForAssignmentSource(assignment.source)} size="sm">
+                                  {assignment.source}
+                                </Tag>
+                              ) : null}
                             </div>
                             {assignment.source === 'manual' && canUseScopedAssignmentControls && onRemoveScopedAssignment ? (
                               <Button
@@ -544,9 +545,11 @@ export const ProjectMembersModal = ({
                                 {assignment.source === 'sso' && projectAccessAuthority === 'sso_managed' ? 'managed by SSO mapping' : 'managed'}
                               </Tag>
                             )}
-                            <div style={{ gridColumn: '1 / -1', color: 'var(--cds-text-secondary)', fontSize: 12, overflowWrap: 'anywhere' }}>
-                              Lineage: {formatProjectScopedAssignmentSourceLineage(assignment)}
-                            </div>
+                            {showAccessDiagnostics ? (
+                              <div style={{ gridColumn: '1 / -1', color: 'var(--cds-text-secondary)', fontSize: 12, overflowWrap: 'anywhere' }}>
+                                Lineage: {formatProjectScopedAssignmentSourceLineage(assignment)}
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                       </div>

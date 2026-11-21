@@ -9,9 +9,11 @@
     "users",
     "operators"
   ],
-  "summary": "Removes a duplicate setup request when an active platform administrator opens a verified organization workspace.",
+  "summary": "Speeds up verified workspace entry and makes project member access easier to read.",
   "userImpact": [
-    "The dashboard can show results as soon as the workspace reads finish."
+    "The dashboard can show results as soon as the workspace reads finish for platform administrators.",
+    "Text can appear while the bundled IBM Plex fonts load.",
+    "Project member dialogs show names when available and keep assignment diagnostics out of tenant users' view."
   ],
   "upgrade": {
     "required": false,
@@ -30,14 +32,16 @@
   "security": [
     "Workspace access still requires matching authenticated session context and permission checks."
   ],
-  "documentation": [],
+  "documentation": ["Release notes describe the dashboard startup check, font loading, and project role visibility."],
   "knownLimitations": [],
   "rollback": [
     "Redeploy the preceding compatible frontend image."
   ],
   "validation": [
     "Frontend unit tests preserve the setup guard for standalone deployments and delegated administrators.",
-    "Chromium and Firefox open and reload an authenticated pooled workspace with no duplicate setup request."
+    "Chromium and Firefox open and reload an authenticated pooled workspace with no duplicate setup request.",
+    "Project member dialog tests cover named role assignments and visibility of diagnostics.",
+    "Compared cold sign-in text paint in production builds with delayed IBM Plex fonts."
   ],
   "packages": [
     {
