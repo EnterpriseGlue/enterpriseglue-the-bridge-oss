@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.8](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.7...v0.40.8) (2026-11-21)
+
+
+### Bug Fixes
+
+* **authz:** batch authorization version timestamp reads ([274f837](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/274f837f33d58c3d3cbd2761b77d67353b383c37))
+* **authz:** batch authorization version timestamp reads ([3b693ea](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3b693ea43dbc1f416cbde9e45709c3d1d1157fc3))
+* **frontend:** shorten the application startup request chain ([172e01f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/172e01f2d5036dee8ede4c7617be00ba565bb67a))
+* **frontend:** shorten the application startup request chain ([c59cb52](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/c59cb524873ab333fdf0ce154f12ac827c04ad1c))
+
 ## [0.40.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.6...v0.40.7) (2026-11-21)
 
 ### Changes
