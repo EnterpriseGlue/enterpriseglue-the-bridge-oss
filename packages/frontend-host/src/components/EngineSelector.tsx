@@ -126,9 +126,10 @@ interface EngineSelectorProps {
   size?: 'sm' | 'md' | 'lg'
   label?: string
   enabled?: boolean
+  showLabel?: boolean
 }
 
-export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled = true }: EngineSelectorProps) {
+export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled = true, showLabel = false }: EngineSelectorProps) {
   const { setSelectedEngineIdForScope } = useEngineSelectorStore()
   const inputId = React.useId()
   const trigger = React.useRef<HTMLButtonElement>(null)
@@ -157,9 +158,15 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled =
 
   if (!enabled || isError || isRequestedEngineUnavailable) return null
   if (isResolving) {
-    return <DropdownSkeleton className="eg-engine-dropdown" style={style} hideLabel />
+    return <DropdownSkeleton className="eg-engine-dropdown" style={style} hideLabel={!showLabel} />
   }
   if (items.length === 0) return null
+  if (showLabel && items.length === 1) return (
+    <div className="eg-engine-context" role="group" aria-label={label} style={style}>
+      <span className="cds--label">{label}</span>
+      <p className="eg-engine-context__value">{currentLabel}</p>
+    </div>
+  )
 
   return (
     <Dropdown
@@ -167,7 +174,7 @@ export function EngineSelector({ style, size = 'sm', label = 'Engine', enabled =
       ref={trigger}
       className="eg-engine-dropdown"
       aria-label={label || 'Engine'}
-      titleText=""
+      titleText={showLabel ? label : ''}
       label={label}
       size={size}
       items={items}

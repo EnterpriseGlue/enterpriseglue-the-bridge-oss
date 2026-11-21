@@ -56,9 +56,9 @@ assert_contains "$BACKEND_DTS" "getNotificationTenantResolver" "backend notifica
 
 if [[ "$MODE" == "current" ]]; then
   assert_contains "$PKG_JSON" '"private": false' "non-private plugin-api package"
-  # The optional host-owned Carbon kit introduces the reviewed 0.5 API line.
+  # The optional host-owned Carbon form controls introduce the reviewed 0.6 API line.
   # Keep this explicit: a future minor must update its compatibility evidence.
-  if ! node ./scripts/check-plugin-api-version.mjs "$PKG_JSON" "0.5.0"; then
+  if ! node ./scripts/check-plugin-api-version.mjs "$PKG_JSON" "0.6.0"; then
     fail=1
   fi
 

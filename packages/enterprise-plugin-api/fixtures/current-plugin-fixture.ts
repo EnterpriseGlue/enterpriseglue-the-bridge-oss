@@ -91,6 +91,15 @@ export const frontendPluginFixture: EnterpriseFrontendPlugin = {
     void context.components.ConfirmModal;
     void context.components.InviteMemberModal;
     void context.components.carbon;
+    const carbon = context.components.carbon;
+    // New controls are optional during a rolling host/module upgrade.
+    if (carbon?.Checkbox && carbon.NumberInput && carbon.RadioButton && carbon.RadioButtonGroup) {
+      const checkbox: NonNullable<typeof carbon.Checkbox> = carbon.Checkbox;
+      const numberInput: NonNullable<typeof carbon.NumberInput> = carbon.NumberInput;
+      const radio: NonNullable<typeof carbon.RadioButton> = carbon.RadioButton;
+      const radioGroup: NonNullable<typeof carbon.RadioButtonGroup> = carbon.RadioButtonGroup;
+      void [checkbox, numberInput, radio, radioGroup];
+    }
     void context.hooks.useAuth;
     void context.hooks.useModal;
     void context.hooks.useToast;

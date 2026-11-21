@@ -65,7 +65,7 @@ export function OrganizationSelection({ onboardingPath }: { onboardingPath?: str
   }
 
   if (memberships.isPending || (!error && !noAccess && (choosingKnown || Boolean(emptyDestination && memberships.data?.length === 0)))) {
-    return <Grid as="main" id="main-content" tabIndex={-1} className="eg-organization-picker">
+    return <Grid as="section" aria-label="Organization selection" className="eg-organization-picker">
       <Column sm={4} md={{ start: 2, span: 6 }} lg={{ start: 5, span: 8 }}>
         <div role="status" aria-label="Finding your organization"><SkeletonText paragraph lineCount={4} /></div>
       </Column>
@@ -73,10 +73,10 @@ export function OrganizationSelection({ onboardingPath }: { onboardingPath?: str
   }
 
   return (
-    <Grid as="main" id="main-content" tabIndex={-1} className="eg-organization-picker">
+    <Grid as="section" aria-labelledby="eg-organization-picker-title" className="eg-organization-picker">
       <Column sm={4} md={{ start: 2, span: 6 }} lg={{ start: 5, span: 8 }}>
         <Stack gap={5} className="eg-organization-form">
-          <h1 className="cds--type-heading-04">Choose an organization</h1>
+          <h1 id="eg-organization-picker-title" className="cds--type-heading-04">Choose an organization</h1>
           {user && <p className="cds--type-body-01">{user.email}</p>}
           {organizationChangedInAnotherTab && <InlineNotification kind="info" lowContrast hideCloseButton title="Your organization changed in another tab. Choose an organization to continue." />}
           {noAccess && <InlineNotification kind="error" lowContrast hideCloseButton title="You don’t have access to that organization" />}

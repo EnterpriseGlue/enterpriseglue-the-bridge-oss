@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { UserDirectoryListResponseSchema } from '@enterpriseglue/shared/schemas/platform-admin/user-directory.js';
 import { MockBrowserIdentityStack } from './utils/mockIdentityStack';
 import { captureManualScreenshot } from './utils/manualScreenshots';
 
@@ -545,19 +546,18 @@ test.describe('Carbon UX screenshot gallery', () => {
       canViewMetrics: true,
       runtimeScopedEngineIds: [],
     }));
-    await page.route('**/api/users/directory**', (route) => json(route, {
+    await page.route('**/api/users/directory**', (route) => json(route, UserDirectoryListResponseSchema.parse({
       items: dashboardUsers.map((item) => ({
-        ...item,
+        id: item.id, email: item.email, firstName: item.firstName, lastName: item.lastName,
         displayName: `${item.firstName} ${item.lastName}`,
-        status: item.isActive ? 'active' : 'deactivated',
+        status: item.isActive ? 'active' : 'deactivated', platformRole: item.platformRole,
+        bootstrapAccess: item.platformRole, authenticationSources: item.authenticationSources,
+        provisioningSource: item.provisioningSource, provisioningDirectoryKey: item.provisioningDirectoryKey,
         lastSignInAt: item.lastLoginAt,
         lastProvisionedAt: item.provisioningSource === 'scim' ? now - 7_200_000 : null,
         provisioningHealth: item.provisioningSource === 'scim' ? 'healthy' : 'not_applicable',
-      })),
-      total: dashboardUsers.length,
-      limit: 200,
-      offset: 0,
-    }));
+      })), total: dashboardUsers.length, limit: 200, offset: 0,
+    })));
     await page.route('**/api/dashboard/stats', (route) => json(route, {
       totalProjects: 8,
       totalFiles: 28,
@@ -623,29 +623,6 @@ test.describe('Carbon UX screenshot gallery', () => {
 
   test('captures user access ownership without the dashboard @carbon-gallery', async ({ page }) => {
     await installGalleryStack(page);
-    await page.route('**/api/users', (route) => json(route, [
-      {
-        ...user,
-        platformRole: 'user',
-        authProvider: 'oidc',
-        isActive: true,
-        isEmailVerified: true,
-        adminStatus: 'active',
-        createdAt: now,
-      },
-      {
-        id: 'browser-admin-user',
-        email: 'browser.admin@example.test',
-        firstName: 'Browser',
-        lastName: 'Admin',
-        platformRole: 'admin',
-        authProvider: 'local',
-        isActive: true,
-        isEmailVerified: true,
-        adminStatus: 'active',
-        createdAt: now,
-      },
-    ]));
     await page.route('**/api/t/default/invitations/capabilities', (route) => json(route, {
       ssoRequired: true,
       emailConfigured: true,
@@ -653,8 +630,10 @@ test.describe('Carbon UX screenshot gallery', () => {
 
     await page.goto('/admin/users');
     await expect(page.getByRole('heading', { name: 'User management' })).toBeVisible();
-    await expect(page.getByRole('columnheader', { name: 'Access source' })).toBeVisible();
-    await expect(page.getByText('SSO-managed', { exact: true })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Authentication', exact: true })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Provisioning', exact: true })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Platform access', exact: true })).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'ada.lovelace@example.test' }).getByRole('cell', { name: 'SCIM 2.0 entra-workforce', exact: true })).toBeVisible();
     await captureManualScreenshot(page, '02-user-management-platform-role.jpg');
   });
 
@@ -930,7 +909,8 @@ test.describe('Carbon UX screenshot gallery', () => {
     const engineSelector = page.getByRole('combobox', { name: 'Engine', exact: true });
     await expect(engineSelector).toContainText('Production Operaton');
     await engineSelector.click();
-    await expect(page.getByRole('option', { name: /Production Operaton.*engine-operaton-production/ })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Production Operaton', exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'Production Operaton', exact: true })).not.toContainText(engine.id);
     await captureManualScreenshot(page, '40-mission-control-scoped-runtime-picker.jpg');
   });
 });

@@ -194,9 +194,9 @@ test.describe('Login experience screenshot gallery', () => {
     await captureManualScreenshot(page, '98-cloud-login-email-required.jpg');
     await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
-    const choices = page.getByRole('list', { name: 'Your organizations' });
-    await expect(choices.getByRole('link', { name: /Alpha/ })).toBeFocused();
-    await expect(choices.getByRole('link', { name: /Bravo/ })).toHaveClass(/cds--tile/);
+    const choices = page.getByRole('listbox', { name: 'Your organizations' });
+    await expect(choices.getByRole('option', { name: /Alpha/ })).toBeFocused();
+    await expect(choices.getByRole('option', { name: /Bravo/ })).toHaveClass(/cds--tile/);
     await captureManualScreenshot(page, '97-cloud-organization-chooser.jpg');
     await page.setViewportSize({ width: 320, height: 720 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -205,12 +205,12 @@ test.describe('Login experience screenshot gallery', () => {
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     await page.evaluate(() => { document.documentElement.style.zoom = '1'; });
     await page.keyboard.press('ArrowDown');
-    await expect(choices.getByRole('link', { name: /Bravo/ })).toBeFocused();
+    await expect(choices.getByRole('option', { name: /Bravo/ })).toBeFocused();
     expect(providerReturnTo).toBe('/login');
     await expect(choices.getByText('Suspended')).toBeVisible();
     await expect(choices.getByRole('link', { name: /Disabled/ })).toHaveCount(0);
     expect(selectedTenant).toBeNull();
-    await choices.getByRole('link', { name: /Bravo/ }).click();
+    await choices.getByRole('option', { name: /Bravo/ }).click();
     await expect(page.getByText('Could not open this organization. Try again or choose another organization.')).toBeVisible();
     expect(selectedTenant).toBe('bravo');
     await expect(page).toHaveURL(/\/organizations\/select$/);

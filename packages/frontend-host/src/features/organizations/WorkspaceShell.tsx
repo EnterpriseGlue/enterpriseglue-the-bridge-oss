@@ -88,14 +88,14 @@ function WorkspaceHeader() {
                 onClick={() => expanded ? closePanel() : setExpanded(true)}
               ><UserAvatar size={20} /></HeaderGlobalAction>}
             </HeaderGlobalBar>
-            {user && <HeaderPanel ref={panel} expanded={expanded} addFocusListeners={false}>
+            {user && <HeaderPanel ref={panel} className="eg-account-menu" expanded={expanded} addFocusListeners={false}>
               {expanded && <section id="eg-account-panel" aria-label="Account settings" className="eg-account-panel">
                 <Stack gap={4}>
-                  <div>
+                  <div className="eg-account-panel__details">
                     <p className="cds--type-heading-compact-01">{[user.firstName, user.lastName].filter(Boolean).join(' ') || user.email}</p>
                     <p>{user.email}</p>
                   </div>
-                  {active && <div>
+                  {active && <div className="eg-account-panel__details">
                     <p className="cds--type-heading-compact-01">{active.tenantName}</p>
                     <p className="eg-organization-slug">{active.tenantSlug}</p>
                   </div>}

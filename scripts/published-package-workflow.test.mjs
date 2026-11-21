@@ -63,10 +63,10 @@ test('the current plugin API guard pins the reviewed Carbon contract line', asyn
   const manifest = JSON.parse(await readFile(
     new URL('../packages/enterprise-plugin-api/package.json', import.meta.url), 'utf8',
   ));
-  assert.match(guard, /check-plugin-api-version\.mjs "\$PKG_JSON" "0\.5\.0"/);
-  assert.equal(isCompatiblePatchVersion(manifest.version, '0.5.0'), true);
-  assert.equal(isCompatiblePatchVersion('0.5.1', '0.5.0'), true);
-  for (const version of ['0.4.99', '0.6.0', '1.0.0', '0.5.1-beta.1']) {
-    assert.equal(isCompatiblePatchVersion(version, '0.5.0'), false, version);
+  assert.match(guard, /check-plugin-api-version\.mjs "\$PKG_JSON" "0\.6\.0"/);
+  assert.equal(isCompatiblePatchVersion(manifest.version, '0.6.0'), true);
+  assert.equal(isCompatiblePatchVersion('0.6.1', '0.6.0'), true);
+  for (const version of ['0.5.99', '0.7.0', '1.0.0', '0.6.1-beta.1']) {
+    assert.equal(isCompatiblePatchVersion(version, '0.6.0'), false, version);
   }
 });

@@ -110,8 +110,10 @@ describe('Cloud email-and-passkey account page', () => {
   it('fails closed for an expired verification link without requesting a credential', async () => {
     vi.mocked(apiClient.post).mockRejectedValue(new Error('expired'));
     render(<MemoryRouter initialEntries={['/signup/email/passkey']}><CloudEmailAuth /></MemoryRouter>);
-    expect(await screen.findByText('Your email link is invalid or has expired. Request a new link.')).toBeInTheDocument();
+    expect(await screen.findByText('We could not prepare your passkey. Request a new email link or try again.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create passkey and account' })).toBeDisabled();
     expect(webauthn.register).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Your email is verified/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Request a new email link' })).toHaveAttribute('href', '/signup/email');
   });
 });

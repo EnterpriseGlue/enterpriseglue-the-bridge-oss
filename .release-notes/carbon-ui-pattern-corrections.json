@@ -1,0 +1,79 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "carbon-ui-pattern-corrections",
+  "type": "fix",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": [
+    "users",
+    "developers"
+  ],
+  "summary": "Corrects account, organization and dashboard feedback, accessibility, spacing and Carbon component patterns.",
+  "userImpact": [
+    "Verification and recovery screens report consistent outcomes and offer direct recovery.",
+    "Account and organization workflows use readable content themes, defined spacing and typography, and consistent keyboard and landmark semantics.",
+    "Dashboard filters use explicit labels and failed data can be retried locally while retaining available results.",
+    "Public sign-in, verification and account-recovery pages retain their dark illustrated layout when using the shared workspace header.",
+    "Email-verification feedback, countdown and recovery actions use aligned responsive Carbon grid rows with consistent spacing."
+  ],
+  "upgrade": {
+    "required": false,
+    "instructions": []
+  },
+  "configuration": [],
+  "api": {
+    "compatibility": "additive",
+    "changes": [
+      "Plugin API 0.6 adds optional host-owned Carbon Checkbox, NumberInput, RadioButton and RadioButtonGroup components; modules feature-detect support."
+    ]
+  },
+  "database": {
+    "migrations": [],
+    "rollbackSupported": true,
+    "notes": []
+  },
+  "security": [
+    "Public verification feedback and keyboard semantics are corrected without changing authentication or organization-membership enforcement."
+  ],
+  "documentation": [
+    "docs/development/carbon-component-contracts.md documents theme boundaries, keyboard selection, dashboard states and the optional Carbon component contract."
+  ],
+  "knownLimitations": [],
+  "rollback": [
+    "Redeploy the previous compatible frontend package or application image."
+  ],
+  "validation": [
+    "Frontend unit coverage, affected authentication and dashboard browser journeys, and Chromium/Firefox organization workflows pass.",
+    "Frontend host and production builds, frontend typecheck, bundle budget, changed-source lint, and 44 plugin-bridge checks pass.",
+    "Current and next plugin API fixtures, published-package version discipline, documentation boundaries, CI contracts, change-detection contracts, and release-note preflight pass.",
+    "Twelve rendered verification state/viewport checks confirm shared grid edges, 24px countdown spacing, dark appearance and no horizontal overflow.",
+    "The Cloud module passes 367 related tests and 67 browser checks; actual host/module integration verifies the new host-owned controls and content integrity."
+  ],
+  "packages": [
+    {
+      "name": "@enterpriseglue/backend-host",
+      "previousVersion": "0.25.6",
+      "newVersion": "0.25.7",
+      "impact": "patch"
+    },
+    {
+      "name": "@enterpriseglue/enterprise-plugin-api",
+      "previousVersion": "0.5.1",
+      "newVersion": "0.6.0",
+      "impact": "minor"
+    },
+    {
+      "name": "@enterpriseglue/frontend-host",
+      "previousVersion": "0.21.7",
+      "newVersion": "0.21.8",
+      "impact": "patch"
+    }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "Existing account, organization and dashboard workflows receive feedback and accessibility corrections; no administrator configuration changes."
+  }
+}

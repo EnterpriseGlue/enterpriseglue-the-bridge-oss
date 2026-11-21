@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { startAuthentication, startRegistration, browserSupportsWebAuthn } from '../shared/auth/cloudWebAuthn';
 import { isDocumentationIntent, accountDestination } from '../utils/documentationAccess';
 import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON } from '@simplewebauthn/browser';
-import { Button, InlineLoading, InlineNotification, Stack, TextInput } from '@carbon/react';
+import { Button, InlineLoading, InlineNotification, Link as CarbonLink, Stack, TextInput } from '@carbon/react';
 import PublicAuthShell from '../shared/components/PublicAuthShell';
 import EmailSignupTurnstile from '../shared/components/EmailSignupTurnstile';
 import { apiClient } from '../shared/api/client';
@@ -51,7 +51,7 @@ export default function CloudEmailAuth() {
       setOptions(result);
     } catch {
       setOptions(null);
-      setError(mode === 'register' ? 'Your email link is invalid or has expired. Request a new link.' : 'Passkey sign-in is temporarily unavailable.');
+      setError(mode === 'register' ? 'We could not prepare your passkey. Request a new email link or try again.' : 'Passkey sign-in is temporarily unavailable.');
     }
   }, [mode, supported]);
 
@@ -130,7 +130,9 @@ export default function CloudEmailAuth() {
   const description = mode === 'request'
     ? 'We’ll send a one-time sign-in link to your email address.'
     : mode === 'register'
-      ? 'Your email is verified. Save a passkey to this device or password manager to secure your EnterpriseGlue account.'
+      ? options
+        ? 'Your email is verified. Save a passkey to this device or password manager to secure your EnterpriseGlue account.'
+        : 'Use your email sign-in link to prepare a passkey for your EnterpriseGlue account.'
       : mode === 'signin' ? 'Use the passkey you created for your EnterpriseGlue account.'
         : emailSignedIn ? 'Add a passkey to sign in with your device or password manager next time.' : 'Use the link you received to open your EnterpriseGlue account.';
   return <PublicAuthShell title={title} description={description}>
@@ -164,6 +166,7 @@ export default function CloudEmailAuth() {
                 {busy ? 'Verifying…' : mode === 'register' ? 'Create passkey and account' : 'Sign in with passkey'}
               </Button>
               {!options && <Button kind="ghost" onClick={() => void loadOptions()}>Try again</Button>}
+              {mode === 'register' && !options && error && <CarbonLink as={Link} to={`/signup/email${intentQuery}`}>Request a new email link</CarbonLink>}
             </>}
       {!emailSignedIn && <Button as={Link} kind="ghost" to={documentation && mode === 'signin' ? '/documentation/access' : `${mode === 'signin' || mode === 'continue' ? '/login' : '/signup'}${intentQuery}`}>
         {mode === 'signin' ? 'Other sign-in methods' : 'Other sign-up methods'}

@@ -54,10 +54,11 @@ const adminPermissions = {
 };
 
 async function installPublicAuthStack(page: Page): Promise<void> {
+  await page.route('**/api/auth/cloud-signup/providers', (route) => json(route, { error: 'Cloud signup is not installed in this OSS fixture' }, 404));
   await page.route('**/api/auth/me', (route) => json(route, { error: 'Not authenticated' }, 401));
   await page.route('**/api/auth/refresh', (route) => json(route, { error: 'No refresh session' }, 401));
   await page.route('**/api/auth/branding', (route) => json(route, {}));
-  await page.route('**/api/auth/login-methods', (route) => json(route, {
+  await page.route(/\/api\/(?:t\/default\/)?auth\/(?:onboarding\/)?login-methods$/, (route) => json(route, {
     localPassword: { enabled: true },
     providerSelection: 'chooser',
     autoRedirectProviderId: null,
@@ -78,7 +79,7 @@ async function installPublicAuthStack(page: Page): Promise<void> {
     code: 'TOKEN_EXPIRED',
     error: 'This verification token has expired.',
   }));
-  await page.route('**/api/invitations/gallery-invite', (route) => json(route, {
+  await page.route(/\/api\/(?:t\/default\/)?invitations\/gallery-invite(?:\?|$)/, (route) => json(route, {
     email: 'new.user@example.com',
     tenantSlug: 'default',
     resourceType: 'tenant',

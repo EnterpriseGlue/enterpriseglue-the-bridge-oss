@@ -920,6 +920,23 @@
   max-inline-size: none;
 }
 
+.eg-verification-grid.cds--css-grid {
+  --cds-grid-gutter: 0rem;
+  inline-size: 100%;
+  padding-inline: 0;
+  column-gap: 0;
+  row-gap: var(--spacing-5, 1.5rem);
+}
+
+.eg-verification-grid .eg-verification-countdown {
+  margin: 0;
+  color: var(--cds-text-secondary);
+}
+
+.eg-verification-grid .eg-public-auth-actions {
+  margin-block-start: 0;
+}
+
 .eg-login-section-heading {
   margin: 0 0 var(--spacing-5);
   color: var(--cds-text-primary);
@@ -1082,7 +1099,8 @@
   }
 }
 
-/* The illustrated login is opt-in: other public forms keep their existing shell. */
+/* Public account pages share the dark illustrated shell, including those
+   using the workspace header. Host extensions can explicitly override it. */
 .eg-login-shell--process {
   background: #08090d;
   color: var(--cds-text-primary);
@@ -2217,6 +2235,18 @@
   font-weight: 300;
 }
 
+.eg-engine-context__value {
+  padding-block: var(--spacing-2);
+  overflow-wrap: anywhere;
+}
+
+.eg-dashboard-recovery {
+  display: grid;
+  justify-items: start;
+  gap: var(--spacing-3);
+  margin-block-end: var(--spacing-4);
+}
+
 .eg-dashboard-kpi__icon--blue { color: var(--cds-support-info); }
 .eg-dashboard-kpi__icon--purple { color: var(--cds-decorative-01, #8a3ffc); }
 .eg-dashboard-kpi__icon--orange { color: var(--cds-support-warning); }
@@ -2448,6 +2478,16 @@
 }
 
 @media (max-width: 671px) {
+  .eg-dashboard-kpi {
+    column-gap: var(--spacing-2);
+    grid-template-columns: 1.25rem minmax(0, 1fr);
+  }
+
+  .eg-dashboard-kpi__icon {
+    inline-size: 1.25rem;
+    block-size: 1.25rem;
+  }
+
   .eg-dashboard-page > .eg-page-header,
   .eg-dashboard-content {
     padding-inline: var(--spacing-4);
@@ -2565,8 +2605,36 @@
 }
 
 /* The Cloud logo and hit areas remain in place as route content changes. */
+.eg-organization-picker .cds--type-heading-04 {
+  font-size: var(--cds-heading-04-font-size, 1.75rem);
+  font-weight: var(--cds-heading-04-font-weight, 400);
+  line-height: var(--cds-heading-04-line-height, 1.28572);
+}
+
+:is(.eg-account-panel, .eg-organization-picker, .eg-profile-dialog) .cds--type-heading-compact-01 {
+  font-size: var(--cds-heading-compact-01-font-size, 0.875rem);
+  font-weight: var(--cds-heading-compact-01-font-weight, 600);
+  line-height: var(--cds-heading-compact-01-line-height, 1.28572);
+}
+
+:is(.eg-account-panel, .eg-organization-picker, .eg-profile-dialog) .cds--type-body-compact-01 {
+  font-size: var(--cds-body-compact-01-font-size, 0.875rem);
+  font-weight: var(--cds-body-compact-01-font-weight, 400);
+  line-height: var(--cds-body-compact-01-line-height, 1.28572);
+}
+
+.eg-organization-picker .cds--type-body-01 {
+  font-size: var(--cds-body-01-font-size, 0.875rem);
+  line-height: var(--cds-body-01-line-height, 1.42857);
+}
+
+.eg-profile-dialog .cds--type-label-01 {
+  font-size: var(--cds-label-01-font-size, 0.75rem);
+  line-height: var(--cds-label-01-line-height, 1.33333);
+}
+
 .eg-workspace-shell .eg-login-panel {
-  padding-block: var(--cds-spacing-06);
+  padding-block: var(--spacing-5, 1.5rem);
 }
 
 .eg-login-grid {
@@ -2624,8 +2692,8 @@
 
 .eg-workspace-loading,
 .eg-organization-access-notice {
-  padding: var(--cds-spacing-07);
-  margin-block-start: var(--cds-spacing-09);
+  padding: var(--spacing-6, 2rem);
+  margin-block-start: var(--spacing-8, 3rem);
 }
 
 .eg-organization-picker {
@@ -2647,12 +2715,19 @@
 
 .eg-organization-list {
   display: grid;
-  gap: var(--cds-spacing-03);
+  gap: var(--spacing-2, 0.5rem);
+}
+
+.eg-organization-keyboard-help {
+  color: var(--cds-text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.33333;
 }
 
 .eg-organization-list .cds--tile {
   outline: 1px solid var(--cds-border-subtle);
   overflow-wrap: anywhere;
+  text-decoration: none;
 }
 
 .eg-organization-slug {
@@ -2660,7 +2735,25 @@
   color: var(--cds-text-secondary);
 }
 
+.eg-account-menu.cds--header-panel--expanded {
+  inline-size: min(20rem, 100vw);
+}
+
 .eg-account-panel {
-  padding: var(--cds-spacing-05);
+  padding: var(--spacing-4, 1rem);
   overflow-wrap: anywhere;
+}
+
+/* Align account details with the labels inside Carbon buttons and tiles. */
+.eg-account-panel__details {
+  padding-inline: var(--spacing-4, 1rem);
+}
+
+.eg-account-panel .cds--btn {
+  inline-size: 100%;
+  max-inline-size: none;
+  block-size: auto;
+  min-block-size: 2rem;
+  text-align: start;
+  white-space: normal;
 }
