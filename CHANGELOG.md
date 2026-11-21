@@ -6,16 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.9...v0.40.10) (2026-11-21)
 
+### Changes
 
-### Bug Fixes
+- **frontend:** Loads public sign-in options while the organization finder checks the browser session.
+- **starbase:** Uses the organization’s sign-in policy for project and engine member invitations.
 
-* **frontend:** keep the initial typeface for the visit ([e692e0c](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/e692e0cab639e96872c14218175f510bf2860a13))
-* **frontend:** load fonts through the startup font selection ([ef0db73](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/ef0db734c57e56a82db881b0bc8db7da8b595ada))
-* **frontend:** preload public organization sign-in options ([903eae7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/903eae79874000ac97c6a6e4e043cbaa44581d16))
-* **frontend:** preserve the established Carbon font build guard ([953a5dc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/953a5dcf8cdb051be3c503995d8f2dbb861b4e6b))
-* **release:** verify frozen Carbon font configuration during publication ([4ddc9b1](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/4ddc9b19a49cdfa373197dfd1e715865af79703f))
-* **workspace:** improve sign-in loading and organization controls ([cfe2bf7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/cfe2bf7ee5da7d98864a10590bac6f10bcf93a6e))
-* **workspace:** use organization permissions for account and project controls ([6a86a39](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6a86a39c9dca93305ba239eddd74c6a6aa0fd119))
+Full upgrade, compatibility and verification details: [v0.40.10 release notes](docs/releases/v0.40.10.md).
 
 ## [0.40.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.8...v0.40.9) (2026-11-21)
 
