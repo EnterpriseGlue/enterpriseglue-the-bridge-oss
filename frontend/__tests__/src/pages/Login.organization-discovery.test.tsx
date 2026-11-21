@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastProvider } from '@src/shared/notifications/ToastProvider';
 import { OrganizationSelection } from '@src/features/organizations/OrganizationSelection';
 import { OrganizationSessionProvider } from '@src/features/organizations/OrganizationSession';
+import { preloadCloudAccountProviders } from '@src/features/organizations/cloudAccountProviders';
 import Login from '@src/pages/Login';
 import { apiClient, ApiError } from '@src/shared/api/client';
 
@@ -276,5 +277,25 @@ describe('pooled organization discovery login', () => {
     expect(await screen.findByText('Could not open this organization. Try again or choose another organization.')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Alpha/ })).toBeInTheDocument();
     expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the provider request started during bootstrap and retries with a fresh request', async () => {
+    let providerCalls = 0;
+    vi.mocked(apiClient.get).mockImplementation(async (path: string) => {
+      if (path !== '/api/auth/cloud-signup/providers') return {};
+      if (++providerCalls === 1) throw new Error('Providers temporarily unavailable');
+      return [{ id: 'google', displayName: 'Google', protocol: 'oidc' }];
+    });
+
+    preloadCloudAccountProviders();
+    expect(providerCalls).toBe(1);
+    const user = userEvent.setup();
+    renderLogin();
+
+    expect(await screen.findByText('Work-account sign-in unavailable')).toBeInTheDocument();
+    expect(providerCalls).toBe(1);
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('button', { name: 'Continue with Google' })).toBeInTheDocument();
+    expect(providerCalls).toBe(2);
   });
 });

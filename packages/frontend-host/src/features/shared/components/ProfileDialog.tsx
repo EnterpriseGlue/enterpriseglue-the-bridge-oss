@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
 import type { AuthenticatedIdentityProviderLinks } from '@enterpriseglue/shared/schemas/auth/session.js'
 import { useAuth } from '../../../shared/hooks/useAuth'
+import { getTenancyCapabilities } from '../../../services/tenancy'
 import { apiClient } from '../../../shared/api/client'
 import { parseApiError } from '../../../shared/api/apiErrorUtils'
 import { ADMIN_NAV_PLATFORM_PERMISSIONS, hasAnyPlatformPermission } from '../../../shared/auth/permissions'
@@ -20,6 +21,7 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
   const { user, permissions, refreshUser } = useAuth()
   const { pathname } = useLocation()
   const platformAdminMenuVisible = hasAnyPlatformPermission(permissions, ADMIN_NAV_PLATFORM_PERMISSIONS)
+  const showPlatformAccess = platformAdminMenuVisible || getTenancyCapabilities().mode !== 'pooled'
   const [profileFirstName, setProfileFirstName] = useState('')
   const [profileLastName, setProfileLastName] = useState('')
   const [profileSaving, setProfileSaving] = useState(false)
@@ -119,12 +121,12 @@ export function ProfileDialog({ open, onClose, isMultiTenant, tenantSlug }: {
           <div style={{ fontSize: '14px' }}>{user?.email || ''}</div>
         </div>
 
-        <div>
+        {showPlatformAccess && <div>
           <div style={{ fontSize: '12px', color: 'var(--cds-text-secondary)', marginBottom: 'var(--spacing-2)' }}>Platform access</div>
           <Tag type={platformAdminMenuVisible ? 'purple' : 'gray'} size="sm">
             {platformAdminMenuVisible ? 'Administrative features' : 'Standard features'}
           </Tag>
-        </div>
+        </div>}
 
         {documentationLinkQ.data && user?.isEmailVerified === true && !user.mustResetPassword && (
           <Button as="a" href={documentationLinkQ.data} kind="ghost" size="sm">Open documentation</Button>

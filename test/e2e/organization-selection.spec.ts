@@ -112,6 +112,77 @@ const dashboard = (page: Page) => page.getByRole('heading', { name: 'Dashboard',
 const account = (page: Page) => header(page).getByRole('button', { name: 'Account menu' })
 
 test.describe('Cloud organization selection @organization-selection @identity-lifecycle', () => {
+  test('keeps visible sign-in text in the same typeface when Carbon fonts arrive late', async ({ page }) => {
+    await installAccount(page, [alpha, bravo])
+    const plexFont = /\/IBMPlexSans-[^/]+\.woff2(?:\?.*)?$/
+    let releaseFonts = () => {}
+    const fontGate = new Promise<void>((resolve) => { releaseFonts = resolve })
+    await page.route(plexFont, async (route) => {
+      await fontGate
+      await route.continue()
+    })
+
+    const heading = page.getByRole('heading', { name: 'Find your organization' })
+    const loadedPlexWeights = () => page.evaluate(() => Array.from(document.fonts)
+      .filter((face) => face.family.replace(/["']/g, '') === 'IBM Plex Sans' && face.status === 'loaded')
+      .map((face) => face.weight).sort())
+    const textWidth = () => heading.evaluate((node) => {
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      return range.getBoundingClientRect().width
+    })
+    try {
+      const fontRequested = page.waitForRequest(plexFont)
+      await page.goto('/login', { waitUntil: 'domcontentloaded' })
+      const firstFont = await fontRequested
+      await expect(heading).toBeVisible()
+      expect(await loadedPlexWeights()).toEqual([])
+      const initialWidth = await textWidth()
+
+      releaseFonts()
+      // A browser may cancel a pending request for a font the app discarded.
+      await firstFont.response()
+      await page.evaluate(async () => { await document.fonts.ready })
+      expect(await textWidth()).toBe(initialWidth)
+      await page.getByRole('button', { name: 'Continue with Google' }).click()
+      await expect(picker(page)).toBeVisible()
+      expect(await loadedPlexWeights()).toEqual([])
+      await page.getByRole('option', { name: /Northwind/ }).click()
+      await expect(dashboard(page)).toBeVisible()
+      expect(await loadedPlexWeights()).toEqual([])
+    } finally {
+      releaseFonts()
+    }
+  })
+
+  test('uses IBM Plex from the first render when the bundled typeface is ready', async ({ page }) => {
+    await installAccount(page, [])
+    let releaseTenancy = () => {}
+    const tenancyGate = new Promise<void>((resolve) => { releaseTenancy = resolve })
+    await page.route('**/api/tenancy/capabilities', async (route) => {
+      await tenancyGate
+      await route.fallback()
+    })
+
+    try {
+      await page.goto('/login', { waitUntil: 'domcontentloaded' })
+      await page.waitForFunction(() => Array.from(document.fonts).filter((face) =>
+        face.family.replace(/["']/g, '') === 'IBM Plex Sans' && face.status === 'loaded').length >= 3)
+      releaseTenancy()
+      const heading = page.getByRole('heading', { name: 'Find your organization' })
+      await expect(heading).toBeVisible()
+      await page.evaluate(async () => { await document.fonts.ready })
+      const readyFaces = await page.evaluate(() => Array.from(document.fonts)
+        .filter((face) => /^IBM Plex/.test(face.family.replace(/["']/g, '')))
+        .map(({ weight, status }) => ({ weight, status }))
+        .sort((left, right) => left.weight.localeCompare(right.weight)))
+      expect(readyFaces.map((face) => face.weight)).toEqual(['300', '400', '600'])
+      expect(readyFaces.filter((face) => face.weight !== '300').every((face) => face.status === 'loaded')).toBe(true)
+    } finally {
+      releaseTenancy()
+    }
+  })
+
   test('opens a verified administrator workspace without waiting on platform setup', async ({ page }) => {
     await installAccount(page, [alpha, bravo], true, alpha)
     const setupRequests: string[] = []

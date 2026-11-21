@@ -247,6 +247,9 @@ export default function ProjectDetail() {
   const [query, setQuery] = React.useState('')
   const queryClient = useQueryClient()
   const { user, hasPlatformPermission, hasProjectPermission, permissions, sessionRevision } = useAuth()
+  const showAccessDiagnostics = getTenancyCapabilities().mode !== 'pooled' || user?.platformRole === 'admin'
+  const describeRestrictedAccess = React.useCallback((diagnostic: string, message = 'Ask a project owner for access.') =>
+    showAccessDiagnostics ? diagnostic : message, [showAccessDiagnostics])
   const uploadInputRef = React.useRef<HTMLInputElement | null>(null)
   // Modal hooks
   const deleteFileModal = useModal<FileItem>()
@@ -789,7 +792,10 @@ export default function ProjectDetail() {
   const canRequestEngineAccess = requestEngineAccessDecision.allowed || canManageProjectSettings
   const requestEngineAccessUnavailableReason = canRequestEngineAccess
     ? null
-    : requestEngineAccessDecision.reason || `Missing permission ${ProjectPermission.PROJECT_SETTINGS}`
+    : describeRestrictedAccess(
+      requestEngineAccessDecision.reason || `Missing permission ${ProjectPermission.PROJECT_SETTINGS}`,
+      'Ask a project owner to connect an engine.',
+    )
   const canManageGitConnection = hasProjectPermissionForCurrentUser(ProjectPermission.GIT_CONNECT)
   const hasDeployPermission = hasProjectPermissionOrAction(ProjectPermission.DEPLOY, 'project.deploy.create')
   const canViewDeploymentOptions = canViewFiles
@@ -830,23 +836,23 @@ export default function ProjectDetail() {
       : legacyDeploymentTargetPolicyAllowed)
 
   const getProjectPermissionUnavailableReason = React.useCallback((permission: string): string | null => (
-    hasProjectPermissionForCurrentUser(permission) ? null : `Missing permission ${permission}`
-  ), [hasProjectPermissionForCurrentUser])
+    hasProjectPermissionForCurrentUser(permission) ? null : describeRestrictedAccess(`Missing permission ${permission}`)
+  ), [describeRestrictedAccess, hasProjectPermissionForCurrentUser])
 
   const getProjectDetailRowActionUnavailableReason = React.useCallback((_item: FileItem, action: ProjectDetailRowAction): string | null => {
     switch (action) {
       case 'rename':
       case 'move':
-        return canEditFiles ? null : 'Missing permission to edit project files'
+        return canEditFiles ? null : describeRestrictedAccess('Missing permission to edit project files')
       case 'download':
       case 'downloadPdf':
         return getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
       case 'delete':
-        return canDeleteFiles ? null : 'Missing permission to delete project files'
+        return canDeleteFiles ? null : describeRestrictedAccess('Missing permission to delete project files')
       default:
         return null
     }
-  }, [getProjectPermissionUnavailableReason, canEditFiles, canDeleteFiles])
+  }, [getProjectPermissionUnavailableReason, canEditFiles, canDeleteFiles, describeRestrictedAccess])
 
   const syncPermissions = React.useMemo(() => [
     ...((platformSettings?.syncPushEnabled ?? true) ? [ProjectPermission.GIT_PUSH] : []),
@@ -859,8 +865,8 @@ export default function ProjectDetail() {
     if (syncPermissions.length === 0) return null
     if (syncPermissions.some((permission) => hasProjectPermissionForCurrentUser(permission))) return null
     const permissionText = syncPermissions.length === 1 ? syncPermissions[0] : syncPermissions.join(' or ')
-    return `Missing permission ${permissionText}`
-  }, [anySyncEnabled, hasGitConnection, hasProjectPermissionForCurrentUser, syncPermissions])
+    return describeRestrictedAccess(`Missing permission ${permissionText}`)
+  }, [anySyncEnabled, describeRestrictedAccess, hasGitConnection, hasProjectPermissionForCurrentUser, syncPermissions])
 
   const getProjectDetailToolbarActionUnavailableReason = React.useCallback((action: ProjectDetailToolbarAction): string | null => {
     switch (action) {
@@ -871,28 +877,30 @@ export default function ProjectDetail() {
           ? null
           : getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
       case 'upload':
-        return upload.unavailableReason || getProjectPermissionUnavailableReason(ProjectPermission.FILES_CREATE)
+        return upload.unavailableReason
+          ? describeRestrictedAccess(upload.unavailableReason, 'Ask a project owner for access to upload files.')
+          : getProjectPermissionUnavailableReason(ProjectPermission.FILES_CREATE)
       case 'create':
-        return canCreateFiles ? null : 'Missing permission to create project files'
+        return canCreateFiles ? null : describeRestrictedAccess('Missing permission to create project files')
       default:
         return null
     }
-  }, [canViewDeploymentOptions, canViewMembers, canCreateFiles, getProjectPermissionUnavailableReason, upload.unavailableReason])
+  }, [canViewDeploymentOptions, canViewMembers, canCreateFiles, describeRestrictedAccess, getProjectPermissionUnavailableReason, upload.unavailableReason])
 
   const getProjectDetailToolbarActionDiagnosticDecision = React.useCallback((
     action: ProjectDetailToolbarAction,
     reason?: string | null
   ): UiAuthzDecision | null => (
-    buildProjectDetailToolbarDiagnosticDecision(projectId || '', action, reason)
-  ), [projectId])
+    showAccessDiagnostics ? buildProjectDetailToolbarDiagnosticDecision(projectId || '', action, reason) : null
+  ), [projectId, showAccessDiagnostics])
 
   const downloadProjectUnavailableReason = getProjectPermissionUnavailableReason(ProjectPermission.FILES_VIEW)
   const gitSettingsUnavailableReason = (canManageProjectSettings || canManageGitConnection)
     ? null
-    : `Missing permission ${ProjectPermission.PROJECT_SETTINGS} or ${ProjectPermission.GIT_CONNECT}`
+    : describeRestrictedAccess(`Missing permission ${ProjectPermission.PROJECT_SETTINGS} or ${ProjectPermission.GIT_CONNECT}`)
   const deploymentTargetsUnavailableReason = canReadProjectEngineTargets
     ? null
-    : `Missing permission ${ProjectPermission.DEPLOYMENT_TARGETS_VIEW} or ${PlatformPermission.PROJECT_ENGINE_TARGETS_VIEW}`
+    : describeRestrictedAccess(`Missing permission ${ProjectPermission.DEPLOYMENT_TARGETS_VIEW} or ${PlatformPermission.PROJECT_ENGINE_TARGETS_VIEW}`)
   const deploymentTargetsManageUnavailableReason = canManageProjectEngineTargets
     ? null
     : hasServerDeploymentTargetAvailability
@@ -1174,8 +1182,8 @@ export default function ProjectDetail() {
   action: ProjectDetailBulkAction,
   reason?: string | null
 ): UiAuthzDecision | null => (
-    buildProjectDetailBulkDiagnosticDecision(projectId || '', action, reason, syncPermissions)
-  ), [projectId, syncPermissions])
+    showAccessDiagnostics ? buildProjectDetailBulkDiagnosticDecision(projectId || '', action, reason, syncPermissions) : null
+  ), [projectId, showAccessDiagnostics, syncPermissions])
 
   const resolveMemberName = React.useCallback((member: ProjectMember) => {
     const userInfo = member.user
@@ -2043,7 +2051,7 @@ export default function ProjectDetail() {
           canAssignScopedAccess={canAssignScopedProjectAccess}
           projectAccessAuthority={projectAccessAuthority}
           scopedAssignmentsVisible={canAssignScopedProjectAccess || canInspectScopedProjectLineage}
-          showAccessDiagnostics={getTenancyCapabilities().mode !== 'pooled' || user?.platformRole === 'admin'}
+          showAccessDiagnostics={showAccessDiagnostics}
           scopedAssignmentsLoading={projectRoleAssignmentsQ.isLoading}
           scopedAssignmentsError={projectRoleAssignmentsQ.isError}
           scopedRoleAssignments={scopedProjectRoleAssignments}
@@ -2112,11 +2120,11 @@ export default function ProjectDetail() {
           canUpdateMemberRoles={canUpdateMemberRoles}
           canRemoveMembers={canRemoveMembers}
           canAssignScopedAccess={canAssignScopedProjectAccess}
-          addMembersUnavailableReason={canAddMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_ADD}`}
-          inviteMembersUnavailableReason={canInviteMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_INVITE}`}
-          updateMemberRolesUnavailableReason={canUpdateMemberRoles ? null : `Missing permission ${ProjectPermission.MEMBERS_UPDATE_ROLE}`}
-          removeMembersUnavailableReason={canRemoveMembers ? null : `Missing permission ${ProjectPermission.MEMBERS_REMOVE}`}
-          assignScopedAccessUnavailableReason={canAssignScopedProjectAccess ? null : `Missing permission ${ProjectPermission.MEMBERS_ADD} or ${ProjectPermission.MEMBERS_UPDATE_ROLE}`}
+          addMembersUnavailableReason={canAddMembers ? null : describeRestrictedAccess(`Missing permission ${ProjectPermission.MEMBERS_ADD}`)}
+          inviteMembersUnavailableReason={canInviteMembers ? null : describeRestrictedAccess(`Missing permission ${ProjectPermission.MEMBERS_INVITE}`)}
+          updateMemberRolesUnavailableReason={canUpdateMemberRoles ? null : describeRestrictedAccess(`Missing permission ${ProjectPermission.MEMBERS_UPDATE_ROLE}`)}
+          removeMembersUnavailableReason={canRemoveMembers ? null : describeRestrictedAccess(`Missing permission ${ProjectPermission.MEMBERS_REMOVE}`)}
+          assignScopedAccessUnavailableReason={canAssignScopedProjectAccess ? null : describeRestrictedAccess(`Missing permission ${ProjectPermission.MEMBERS_ADD} or ${ProjectPermission.MEMBERS_UPDATE_ROLE}`)}
           isMemberEmailValid={isMemberEmailValid}
           memberLookupEmail={debouncedMemberEmail}
           memberLookup={memberLookupQ.data || null}
@@ -2164,7 +2172,7 @@ export default function ProjectDetail() {
           transferOwnershipMember={transferOwnershipModal.data as ProjectMember | null}
           onCloseTransferOwnership={() => transferOwnershipModal.closeModal()}
           submitTransferOwnership={submitTransferOwnership}
-          transferOwnershipUnavailableReason={canTransferOwnership ? null : `Missing permission ${ProjectPermission.OWNERSHIP_TRANSFER}`}
+          transferOwnershipUnavailableReason={canTransferOwnership ? null : describeRestrictedAccess(`Missing permission ${ProjectPermission.OWNERSHIP_TRANSFER}`)}
         />
 
         {/* Engine Access Modal */}

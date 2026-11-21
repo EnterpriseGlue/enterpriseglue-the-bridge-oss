@@ -87,6 +87,22 @@ tenant placement, or manage the non-default tenant resources listed above.
 `tenantKey` and `EG_CONFIG_EXPECTED_TENANT_SCOPE` are validation and portability
 inputs; neither is a tenant-routing credential or an authorization bypass.
 
+### Project and engine invitations
+
+Use `/t/{tenantSlug}` as the base URL for project and engine member invitation
+operations on the shared Cloud hostname. The root base URL is also available
+on a verified organization hostname or a single-organization deployment.
+The generated OpenAPI document lists both server URLs for these operations.
+
+Read `/starbase-api/projects/{projectId}/members/capabilities` or
+`/engines-api/engines/{engineId}/members/capabilities` in the same organization
+context as the corresponding member write. When the response reports
+`ssoRequired: false`, callers with invitation access can submit a member
+request with `"deliveryMethod": "manual"`. Email delivery requires
+`emailConfigured: true`. Manual reissue uses the same organization policy.
+Invitation links and one-time passwords are returned only for immediate
+delivery when the selected method permits it.
+
 ### Portal labels and stable interface values
 
 Portal copy is intentionally human-readable. Automations must continue to send

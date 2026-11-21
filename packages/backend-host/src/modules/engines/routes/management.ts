@@ -264,8 +264,9 @@ router.get(
   validateParams(engineIdSchema),
   requireAction('engine.members.invite', { resourceResolver: 'engine.byId', resourceIdFrom: 'params' }),
   asyncHandler(async (req, res) => {
-    const emailConfig = await getEmailConfigForTenant((req as any).tenant?.tenantId);
-    const ssoRequired = await invitationService.isLocalLoginDisabled();
+    const tenantId = req.tenant?.tenantId;
+    const emailConfig = await getEmailConfigForTenant(tenantId);
+    const ssoRequired = await invitationService.isLocalLoginDisabled(tenantId);
 
     res.json({
       ssoRequired,
@@ -418,11 +419,12 @@ router.post(
       }
 
       const engine = await engineRepo.findOne({ where: { id: engineId }, select: ['name'] });
-      const tenantSlug = String(req.params.tenantSlug || '').trim() || 'default';
+      const tenantSlug = req.tenant?.tenantSlug || String(req.params.tenantSlug || '').trim() || 'default';
       const inviteResult = await invitationService.createInvitation({
         userId: pendingUser.id,
         email: emailLower,
         tenantSlug,
+        tenantId: req.tenant?.tenantId,
         resourceType: 'engine',
         resourceId: engineId,
         resourceName: engine?.name || engineId,
@@ -589,6 +591,7 @@ router.post(
         userId: String(invitation.userId),
         email: invitation.email,
         tenantSlug: invitation.tenantSlug,
+        tenantId: req.tenant?.tenantId,
         resourceType: 'engine',
         resourceId: engineId,
         resourceName: engine?.name || invitation.resourceName || engineId,

@@ -3687,9 +3687,20 @@ registry.registerPath({
   responses: { 200: { description: 'Project member candidate lookup', content: { 'application/json': { schema: ProjectMemberLookupSchema } } } },
 });
 
+const organizationInvitationServers = [
+  {
+    url: '/t/{tenantSlug}',
+    description: 'Organization selected by URL name',
+    variables: { tenantSlug: { default: 'default', description: 'Organization URL name' } },
+  },
+  { url: '/', description: 'Single-organization deployment or verified organization hostname' },
+];
+
 registry.registerPath({
   method: 'get',
   path: '/starbase-api/projects/{projectId}/members/capabilities',
+  servers: organizationInvitationServers,
+  description: 'Returns the email and local sign-in options configured for the resolved organization.',
   ...authzExtension('project.members.invite', 'GET', '/starbase-api/projects/{projectId}/members/capabilities'),
   request: { params: z.object({ projectId: z.string().uuid() }) },
   responses: { 200: { description: 'Project member invitation capabilities', content: { 'application/json': { schema: ProjectMemberCapabilitiesSchema } } } },
@@ -3714,6 +3725,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/starbase-api/projects/{projectId}/pending-invites/{invitationId}/reissue',
+  servers: organizationInvitationServers,
   ...authzExtension('project.members.invite', 'POST', '/starbase-api/projects/{projectId}/pending-invites/{invitationId}/reissue'),
   request: { params: z.object({ projectId: z.string().uuid(), invitationId: z.string().uuid() }) },
   responses: { 200: { description: 'Manual project invitation reissued', content: { 'application/json': { schema: ReissuedManualProjectInvitationSchema } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
@@ -3722,6 +3734,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/starbase-api/projects/{projectId}/members',
+  servers: organizationInvitationServers,
   ...authzExtension('project.members.add', 'POST', '/starbase-api/projects/{projectId}/members'),
   request: { params: z.object({ projectId: z.string().uuid() }), body: { content: { 'application/json': { schema: AddProjectMemberRequest } } } },
   responses: { 201: { description: 'Member added directly or invitation created', content: { 'application/json': { schema: ProjectMemberAddResponseSchema } } }, 403: { description: 'Project access is SSO-managed or the caller lacks permission' } },
@@ -3791,6 +3804,8 @@ registry.registerPath({
 registry.registerPath({
   method: 'get',
   path: '/engines-api/engines/{engineId}/members/capabilities',
+  servers: organizationInvitationServers,
+  description: 'Returns the email and local sign-in options configured for the resolved organization.',
   ...authzExtension('engine.members.invite', 'GET', '/engines-api/engines/{engineId}/members/capabilities'),
   request: { params: z.object({ engineId: z.string() }) },
   responses: { 200: { description: 'Engine member invitation capabilities', content: { 'application/json': { schema: EngineMemberCapabilitiesSchema } } } },
@@ -3807,6 +3822,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/engines-api/engines/{engineId}/members',
+  servers: organizationInvitationServers,
   ...authzExtension('engine.members.add', 'POST', '/engines-api/engines/{engineId}/members'),
   request: { params: z.object({ engineId: z.string() }), body: { content: { 'application/json': { schema: AddEngineMemberRequest } } } },
   responses: { 201: { description: 'Member added directly or invitation created', content: { 'application/json': { schema: EngineMemberAddResponseSchema } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },
@@ -3831,6 +3847,7 @@ registry.registerPath({
 registry.registerPath({
   method: 'post',
   path: '/engines-api/engines/{engineId}/pending-invites/{invitationId}/reissue',
+  servers: organizationInvitationServers,
   ...authzExtension('engine.members.invite', 'POST', '/engines-api/engines/{engineId}/pending-invites/{invitationId}/reissue'),
   request: { params: z.object({ engineId: z.string(), invitationId: z.string().uuid() }) },
   responses: { 200: { description: 'Manual invitation reissued', content: { 'application/json': { schema: ReissuedManualEngineInvitationSchema } } }, 403: { description: 'Engine access is SSO-managed or the caller lacks permission' } },

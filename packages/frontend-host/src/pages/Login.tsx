@@ -10,6 +10,7 @@ import { toSafeInternalPath } from '../utils/safeNavigation';
 import { redirectTo, redirectToApi } from '../utils/redirect';
 import { isMultiTenantEnabled } from '../enterprise/extensionRegistry';
 import { getTenancyCapabilities } from '../services/tenancy';
+import { getCloudAccountProviders, type CloudAccountProvider } from '../features/organizations/cloudAccountProviders';
 import {
   ORGANIZATION_SELECTION_PATH, rememberOrganizationDestination, safeOrganizationDestination, takeOrganizationDestination,
 } from '../features/organizations/organizationPaths';
@@ -40,8 +41,6 @@ interface TenantDiscoveryMembership {
   tenantStatus: 'active' | 'suspended' | 'deleting';
   role: 'admin' | 'member';
 }
-
-type CloudAccountProvider = { id: string; displayName: string; protocol: 'oidc' | 'saml' };
 
 type TenantDiscoveryResult =
   | { status: 'resolved'; tenantSlug: string; loginPath: string }
@@ -208,10 +207,10 @@ export default function Login() {
     loadLoginMethods();
   }, [loadLoginMethods]);
 
-  const loadCloudAccountProviders = useCallback(() => {
+  const loadCloudAccountProviders = useCallback((fresh = false) => {
     if (!isOrganizationFinder) return;
     setCloudProviderError(null);
-    apiClient.get<CloudAccountProvider[]>('/api/auth/cloud-signup/providers')
+    getCloudAccountProviders(fresh)
       .then((providers) => setCloudAccountProviders(providers))
       .catch((cause) => {
         if (cause instanceof ApiError && cause.status === 404) return;
@@ -685,7 +684,7 @@ export default function Login() {
           hideCloseButton
           inline
           actionButtonLabel="Retry"
-          onActionButtonClick={loadCloudAccountProviders}
+          onActionButtonClick={() => loadCloudAccountProviders(true)}
           title="Work-account sign-in unavailable"
           subtitle={cloudProviderError}
         />}
