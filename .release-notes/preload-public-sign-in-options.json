@@ -9,6 +9,7 @@
   "summary": "Loads public sign-in options while the organization finder checks the browser session.",
   "userImpact": [
     "Google and Microsoft sign-in buttons can appear as soon as the signed-out organization finder is ready.",
+    "The app uses IBM Plex if it is ready for the initial render and keeps the system typeface for the visit if it is still loading.",
     "Dashboard setup actions appear as their data comes in and reflect what the signed-in account can do.",
     "Restricted project actions explain whom to ask for access."
   ],
@@ -20,7 +21,7 @@
   "documentation": ["Release notes describe the faster sign-in options and permission-aware setup guidance."],
   "knownLimitations": [],
   "rollback": ["Redeploy the preceding compatible frontend image."],
-  "validation": ["Organization finder and dashboard tests cover preload reuse, retries and permission-aware progressive setup."],
+  "validation": ["Organization finder and dashboard tests cover preload reuse, retries and permission-aware progressive setup.", "Browser tests verify the initial IBM Plex choice and a stable system font through sign-in, organization selection and dashboard navigation with delayed fonts."],
   "packages": [
     {"name": "@enterpriseglue/frontend-host", "previousVersion": "0.21.12", "newVersion": "0.21.13", "impact": "patch"}
   ],

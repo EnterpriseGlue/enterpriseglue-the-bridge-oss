@@ -10,6 +10,7 @@ import './styles/carbon-overrides.css'
 import './styles/theme.css'
 import './styles/pro-sidebar.css'
 import './styles/split-pane.css'
+import { prepareInitialTypography } from './styles/initialTypography'
 import { SkeletonText } from '@carbon/react'
 
 // Feature Flags
@@ -85,6 +86,7 @@ function renderRuntimeConfigError(error: unknown): void {
 }
 
 export async function startApp(runtimeConfigReady?: Promise<void>) {
+  const selectInitialTypography = prepareInitialTypography()
   // Resolve runtime configuration before anything (plugins, API clients) reads
   // it. Must run ahead of the plugin loads below, which may issue API requests.
   try {
@@ -128,7 +130,7 @@ export async function startApp(runtimeConfigReady?: Promise<void>) {
       },
     } : undefined)
     return { appRouter, deferNativePlugins }
-  })
+  }).finally(selectInitialTypography)
   const qc = new QueryClient()
   const hasExplicitTenant = /^\/t\/[^/]+(?:\/|$)/.test(window.location.pathname)
 

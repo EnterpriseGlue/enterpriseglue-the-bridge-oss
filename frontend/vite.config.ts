@@ -33,26 +33,17 @@ function urlReferencesHostname(source: string, expectedHostname: string): boolea
   return false
 }
 
-function configureCarbonFontFaces() {
+function stripExternalCarbonFontFaces() {
   return {
     postcssPlugin: 'enterpriseglue-strip-external-carbon-font-faces',
     AtRule(atRule: {
       name: string
-      nodes?: Array<{ type: string; prop?: string; value?: string }>
       toString(): string
       remove(): void
-      append(declaration: { prop: string; value: string }): void
     }) {
       if (atRule.name === 'font-face') {
         if (urlReferencesHostname(atRule.toString(), externalCarbonFontHostname)) {
           atRule.remove()
-          return
-        }
-
-        const fontFamily = atRule.nodes?.find((node) => node.prop === 'font-family')?.value
-        const fontDisplay = atRule.nodes?.find((node) => node.prop === 'font-display')
-        if (fontFamily && /^["']?IBM Plex (Sans(?: Arabic)?|Mono)["']?$/i.test(fontFamily) && !fontDisplay) {
-          atRule.append({ prop: 'font-display', value: 'swap' })
         }
       }
     },
@@ -106,7 +97,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     css: {
       postcss: {
-        plugins: [configureCarbonFontFaces()],
+        plugins: [stripExternalCarbonFontFaces()],
       },
     },
     resolve: {

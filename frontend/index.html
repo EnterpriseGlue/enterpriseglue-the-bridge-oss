@@ -9,6 +9,9 @@
     <!-- Fallback favicon -->
     <link rel="icon" type="image/x-icon" href="/favicon-light.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@enterpriseglue/frontend-host/node_modules/@ibm/plex-sans/fonts/split/woff2/IBMPlexSans-Light-Latin1.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@enterpriseglue/frontend-host/node_modules/@ibm/plex-sans/fonts/split/woff2/IBMPlexSans-Regular-Latin1.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/node_modules/@enterpriseglue/frontend-host/node_modules/@ibm/plex-sans/fonts/split/woff2/IBMPlexSans-SemiBold-Latin1.woff2" />
     <title>EnterpriseGlue</title>
     <style>
       /* ============================================
@@ -26,7 +29,7 @@
       .cds--header,
       .cds--side-nav,
       .cds--data-table {
-        font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif !important;
+        font-family: var(--font-ibm-plex-sans, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif) !important;
       }
       
       /* Header - uses g100 theme from Theme wrapper, no override needed */
