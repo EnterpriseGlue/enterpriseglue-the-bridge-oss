@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.6...v0.40.7) (2026-11-21)
+
+### Changes
+
+- **frontend:** Corrects account, organization and dashboard feedback, accessibility, spacing and Carbon component patterns.
+
+Full upgrade, compatibility and verification details: [v0.40.7 release notes](docs/releases/v0.40.7.md).
+
 ## [0.40.6](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.5...v0.40.6) (2026-11-20)
 
 ### Changes
