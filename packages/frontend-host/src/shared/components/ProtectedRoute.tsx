@@ -6,6 +6,7 @@ import { ORGANIZATION_SELECTION_PATH } from '../../features/organizations/organi
 import { useAuth } from '../hooks/useAuth';
 import { apiClient } from '../../shared/api/client';
 import { isMultiTenantEnabled } from '../../enterprise/extensionRegistry';
+import { getTenancyCapabilities } from '../../services/tenancy';
 import {
   hasAdminRouteAccess,
   hasPlatformPermission,
@@ -57,28 +58,38 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   const checkingOrganization = Boolean(tenantSlug && organization && isAuthenticated
     && (organization.transitioning || (!verifiedTenantSlug && sessionTenant?.id && organization.memberships.isPending)));
   const isSetupPath = !multiTenantEnabled && effectivePathname === '/admin/settings';
+  // In pooled mode, /api/auth/me and setup-status use the same active
+  // platform-administrator lookup. The verified workspace session already
+  // proves setup is complete for that administrator.
+  const verifiedPooledAdministrator = Boolean(
+    tenantSlug && verifiedTenantSlug === tenantSlug && getTenancyCapabilities().mode === 'pooled'
+      && user?.isActive && user.platformRole === 'admin',
+  );
+  const setupCheckSkipped = skipSetupCheck || verifiedPooledAdministrator;
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated || !platformSettingsAllowed || skipSetupCheck || isExemptPath || isSetupPath) {
+    if (isLoading || !isAuthenticated || !platformSettingsAllowed || setupCheckSkipped || isExemptPath || isSetupPath) {
       setSetupChecked(true);
       setNeedsSetup(false);
       return;
     }
 
     setSetupChecked(false);
+    let current = true;
     const checkSetup = async () => {
       try {
         const data = await apiClient.get<{ isConfigured?: boolean }>('/api/admin/setup-status');
-        setNeedsSetup(!data?.isConfigured);
+        if (current) setNeedsSetup(!data?.isConfigured);
       } catch {
         // Ignore errors, assume configured
       } finally {
-        setSetupChecked(true);
+        if (current) setSetupChecked(true);
       }
     };
 
     checkSetup();
-  }, [isLoading, isAuthenticated, platformSettingsAllowed, skipSetupCheck, isExemptPath, isSetupPath]);
+    return () => { current = false; };
+  }, [isLoading, isAuthenticated, platformSettingsAllowed, setupCheckSkipped, isExemptPath, isSetupPath, user?.id, tenantSlug]);
 
   if (organization && (isLoading || checkingOrganization)) {
     return <main id="main-content" className="eg-workspace-loading" aria-label="Loading your workspace">
@@ -110,7 +121,7 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   }
 
   // Still checking setup status for admins
-  if (platformSettingsAllowed && !setupChecked && !skipSetupCheck && !isExemptPath) {
+  if (platformSettingsAllowed && !setupChecked && !setupCheckSkipped && !isExemptPath) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
         <InlineLoading description="Loading..." />
@@ -119,7 +130,7 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   }
 
   // Admin needs to complete setup - redirect to tenant management
-  if (needsSetup && !isExemptPath && !isSetupPath) {
+  if (needsSetup && !setupCheckSkipped && !isExemptPath && !isSetupPath) {
     const setupPath = multiTenantEnabled ? '/admin/tenants' : `${tenantPrefix}/admin/settings`;
     return <Navigate to={setupPath} replace state={{ setupRequired: true }} />;
   }
