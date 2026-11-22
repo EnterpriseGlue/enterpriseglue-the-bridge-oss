@@ -143,6 +143,7 @@ test.describe('Login experience screenshot gallery', () => {
       { width: 1440, columns: 16, inlineInset: 32, topInset: 32, headerGap: 64, formWidth: loginAndResetFormWidths.desktop },
       { width: 1056, columns: 16, inlineInset: 32, topInset: 32, headerGap: 64, formWidth: loginAndResetFormWidths.desktop },
       { width: 768, columns: 8, inlineInset: 32, topInset: 32, headerGap: 64, formWidth: loginAndResetFormWidths.desktop },
+      { width: 672, columns: 8, inlineInset: 32, topInset: 32, headerGap: 64, formWidth: loginAndResetFormWidths.desktop },
       { width: 320, columns: 4, inlineInset: 8, topInset: 16, headerGap: 32, formWidth: loginAndResetFormWidths.mobile },
     ]) {
       await page.setViewportSize({ width, height: 900 });
@@ -358,6 +359,8 @@ test.describe('Login experience screenshot gallery', () => {
     const password = page.getByLabel('Current Password', { exact: true });
     expect((await password.boundingBox())?.width).toBe(loginAndResetFormWidths.desktop);
     await captureManualScreenshot(page, '99-first-login-password-reset.jpg');
+    await page.setViewportSize({ width: 672, height: 900 });
+    expect((await password.boundingBox())?.width).toBe(loginAndResetFormWidths.desktop);
     await page.setViewportSize({ width: 320, height: 900 });
     expect((await password.boundingBox())?.width).toBe(loginAndResetFormWidths.mobile);
   });

@@ -1179,7 +1179,7 @@
   .eg-login-landscape { opacity: 0.5; }
 }
 
-@media (max-width: 42rem) {
+@media (width < 42rem) {
   .eg-login-shell--process .eg-login-page { padding: var(--eg-login-mobile-gutter); }
   .eg-login-shell--process .eg-login-panel {
     inline-size: 100%;
