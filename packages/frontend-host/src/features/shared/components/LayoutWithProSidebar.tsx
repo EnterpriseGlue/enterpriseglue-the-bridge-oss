@@ -54,6 +54,7 @@ import {
 } from '../../../plugins/nativePluginRuntime'
 import { createPortal } from 'react-dom'
 import { useWorkspaceHeader } from '../../organizations/workspaceHeaderContext'
+import { isOrganizationSelectionPath } from '../../organizations/organizationPaths'
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1'
 
@@ -1257,6 +1258,8 @@ export default function LayoutWithProSidebar() {
                 </div>
               )}
   </>
+
+  if (workspaceHeader && isOrganizationSelectionPath(pathname)) return <Outlet />
 
   return (
     <Theme theme="g100" style={{ height: '100vh', width: '100%', overflow: 'hidden' }}>

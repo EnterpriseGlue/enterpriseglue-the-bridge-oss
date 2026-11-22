@@ -629,7 +629,6 @@ export default function Login() {
       <PublicAuthShell
         title={organizationStep === 'tenants' ? 'Choose an organization' : 'Find your organization'}
         homePath="/"
-        appearance="default"
         layout="grid"
       >
         {loginError && <InlineNotification

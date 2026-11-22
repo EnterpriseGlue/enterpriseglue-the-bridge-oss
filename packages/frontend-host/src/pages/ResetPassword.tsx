@@ -1,6 +1,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Button, TextInput } from '@carbon/react';
+import { Button, Stack, TextInput } from '@carbon/react';
+import PublicAuthShell from '../shared/components/PublicAuthShell';
 import { useAuth } from '../shared/hooks/useAuth';
 import { parseApiError } from '../shared/api/apiErrorUtils';
 import { useToast } from '../shared/notifications/ToastProvider';
@@ -106,77 +107,41 @@ export default function ResetPassword() {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '100vh',
-      backgroundColor: 'var(--color-bg-secondary)',
-      padding: 'var(--spacing-6)'
-    }}>
-      <div style={{
-        background: 'var(--color-bg-primary)',
-        padding: 'var(--spacing-8)',
-        borderRadius: 'var(--border-radius-md)',
-        boxShadow: 'var(--shadow-md)',
-        width: '100%',
-        maxWidth: '500px'
-      }}>
-        {/* Header */}
-        <div style={{ marginBottom: 'var(--spacing-6)' }}>
-          <h1 style={{
-            fontSize: 'var(--text-28)',
-            fontWeight: 'var(--font-weight-semibold)',
-            marginBottom: 'var(--spacing-2)',
-            color: 'var(--color-text-primary)'
-          }}>
-            Reset Your Password
-          </h1>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-14)' }}>
-            You must reset your password before continuing
-          </p>
-        </div>
+    <PublicAuthShell title="Reset Your Password" description="You must reset your password before continuing" homePath={homePath}>
+      <form onSubmit={handleSubmit}>
+        <Stack gap={5}>
+          <TextInput
+            id="first-name"
+            labelText="First Name"
+            placeholder="Enter your first name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            required
+            disabled={isLoading}
+          />
 
-        {/* Reset form */}
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 'var(--spacing-5)' }}>
-            <TextInput
-              id="first-name"
-              labelText="First Name"
-              placeholder="Enter your first name"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
+          <TextInput
+            id="last-name"
+            labelText="Last Name"
+            placeholder="Enter your last name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            required
+            disabled={isLoading}
+          />
 
-          <div style={{ marginBottom: 'var(--spacing-5)' }}>
-            <TextInput
-              id="last-name"
-              labelText="Last Name"
-              placeholder="Enter your last name"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
+          <TextInput
+            id="current-password"
+            labelText="Current Password"
+            placeholder="Enter your temporary password"
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+            disabled={isLoading}
+          />
 
-          <div style={{ marginBottom: 'var(--spacing-5)' }}>
-            <TextInput
-              id="current-password"
-              labelText="Current Password"
-              placeholder="Enter your temporary password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
-
-          <div style={{ marginBottom: 'var(--spacing-5)' }}>
+          <Stack gap={3}>
             <TextInput
               id="new-password"
               labelText="New Password"
@@ -187,9 +152,9 @@ export default function ResetPassword() {
               required
               disabled={isLoading}
             />
-            <div style={{ marginTop: 'var(--spacing-2)', fontSize: 'var(--text-12)', color: 'var(--color-text-secondary)' }}>
+            <div className="eg-login-supporting-copy">
               Password must contain:
-              <ul style={{ marginLeft: 'var(--spacing-5)', marginTop: 'var(--spacing-1)' }}>
+              <ul className="cds--list--unordered">
                 <li>At least 8 characters</li>
                 <li>One uppercase letter (A-Z)</li>
                 <li>One lowercase letter (a-z)</li>
@@ -197,31 +162,29 @@ export default function ResetPassword() {
                 <li>One symbol (!@#$%^&*_+=)</li>
               </ul>
             </div>
-          </div>
+          </Stack>
 
-          <div style={{ marginBottom: 'var(--spacing-6)' }}>
-            <TextInput
-              id="confirm-password"
-              labelText="Confirm Password"
-              placeholder="Confirm your new password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              disabled={isLoading}
-            />
-          </div>
+          <TextInput
+            id="confirm-password"
+            labelText="Confirm Password"
+            placeholder="Confirm your new password"
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            disabled={isLoading}
+          />
 
           <Button
             type="submit"
             kind="primary"
             disabled={isLoading || !firstName.trim() || !lastName.trim() || !currentPassword || !newPassword || !confirmPassword}
-            style={{ width: '100%' }}
+            className="eg-login-primary-action"
           >
             {isLoading ? 'Resetting...' : 'Reset Password'}
           </Button>
-        </form>
-      </div>
-    </div>
+        </Stack>
+      </form>
+    </PublicAuthShell>
   );
 }

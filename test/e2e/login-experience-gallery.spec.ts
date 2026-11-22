@@ -68,6 +68,16 @@ async function installUnauthenticatedLogin(page: Page, methods: LoginMethods | n
   ));
 }
 
+async function expectDarkSignIn(page: Page) {
+  const shell = page.locator('.cds--g100 .eg-login-shell--process');
+  await expect(shell).toHaveCount(1);
+  await expect(shell).toHaveCSS('background-color', 'rgb(8, 9, 13)');
+  const header = page.getByRole('banner', { name: 'EnterpriseGlue application header' });
+  await expect(header).toHaveCount(1);
+  await expect(header).toHaveCSS('background-color', 'rgb(0, 0, 0)');
+  await expect(page.getByRole('main')).toHaveCount(1);
+}
+
 test.describe('Login experience screenshot gallery', () => {
   test('uses global work-account sign-in before offering only authenticated organizations @identity-lifecycle', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -123,6 +133,8 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page.getByRole('button', { name: 'Sign in with Microsoft' })).toBeVisible();
     await expect(page.getByLabel('Email address')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
+    await expectDarkSignIn(page);
+    await expect(page.locator('.eg-login-landscape')).toBeVisible();
     const main = page.getByRole('main', { name: 'Find your organization' });
     for (const { width, columns, inset, headerGap } of [
       { width: 1440, columns: 16, inset: 32, headerGap: 64 },
@@ -138,7 +150,7 @@ test.describe('Login experience screenshot gallery', () => {
         const primary = grid.querySelector('button[type=submit]')!.getBoundingClientRect();
         return {
           columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
-          center: (panel.left + panel.right) / 2,
+          formCenter: (panel.left + panel.right) / 2,
           inlineInset: title.left - panel.left,
           topInset: title.top - panel.top,
           headerGap: panel.top - document.querySelector('header')!.getBoundingClientRect().bottom,
@@ -147,7 +159,8 @@ test.describe('Login experience screenshot gallery', () => {
         };
       });
       expect(geometry.columns).toBe(columns);
-      expect(geometry.center).toBeCloseTo(width / 2, 0);
+      if (columns === 16) expect(geometry.formCenter).toBeLessThan(width / 2);
+      if (width === 320) await expect(page.locator('.eg-login-landscape')).toBeHidden();
       expect(geometry.inlineInset).toBe(inset);
       expect(geometry.topInset).toBe(inset);
       expect(geometry.headerGap).toBe(headerGap);
@@ -187,6 +200,7 @@ test.describe('Login experience screenshot gallery', () => {
     await passkeyLink.click();
     await expect(page).toHaveURL(/\/signup\/email\/signin$/);
     await expect(page.getByRole('heading', { name: 'Sign in with a passkey' })).toBeVisible();
+    await expectDarkSignIn(page);
     await page.goto('/login');
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     await expect(page.getByText('Email address is required')).toBeVisible();
@@ -194,6 +208,8 @@ test.describe('Login experience screenshot gallery', () => {
     await captureManualScreenshot(page, '98-cloud-login-email-required.jpg');
     await page.getByRole('button', { name: 'Sign in with Microsoft' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
+    await expectDarkSignIn(page);
+    await expect(page.getByRole('link', { name: 'Skip to main content' })).toHaveAttribute('href', '#public-auth-main');
     const choices = page.getByRole('listbox', { name: 'Your organizations' });
     await expect(choices.getByRole('option', { name: /Alpha/ })).toBeFocused();
     await expect(choices.getByRole('option', { name: /Bravo/ })).toHaveClass(/cds--tile/);
@@ -276,6 +292,64 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page).toHaveURL(/\/organizations\/select$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Choose an organization' })).toBeVisible();
     await expect(page.getByText(linkRequired)).toHaveCount(0);
+  });
+
+  test('uses the dark shell throughout first-party account access @identity-lifecycle', async ({ page }) => {
+    await installUnauthenticatedLogin(page, {
+      localPassword: { enabled: true }, providerSelection: 'chooser', autoRedirectProviderId: null,
+      providers: [], configurationStatus: 'ready',
+    });
+    await page.route('**/api/auth/cloud-signup/providers', (route) => json(route, []));
+    await page.route('**/api/auth/cloud-signup/email/challenge', (route) => json(route, { siteKey: null }));
+    await page.route('**/invitations/public-auth-fixture', (route) => json(route, {
+      email: 'invitee@example.test', tenantSlug: 'default', resourceType: 'tenant', resourceName: 'Example',
+      expiresAt: Date.now() + 60_000, status: 'pending', deliveryMethod: 'email',
+    }));
+
+    for (const [path, title] of [
+      ['/login', 'Log in'],
+      ['/t/default/login', 'Log in'],
+      ['/signup', 'Create your Cloud account'],
+      ['/signup/email', 'Continue with email'],
+      ['/signup/email/continue', 'Sign in with your email link'],
+      ['/signup/email/passkey', 'Create your passkey'],
+      ['/signup/email/signin', 'Sign in with a passkey'],
+      ['/signup/microsoft/email', 'Verify your email address'],
+      ['/signup/microsoft/email?verified=1', 'Finish Microsoft sign-in'],
+      ['/admin-recovery', 'Log in for administrator recovery'],
+      ['/forgot-password', 'Forgot your password?'],
+      ['/password-reset', 'Set a new password'],
+      ['/verify-email', 'Verification failed'],
+      ['/resend-verification', 'Verify your email'],
+      ['/t/default/invite/public-auth-fixture', 'Set up your account'],
+      ['/documentation/access', 'Documentation access'],
+    ]) {
+      await test.step(path, async () => {
+        await page.goto(path);
+        await expect(page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible();
+        await expectDarkSignIn(page);
+      });
+    }
+  });
+
+  test('uses the same dark layout for a password change required at sign-in @identity-lifecycle', async ({ page }) => {
+    await installBootstrap(page);
+    await page.route('**/api/auth/me', (route) => json(route, {
+      id: 'first-login', email: 'first-login@example.test', firstName: 'New', lastName: 'User',
+      platformRole: 'user', authProvider: 'local', isActive: true, isEmailVerified: true, mustResetPassword: true,
+      createdAt: Date.now(), session: { principal: { type: 'user', id: 'first-login' }, tenant: { id: null } },
+    }));
+    await page.route('**/api/authz/me/permissions', (route) => json(route, {
+      userId: 'first-login', tenantId: null, platform: [], projects: [], engines: [],
+      generatedAt: Date.now(), authorizationVersion: 'first-login-v1',
+    }));
+
+    await page.goto('/reset-password');
+    await expect(page.getByRole('heading', { name: 'Reset Your Password' })).toBeVisible();
+    await expect(page.getByLabel('Current Password')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reset Password' })).toBeDisabled();
+    await expectDarkSignIn(page);
+    await captureManualScreenshot(page, '99-first-login-password-reset.jpg');
   });
 
   test('opens anonymous signup without probing or refreshing a session @identity-lifecycle', async ({ page }) => {

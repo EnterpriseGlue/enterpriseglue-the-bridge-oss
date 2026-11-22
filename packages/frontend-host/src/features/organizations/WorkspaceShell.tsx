@@ -10,7 +10,7 @@ import { PublicAuthHeaderBrand, usePublicAuthBranding } from '../../shared/compo
 import { ProfileDialog } from '../shared/components/ProfileDialog'
 import { OrganizationList } from './OrganizationList'
 import { OrganizationSessionProvider, useOrganizationSession, type OrganizationMembership } from './OrganizationSession'
-import { ORGANIZATION_SELECTION_PATH, tenantSlugForPath } from './organizationPaths'
+import { isOrganizationSelectionPath, ORGANIZATION_SELECTION_PATH, tenantSlugForPath } from './organizationPaths'
 import { WorkspaceHeaderContext } from './workspaceHeaderContext'
 
 function WorkspaceHeader() {
@@ -33,7 +33,8 @@ function WorkspaceHeader() {
   )
   const hasTenantHome = tenantPath && (active || (user?.session?.tenant.id && user.session.tenant.slug === tenantPath))
   const options = memberships.data ?? []
-  const publicPage = /\/(?:login|signup|forgot-password|password-reset|verify-email|admin-recovery)(?:\/|$)/.test(location.pathname)
+  const authPage = isOrganizationSelectionPath(location.pathname)
+    || /^(?:\/t\/[^/]+)?\/(?:login|signup|invite|forgot-password|password-reset|reset-password|verify-email|resend-verification|admin-recovery|documentation\/access)(?:\/|$)/i.test(location.pathname)
   const noAccess = location.pathname === '/cloud/onboarding'
     && (location.state as { organizationAccessDenied?: boolean } | null)?.organizationAccessDenied
 
@@ -71,10 +72,10 @@ function WorkspaceHeader() {
 
   return (
     <WorkspaceHeaderContext.Provider value={{ branding, navigation, actions }}>
-      <Theme theme="g10" className="eg-workspace-shell">
+      <Theme theme={authPage ? 'g100' : 'g10'} className={authPage ? 'eg-workspace-shell eg-workspace-shell--auth' : 'eg-workspace-shell'}>
         <Theme theme="g100">
           <Header className="eg-workspace-header" aria-label={`${branding.brandTitle} application header`}>
-            <SkipToContent href={publicPage ? '#public-auth-main' : '#main-content'}>Skip to main content</SkipToContent>
+            <SkipToContent href={authPage ? '#public-auth-main' : '#main-content'}>Skip to main content</SkipToContent>
             <HeaderName as={RouterLink} to={hasTenantHome ? `/t/${tenantPath}/` : '/'} prefix="">
               <PublicAuthHeaderBrand branding={branding} />
             </HeaderName>

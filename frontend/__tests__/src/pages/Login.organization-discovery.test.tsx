@@ -222,7 +222,7 @@ describe('pooled organization discovery login', () => {
     renderSelection();
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Choose an organization' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Alpha/ })).toBeVisible();
+    expect(await screen.findByRole('option', { name: /Alpha/ })).toBeVisible();
     expect(screen.getByRole('option', { name: /Bravo/ })).toBeVisible();
     expect(screen.getByText('Suspended')).toBeVisible();
     expect(screen.queryByRole('link', { name: /Charlie/ })).not.toBeInTheDocument();
@@ -243,7 +243,7 @@ describe('pooled organization discovery login', () => {
     expect(await screen.findByText('Could not load your organizations')).toBeInTheDocument();
     expect(navigateMock).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(vi.mocked(apiClient.get).mock.calls).toHaveLength(2));
+    await waitFor(() => expect(vi.mocked(apiClient.get).mock.calls.filter(([path]) => path === '/api/auth/my-tenants')).toHaveLength(2));
     expect(apiClient.get).toHaveBeenCalledWith('/api/auth/my-tenants', { includeSelectionHints: 'true' });
   });
 

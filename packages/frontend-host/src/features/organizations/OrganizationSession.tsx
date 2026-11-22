@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import type { NativeTenantMembership } from '@enterpriseglue/shared/schemas/platform-admin/tenant.js'
 import { apiClient, ApiError } from '../../shared/api/client'
 import { useAuth } from '../../shared/hooks/useAuth'
-import { ORGANIZATION_SELECTION_PATH, rememberOrganizationDestination, takeOrganizationDestination, tenantSlugForPath } from './organizationPaths'
+import { isOrganizationSelectionPath, rememberOrganizationDestination, takeOrganizationDestination, tenantSlugForPath } from './organizationPaths'
 
 const lastOrganizationKey = (principal: string) => `eg.organization.last.${encodeURIComponent(principal)}`
 const membershipQueryKey = (principal: string | undefined, selection: boolean) =>
@@ -57,7 +57,7 @@ export function OrganizationSessionProvider({ children }: { children: ReactNode 
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const memberships = useOrganizationMemberships(pathname === ORGANIZATION_SELECTION_PATH)
+  const memberships = useOrganizationMemberships(isOrganizationSelectionPath(pathname))
   const [pendingTenantSlug, setPendingTenantSlug] = useState<string | null>(null)
   const inFlight = useRef(false)
   const principal = user?.id
