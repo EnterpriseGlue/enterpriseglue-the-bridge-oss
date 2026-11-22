@@ -24,8 +24,59 @@ describe('initRuntimeConfig', () => {
   });
 
   afterEach(() => {
+    document.head.querySelector('meta[name="enterpriseglue-runtime-config"]')?.remove();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+  });
+
+  function embedConfig(content: string) {
+    const meta = document.createElement('meta');
+    meta.name = 'enterpriseglue-runtime-config';
+    meta.content = content;
+    document.head.append(meta);
+  }
+
+  it('uses the standard configuration embedded in the application document without a request', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/.well-known/enterpriseglue/runtime-config.json');
+    const module = { ownerId: 'io.enterpriseglue.cloud-system', entryPath: '/cloud-system/releases.js', integrity: `sha256-${'A'.repeat(43)}=`, required: true };
+    embedConfig(JSON.stringify({ apiBaseUrl: 'https://runtime.example', systemFrontendModules: [module] }));
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await initRuntimeConfig();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(config.apiBaseUrl).toBe('https://runtime.example');
+    expect(getConfiguredSystemFrontendModules()).toEqual([module]);
+  });
+
+  it('uses the standard endpoint when the original document has an empty marker', async () => {
+    const path = '/.well-known/enterpriseglue/runtime-config.json';
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', path);
+    embedConfig('');
+    const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ apiBaseUrl: 'https://runtime.example' }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await initRuntimeConfig();
+    expect(fetchSpy).toHaveBeenCalledWith(path, expect.objectContaining({ cache: 'no-store', redirect: 'error' }));
+  });
+
+  it('keeps custom configuration URLs authoritative when a document contains embedded metadata', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/custom-config.json');
+    embedConfig(JSON.stringify({ apiBaseUrl: 'https://ignored.example' }));
+    const fetchSpy = vi.fn().mockResolvedValue(jsonResponse({ apiBaseUrl: 'https://custom.example' }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await initRuntimeConfig();
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(config.apiBaseUrl).toBe('https://custom.example');
+  });
+
+  it('fails closed on invalid embedded configuration for a required deployment', async () => {
+    vi.stubEnv('VITE_RUNTIME_CONFIG_URL', '/.well-known/enterpriseglue/runtime-config.json');
+    vi.stubEnv('VITE_RUNTIME_CONFIG_REQUIRED', 'true');
+    embedConfig('{');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await expect(initRuntimeConfig()).rejects.toThrow(RuntimeConfigError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(config.apiBaseUrl).toBe(BUILD_TIME_BASE);
   });
 
   it('does nothing and issues no fetch when no config URL is set', async () => {

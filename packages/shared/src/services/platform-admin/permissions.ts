@@ -6,7 +6,9 @@
  */
 
 import { getDataSource } from '@enterpriseglue/shared/db/data-source.js';
+import { databaseConfig } from '@enterpriseglue/shared/config/database.js';
 import { runWithPlatformDatabaseCapability } from '../platform-database-context.js';
+import { getTenantDatabaseContext } from '../tenant-database-context.js';
 import { PermissionGrant } from '@enterpriseglue/shared/infrastructure/persistence/entities/PermissionGrant.js';
 import { User } from '@enterpriseglue/shared/infrastructure/persistence/entities/User.js';
 import { Project } from '@enterpriseglue/shared/infrastructure/persistence/entities/Project.js';
@@ -3491,6 +3493,8 @@ class PermissionServiceClass {
   ): Promise<string[]> {
     const ids = new Set<string>();
     const normalizedTenantId = normalizeTenantId(tenantId);
+    const pooledTenant = databaseConfig.tenancyMode === 'pooled' && normalizedTenantId
+      && getTenantDatabaseContext()?.tenantId === normalizedTenantId ? normalizedTenantId : null;
     const explicitGrantQb = dataSource.getRepository(PermissionGrant)
       .createQueryBuilder('grant')
       .select(['grant.resourceId'])
@@ -3498,11 +3502,10 @@ class PermissionServiceClass {
       .andWhere('grant.resourceType = :resourceType', { resourceType: 'project' })
       .andWhere('(grant.expiresAt IS NULL OR grant.expiresAt > :now)', { now: Date.now() });
     addTenantScopeFilter(explicitGrantQb, 'grant', tenantId);
-    const [explicitGrants, { groupIds, hasTenantAssignment }] = await Promise.all([explicitGrantQb.getMany(), discovery]);
-    const hasGlobalExplicitGrant = explicitGrants.some((grant) => grant.resourceId === null);
-    explicitGrants.forEach((grant) => {
-      if (grant.resourceId) ids.add(grant.resourceId);
-    });
+    const [explicitGrants, { groupIds, hasTenantAssignment }] = await Promise.all([
+      pooledTenant ? [] : explicitGrantQb.getMany(),
+      discovery,
+    ]);
 
     const assignmentQb = dataSource.getRepository(RbacRoleAssignment)
       .createQueryBuilder('assignment')
@@ -3514,6 +3517,27 @@ class PermissionServiceClass {
     this.addPrincipalAssignmentFilter(assignmentQb, 'assignment', userId, groupIds);
     addTenantScopeFilter(assignmentQb, 'assignment', tenantId);
     const projectRepo = dataSource.getRepository(Project);
+    if (pooledTenant) {
+      // The verified database context and project predicate both enforce the
+      // tenant boundary. Read only existing projects, folding grant and
+      // assignment checks into the same PostgreSQL statement.
+      const projects = projectRepo.createQueryBuilder('project')
+        .select('project.id', 'id')
+        .where('project.tenantId = :projectTenant', { projectTenant: pooledTenant });
+      if (!hasTenantAssignment) {
+        const allProjectGrant = explicitGrantQb.clone().select('1').andWhere('grant.resourceId IS NULL');
+        projects.andWhere(
+          `(project.id IN (${assignmentQb.getQuery()}) OR project.id IN (${explicitGrantQb.getQuery()}) OR EXISTS (${allProjectGrant.getQuery()}))`,
+          { ...assignmentQb.getParameters(), ...explicitGrantQb.getParameters(), now: Date.now() },
+        );
+      }
+      const rows = await projects.getRawMany<{ id: string }>();
+      return rows.map(project => project.id).sort();
+    }
+    const hasGlobalExplicitGrant = explicitGrants.some((grant) => grant.resourceId === null);
+    explicitGrants.forEach((grant) => {
+      if (grant.resourceId) ids.add(grant.resourceId);
+    });
     const [assignments, inheritedProjects, explicitlyGrantedProjects] = await Promise.all([
       assignmentQb.getMany(),
       hasTenantAssignment && normalizedTenantId ? projectRepo.find({

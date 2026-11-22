@@ -1,0 +1,31 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "dashboard-bootstrap-latency",
+  "type": "performance",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": ["users", "operators"],
+  "summary": "Starts the dashboard with embedded deployment configuration and reduces project-discovery queries for pooled tenants.",
+  "userImpact": ["A deployment that supplies the configuration in the initial page can start the dashboard without a separate configuration request.", "Pooled workspaces determine the visible project set in fewer database round trips."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": ["The existing runtime configuration endpoint remains the fallback for unmodified application shells and custom configuration URLs."],
+  "api": { "compatibility": "additive", "changes": ["The application shell reserves metadata for the standard same-origin runtime configuration document."] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["The embedded document uses the same validation and API and system module startup checks as the fetched document.", "Pooled project discovery remains bound to the request tenant and PostgreSQL row-level security."],
+  "documentation": ["The deployment configuration reference describes when the application can use runtime configuration from its HTML response."],
+  "knownLimitations": [],
+  "rollback": ["Redeploy the preceding compatible application image; the original runtime configuration endpoint remains available."],
+  "validation": ["Frontend runtime configuration tests and production dashboard cold and warm load comparisons.", "Pooled PostgreSQL dashboard checks for an owner and member with separate project access."],
+  "packages": [
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.21.14", "newVersion": "0.21.15", "impact": "patch" },
+    { "name": "@enterpriseglue/shared", "previousVersion": "0.30.5", "newVersion": "0.30.6", "impact": "patch" },
+    { "name": "@enterpriseglue/backend-host", "previousVersion": "0.25.9", "newVersion": "0.25.10", "impact": "patch" }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The existing deployment settings and customer workflow continue to work."
+  }
+}

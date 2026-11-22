@@ -586,6 +586,11 @@ The loader rejects redirects, including same-origin redirects; optional loading
 retains the build-time configuration on failure, while required loading stops
 startup. The original document may still explicitly select a separate API origin.
 
+The initial HTML response may carry the standard runtime document in the
+`enterpriseglue-runtime-config` metadata field. The host validates it before
+starting API or plugin requests. The bundled HTML leaves this field empty so
+regular installs and older proxies continue to fetch the configured URL.
+
 Managed deployments may also add `systemFrontendModules` to that runtime
 document. Each entry contains a reverse-DNS `ownerId`, same-origin `entryPath`,
 `sha256-...` integrity value, and `required` flag. The frontend downloads the
