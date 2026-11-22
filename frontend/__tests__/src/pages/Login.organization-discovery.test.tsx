@@ -91,7 +91,7 @@ describe('pooled organization discovery login', () => {
   it('shows the neutral finder without calling ambiguous root login-method discovery', async () => {
     renderLogin();
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Find your organization' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Login' })).toBeInTheDocument();
     expect(screen.getByLabelText('Email address')).toHaveFocus();
     expect(apiClient.get).not.toHaveBeenCalledWith('/api/auth/login-methods');
   });
@@ -156,7 +156,7 @@ describe('pooled organization discovery login', () => {
   it('never exchanges discovery tokens from the URL query string', async () => {
     renderLogin('/login?discovery_token=must-not-reach-the-server');
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Find your organization' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'Login' })).toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 

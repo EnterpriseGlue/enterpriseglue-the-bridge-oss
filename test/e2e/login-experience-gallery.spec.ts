@@ -28,6 +28,8 @@ const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   body: JSON.stringify(body),
 });
 
+const loginAndResetFormWidths = { desktop: 360, mobile: 272 };
+
 const provider = (
   id: string,
   displayName: string,
@@ -135,12 +137,13 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page.getByRole('link', { name: 'Create an account' })).toHaveAttribute('href', '/signup');
     await expectDarkSignIn(page);
     await expect(page.locator('.eg-login-landscape')).toBeVisible();
-    const main = page.getByRole('main', { name: 'Find your organization' });
-    for (const { width, columns, inset, headerGap } of [
-      { width: 1440, columns: 16, inset: 32, headerGap: 64 },
-      { width: 1056, columns: 16, inset: 32, headerGap: 64 },
-      { width: 768, columns: 8, inset: 32, headerGap: 64 },
-      { width: 320, columns: 4, inset: 16, headerGap: 32 },
+    const main = page.getByRole('main', { name: 'Login' });
+    await expect(page).toHaveTitle('Login | EnterpriseGlue');
+    for (const { width, columns, inlineInset, topInset, headerGap, formWidth } of [
+      { width: 1440, columns: 16, inlineInset: 32, topInset: 32, headerGap: 64, formWidth: loginAndResetFormWidths.desktop },
+      { width: 1056, columns: 16, inlineInset: 32, topInset: 32, headerGap: 64, formWidth: loginAndResetFormWidths.desktop },
+      { width: 768, columns: 8, inlineInset: 32, topInset: 32, headerGap: 64, formWidth: loginAndResetFormWidths.desktop },
+      { width: 320, columns: 4, inlineInset: 8, topInset: 16, headerGap: 32, formWidth: loginAndResetFormWidths.mobile },
     ]) {
       await page.setViewportSize({ width, height: 900 });
       const geometry = await main.evaluate((grid) => {
@@ -154,6 +157,7 @@ test.describe('Login experience screenshot gallery', () => {
           inlineInset: title.left - panel.left,
           topInset: title.top - panel.top,
           headerGap: panel.top - document.querySelector('header')!.getBoundingClientRect().bottom,
+          formWidth: email.width,
           aligned: title.left === email.left && email.left === primary.left && email.right === primary.right,
           fitsViewport: document.documentElement.scrollWidth === document.documentElement.clientWidth,
         };
@@ -161,9 +165,10 @@ test.describe('Login experience screenshot gallery', () => {
       expect(geometry.columns).toBe(columns);
       if (columns === 16) expect(geometry.formCenter).toBeLessThan(width / 2);
       if (width === 320) await expect(page.locator('.eg-login-landscape')).toBeHidden();
-      expect(geometry.inlineInset).toBe(inset);
-      expect(geometry.topInset).toBe(inset);
+      expect(geometry.inlineInset).toBe(inlineInset);
+      expect(geometry.topInset).toBe(topInset);
       expect(geometry.headerGap).toBe(headerGap);
+      expect(geometry.formWidth).toBe(formWidth);
       expect(geometry.aligned).toBe(true);
       expect(geometry.fitsViewport).toBe(true);
     }
@@ -333,6 +338,7 @@ test.describe('Login experience screenshot gallery', () => {
   });
 
   test('uses the same dark layout for a password change required at sign-in @identity-lifecycle', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await installBootstrap(page);
     await page.route('**/api/auth/me', (route) => json(route, {
       id: 'first-login', email: 'first-login@example.test', firstName: 'New', lastName: 'User',
@@ -349,7 +355,11 @@ test.describe('Login experience screenshot gallery', () => {
     await expect(page.getByLabel('Current Password')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Reset Password' })).toBeDisabled();
     await expectDarkSignIn(page);
+    const password = page.getByLabel('Current Password', { exact: true });
+    expect((await password.boundingBox())?.width).toBe(loginAndResetFormWidths.desktop);
     await captureManualScreenshot(page, '99-first-login-password-reset.jpg');
+    await page.setViewportSize({ width: 320, height: 900 });
+    expect((await password.boundingBox())?.width).toBe(loginAndResetFormWidths.mobile);
   });
 
   test('opens anonymous signup without probing or refreshing a session @identity-lifecycle', async ({ page }) => {

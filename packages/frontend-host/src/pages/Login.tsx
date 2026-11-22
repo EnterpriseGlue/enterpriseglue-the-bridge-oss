@@ -627,7 +627,7 @@ export default function Login() {
   if (isOrganizationFinder) {
     return (
       <PublicAuthShell
-        title={organizationStep === 'tenants' ? 'Choose an organization' : 'Find your organization'}
+        title={organizationStep === 'tenants' ? 'Choose an organization' : 'Login'}
         homePath="/"
         layout="grid"
       >

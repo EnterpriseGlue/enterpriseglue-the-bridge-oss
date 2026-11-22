@@ -68,7 +68,7 @@ export function OrganizationSelection({ onboardingPath }: { onboardingPath?: str
   const loading = memberships.isPending || (!error && !noAccess && (choosingKnown || Boolean(emptyDestination && memberships.data?.length === 0)))
 
   return (
-    <PublicAuthShell title="Choose an organization" layout="grid">
+    <PublicAuthShell title="Choose an organization" layout="grid" panelSize="wide">
       {loading ? <div role="status" aria-label="Finding your organization"><SkeletonText paragraph lineCount={4} /></div>
         : <Stack gap={5} className="eg-organization-picker">
           {user && <p className="cds--type-body-01">{user.email}</p>}

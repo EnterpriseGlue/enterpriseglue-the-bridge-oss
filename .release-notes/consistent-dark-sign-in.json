@@ -7,7 +7,7 @@
   "breaking": false,
   "audiences": ["users"],
   "summary": "Uses the same dark EnterpriseGlue layout for sign-in, organization selection, and first-login password reset.",
-  "userImpact": ["The organization finder and picker use the dark illustrated layout already used for signup, direct organization sign-in, and recovery."],
+  "userImpact": ["The Cloud Login page and organization picker use the dark illustrated layout already used for signup, direct organization sign-in, and recovery. The Login form matches the password-reset form width."],
   "upgrade": {"required": false, "instructions": []},
   "configuration": [],
   "api": {"compatibility": "none", "changes": []},

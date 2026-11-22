@@ -1126,6 +1126,12 @@
   letter-spacing: 0;
 }
 
+.eg-login-shell--process {
+  --eg-login-form-inline-size: 22.5rem;
+  --eg-login-panel-inline-padding: 2.5rem;
+  --eg-login-mobile-gutter: var(--spacing-5);
+}
+
 .eg-login-shell--process .eg-login-page {
   position: relative;
   isolation: isolate;
@@ -1139,9 +1145,9 @@
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
-  inline-size: min(27.5rem, 100%);
+  inline-size: min(calc(var(--eg-login-form-inline-size) + 2 * var(--eg-login-panel-inline-padding)), 100%);
   /* Leave room for all sign-in actions with taller cross-platform text metrics. */
-  padding: 1.5rem 2.5rem;
+  padding: 1.5rem var(--eg-login-panel-inline-padding);
   border: 0;
   background: var(--eg-login-background);
 }
@@ -1174,7 +1180,7 @@
 }
 
 @media (max-width: 42rem) {
-  .eg-login-shell--process .eg-login-page { padding: 1.5rem; }
+  .eg-login-shell--process .eg-login-page { padding: var(--eg-login-mobile-gutter); }
   .eg-login-shell--process .eg-login-panel {
     inline-size: 100%;
     max-inline-size: none;
@@ -2667,6 +2673,10 @@
   overflow-wrap: anywhere;
 }
 
+.eg-login-shell--process .eg-login-grid-panel--standard.cds--tile {
+  max-inline-size: calc(var(--eg-login-form-inline-size) + 2 * var(--cds-grid-gutter));
+}
+
 .eg-login-grid-title {
   font-size: var(--cds-heading-04-font-size, 1.75rem);
   font-weight: var(--cds-heading-04-font-weight, 400);
@@ -2701,6 +2711,11 @@
 
   .eg-login-grid-panel.cds--tile {
     padding: var(--cds-grid-gutter-start);
+  }
+
+  .eg-login-shell--process .eg-login-grid-panel--standard.cds--tile {
+    max-inline-size: none;
+    padding-inline: calc(var(--eg-login-mobile-gutter) - var(--cds-grid-gutter-start));
   }
 }
 

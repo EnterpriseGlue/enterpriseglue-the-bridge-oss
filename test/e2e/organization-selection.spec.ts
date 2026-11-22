@@ -122,7 +122,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       await route.continue()
     })
 
-    const heading = page.getByRole('heading', { name: 'Find your organization' })
+    const heading = page.getByRole('heading', { name: 'Login' })
     const loadedPlexWeights = () => page.evaluate(() => Array.from(document.fonts)
       .filter((face) => face.family.replace(/["']/g, '') === 'IBM Plex Sans' && face.status === 'loaded')
       .map((face) => face.weight).sort())
@@ -169,7 +169,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       await page.waitForFunction(() => Array.from(document.fonts).filter((face) =>
         face.family.replace(/["']/g, '') === 'IBM Plex Sans' && face.status === 'loaded').length >= 3)
       releaseTenancy()
-      const heading = page.getByRole('heading', { name: 'Find your organization' })
+      const heading = page.getByRole('heading', { name: 'Login' })
       await expect(heading).toBeVisible()
       await page.evaluate(async () => { await document.fonts.ready })
       const readyFaces = await page.evaluate(() => Array.from(document.fonts)

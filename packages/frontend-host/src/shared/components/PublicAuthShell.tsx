@@ -213,6 +213,7 @@ export default function PublicAuthShell({
   const heading = <h1 id={headingId} className={gridLayout ? 'eg-login-grid-title' : 'eg-login-title'} tabIndex={-1}>{title}</h1>;
   const content = typeof children === 'function' ? children(branding) : children;
   const illustrated = appearance === 'process';
+  const isWidePanel = panelSize === 'wide';
   const landscape = illustrated && <div className="eg-login-landscape" aria-hidden="true">
     <img src={processLandscape} alt="" />
   </div>;
@@ -236,9 +237,9 @@ export default function PublicAuthShell({
       {gridLayout ? <Grid as="main" {...mainAttributes} className="eg-login-grid">
         {landscape}
         <Column sm={4} md={{ start: 2, span: 6 }}
-          lg={{ start: illustrated ? 2 : 5, span: illustrated ? 6 : 8 }}
+          lg={{ start: illustrated ? 2 : 5, span: illustrated && isWidePanel ? 6 : 8 }}
           xlg={{ start: illustrated ? 2 : 6, span: 6 }}>
-          <Tile className="eg-login-grid-panel">
+          <Tile className={isWidePanel ? 'eg-login-grid-panel' : 'eg-login-grid-panel eg-login-grid-panel--standard'}>
             <Stack gap={7}>
               {heading}
               {description && <p className="eg-login-grid-copy">{description}</p>}
@@ -248,7 +249,7 @@ export default function PublicAuthShell({
         </Column>
       </Grid> : <main {...mainAttributes} className="eg-login-page">
         {landscape}
-        <section className={`eg-login-panel${panelSize === 'wide' ? ' eg-login-panel--wide' : ''}`}>
+        <section className={`eg-login-panel${isWidePanel ? ' eg-login-panel--wide' : ''}`}>
           {heading}
           {description && <p className="eg-public-auth-description">{description}</p>}
           {content}
