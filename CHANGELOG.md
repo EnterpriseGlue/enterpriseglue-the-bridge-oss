@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.10...v0.40.11) (2026-11-22)
+
+### Changes
+
+- **frontend:** Uses the same dark EnterpriseGlue layout for sign-in, organization selection, and first-login password reset.
+- **frontend:** Starts the dashboard with embedded deployment configuration and reduces project-discovery queries for pooled tenants.
+
+Full upgrade, compatibility and verification details: [v0.40.11 release notes](docs/releases/v0.40.11.md).
+
 ## [0.40.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.9...v0.40.10) (2026-11-21)
 
 ### Changes
