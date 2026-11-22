@@ -205,7 +205,7 @@ describe('LayoutWithProSidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'User' }));
 
     expect(await screen.findByRole('heading', { name: 'Sign-in methods' })).toBeInTheDocument();
-    expect(screen.getByText('Microsoft')).toBeInTheDocument();
+    expect(await screen.findByText('Microsoft')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument();
     expect(screen.getAllByText('Google')).toHaveLength(2);
     expect(screen.getByText('Connected')).toBeInTheDocument();

@@ -17,8 +17,8 @@ const readRepositoryFile = (path: string) => readFile(resolve(repositoryRoot, pa
 describe('frontend delivery performance', () => {
   it('resolves real packages from pnpm module IDs and preserves intentional chunk groups', () => {
     const pnpmRoot = '/workspace/node_modules/.pnpm'
-    const examples: Array<[string, string, string]> = [
-      [`${pnpmRoot}/@carbon+react@1.102.0_react@19.2.4/node_modules/@carbon/react/es/index.js`, '@carbon/react', 'carbon-vendor'],
+    const examples: Array<[string, string, string | undefined]> = [
+      [`${pnpmRoot}/@carbon+react@1.102.0_react@19.2.4/node_modules/@carbon/react/es/index.js`, '@carbon/react', undefined],
       [`${pnpmRoot}/react-dom@19.2.4_react@19.2.4/node_modules/react-dom/client.js`, 'react-dom', 'react-vendor'],
       [`${pnpmRoot}/bpmn-js@18.9.1/node_modules/bpmn-js/lib/Modeler.js`, 'bpmn-js', 'bpmn-vendor'],
       [`${pnpmRoot}/dmn-js@17.4.0/node_modules/dmn-js/lib/Manager.js`, 'dmn-js', 'bpmn-vendor'],

@@ -22,7 +22,6 @@ import {
   MultiSelect,
 } from '@carbon/react'
 import { Close, Logout, Notification, UserAvatar } from '@carbon/icons-react'
-import { ProfileDialog } from './ProfileDialog'
 import ProSidebar from './ProSidebar'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import logoPng from '../../../assets/logo.png'
@@ -55,6 +54,8 @@ import {
 import { createPortal } from 'react-dom'
 import { useWorkspaceHeader } from '../../organizations/workspaceHeaderContext'
 import { isOrganizationSelectionPath } from '../../organizations/organizationPaths'
+
+const ProfileDialog = React.lazy(() => import('./ProfileDialog').then(({ ProfileDialog }) => ({ default: ProfileDialog })))
 
 const BRANDING_CACHE_KEY = 'eg.platformBranding.v1'
 
@@ -1263,8 +1264,9 @@ export default function LayoutWithProSidebar() {
 
   return (
     <Theme theme="g100" style={{ height: '100vh', width: '100%', overflow: 'hidden' }}>
-      {!workspaceHeader && <ProfileDialog open={isProfileModalOpen} onClose={() => setIsProfileModalOpen(false)}
-        isMultiTenant={isMultiTenant} tenantSlug={tenantSlug} />}
+      {!workspaceHeader && isProfileModalOpen && <React.Suspense fallback={null}>
+        <ProfileDialog open onClose={() => setIsProfileModalOpen(false)} isMultiTenant={isMultiTenant} tenantSlug={tenantSlug} />
+      </React.Suspense>}
       {/* Entire app shell uses g100 dark theme - header menus inherit this */}
       {workspaceHeader ? (
         <>

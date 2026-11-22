@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { authService } from '../services/auth';
+import { hasStoredSession, readSessionBootstrap, type InitialDashboardSession } from '../services/initialSession';
 import { getTenancyCapabilities } from '../services/tenancy';
 import { useActivityMonitor } from '../shared/hooks/useActivityMonitor';
 import { ApiError } from '../shared/api/client';
@@ -55,6 +56,7 @@ export const AuthContext = createContext<AuthContextValue | undefined>(undefined
 
 interface AuthProviderProps {
   children: ReactNode;
+  initialDashboardSession?: Promise<InitialDashboardSession | undefined>;
 }
 
 const readStoredUser = (raw: string | null): User | null => {
@@ -73,7 +75,7 @@ function authenticatedSessionScope(user: User | null): string | null {
   return `${principalId}:${tenantId}`;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export function AuthProvider({ children, initialDashboardSession }: AuthProviderProps) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [permissions, setPermissions] = useState<CurrentUserPermissions | null>(null);
@@ -235,22 +237,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
         let nextUser: User;
         let nextPermissions: PromiseSettledResult<CurrentUserPermissions> | undefined;
         try {
-          let hasCachedSession = false;
-          try { hasCachedSession = Boolean(readStoredUser(localStorage.getItem(USER_KEY))); }
-          catch { /* storage may be unavailable */ }
-          if (publicRoute || !hasCachedSession) {
-            nextUser = await authService.getMe();
-          } else {
-            // Both reads use the same cookie session. Validate the account
-            // first, then accept only a snapshot bound to that account.
-            const [me, permissions] = await Promise.allSettled([
-              authService.getMe(),
-              authService.getMyPermissions(),
-            ]);
-            if (me.status === 'rejected') throw me.reason;
-            nextUser = me.value;
-            nextPermissions = permissions;
-          }
+          const prepared = initialDashboardSession && await initialDashboardSession;
+          if (!isCurrent()) return;
+          assertRequestSession();
+          // Both reads use the same cookie session. Accept the permissions
+          // only after validating the account and its tenant below.
+          const [me, permissions] = await (!publicRoute && prepared?.isCurrent()
+            ? prepared.result
+            : readSessionBootstrap(!publicRoute && hasStoredSession()));
+          if (me.status === 'rejected') throw me.reason;
+          nextUser = me.value;
+          if (permissions.status === 'rejected') nextPermissions = permissions;
+          else if (permissions.value) nextPermissions = { status: 'fulfilled', value: permissions.value };
         } catch (error) {
           if (!isCurrent()) return;
           assertRequestSession();
@@ -280,7 +278,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     };
     void initAuth();
-  }, [clearAuth, isCurrentSession, persistUser, refreshPermissions]);
+  }, [clearAuth, initialDashboardSession, isCurrentSession, persistUser, refreshPermissions]);
 
   const setAuthenticatedUser = useCallback((nextUser: User | null) => {
     if (!nextUser) {

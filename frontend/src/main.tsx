@@ -3,6 +3,7 @@
  * Vite resolves the package via file: dependency and bundles it.
  */
 import { initRuntimeConfig } from '@enterpriseglue/frontend-host/runtimeConfig'
+import { startInitialDashboardSession } from '@enterpriseglue/frontend-host/services/initialSession'
 import '../../packages/frontend-host/src/styles/split-pane.css'
 
 // Resolve deployment configuration while the application modules initialize.
@@ -10,4 +11,5 @@ import '../../packages/frontend-host/src/styles/split-pane.css'
 const runtimeConfigReady = initRuntimeConfig()
 void runtimeConfigReady.catch(() => undefined)
 
-void import('@enterpriseglue/frontend-host/main').then(({ startApp }) => startApp(runtimeConfigReady))
+const initialDashboardSession = runtimeConfigReady.then(startInitialDashboardSession, () => undefined)
+void import('@enterpriseglue/frontend-host/main').then(({ startApp }) => startApp(runtimeConfigReady, initialDashboardSession))

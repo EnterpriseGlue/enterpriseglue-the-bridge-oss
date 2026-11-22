@@ -85,7 +85,9 @@ export function enterpriseGlueManualChunk(moduleId) {
     packageName === 'd3' ||
     packageName === 'inferno'
   ) {
-    return 'carbon-vendor'
+    // Let Rollup keep components and their dependencies with the routes
+    // that use them. One shared chunk promotes every lazy Carbon component.
+    return undefined
   }
 
   if (packageName.startsWith('@tanstack/')) return 'tanstack-vendor'

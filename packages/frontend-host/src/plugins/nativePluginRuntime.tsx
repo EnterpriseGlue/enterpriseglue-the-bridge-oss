@@ -1,5 +1,3 @@
-import * as Carbon from '@carbon/react';
-import * as CarbonIcons from '@carbon/icons-react';
 import {
   parseEnterpriseGluePluginManifestV1,
   pluginContributionAvailabilityProjectionV1Schema,
@@ -151,18 +149,22 @@ function contributionNavigationPath(
   return serialized ? `${path}?${serialized}` : path;
 }
 
-function installSharedRuntime(): FrontendPluginHostContextV1['shared'] {
+async function installSharedRuntime(): Promise<FrontendPluginHostContextV1['shared']> {
   const root = globalThis as Record<string, unknown>;
   const existing = root[SHARED_RUNTIME_GLOBAL];
   if (existing) {
     return existing as FrontendPluginHostContextV1['shared'];
   }
+  // Only a verified plugin entry needs the full public Carbon catalog.
+  const [carbon, carbonIcons] = await Promise.all([import('@carbon/react'), import('@carbon/icons-react')]);
+  const installed = root[SHARED_RUNTIME_GLOBAL];
+  if (installed) return installed as FrontendPluginHostContextV1['shared'];
   const shared = Object.freeze({
     react: ReactRuntime,
     reactDom: ReactDomRuntime,
     router: RouterRuntime,
-    carbon: Carbon,
-    carbonIcons: CarbonIcons,
+    carbon,
+    carbonIcons,
   }) as unknown as FrontendPluginHostContextV1['shared'];
   Object.defineProperty(root, SHARED_RUNTIME_GLOBAL, {
     value: shared,
@@ -342,9 +344,9 @@ function hostContext(
   pluginId: PluginId,
   version: string,
   availability: ReadonlyMap<string, PluginContributionAvailabilityEntryV1>,
+  shared: FrontendPluginHostContextV1['shared'],
   scope?: NativePluginStartupScope,
 ): FrontendPluginHostContextV1 {
-  const shared = installSharedRuntime();
   // Once the plugin is registered, its host APIs follow the active workspace
   // as before. An unfinished activation must stay in the session that started it.
   const assertHostScope = () => {
@@ -561,7 +563,6 @@ export async function activateNativePluginBootstrapV1(
 
   await clearActiveNativePlugins();
   assertStartupScope(scope);
-  installSharedRuntime();
 
   const failures: NativePluginLoadFailureV1[] = [];
   for (const record of input.plugins) {
@@ -600,6 +601,8 @@ export async function activateNativePluginBootstrapV1(
         );
         continue;
       }
+      const shared = await installSharedRuntime();
+      assertStartupScope(scope);
       module = resolveModule(await importer(`${assetPrefix}${record.entryUrl}`));
       assertStartupScope(scope);
       if (
@@ -620,7 +623,7 @@ export async function activateNativePluginBootstrapV1(
         record.contributionAvailability,
       );
       const contributions = await module.activate(
-        hostContext(record.pluginId, record.version, availability.entries, scope),
+        hostContext(record.pluginId, record.version, availability.entries, shared, scope),
       );
       assertStartupScope(scope);
       registry.activate({

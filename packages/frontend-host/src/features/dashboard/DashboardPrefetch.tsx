@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { engineInventoryQuery, engineSelectionScope } from '../../components/EngineSelector'
+import { engineSelectionScope } from '../../components/EngineSelector'
 import { permissionSnapshotMatchesSession } from '../../contexts/authSessionPermissions'
 import { useAuth } from '../../shared/hooks/useAuth'
-import { canReadDashboard, dashboardContextQuery, dashboardStatsQuery } from './dashboardQueries'
+import { canReadDashboard, dashboardStatsQuery } from './dashboardQueries'
 
 export function DashboardPrefetch({ tenantSlug }: { tenantSlug: string }) {
   const { user, permissions, isLoading } = useAuth()
@@ -19,8 +19,6 @@ export function DashboardPrefetch({ tenantSlug }: { tenantSlug: string }) {
     const scope = engineSelectionScope(path, user)
     started.current = true
     void queryClient.prefetchQuery(dashboardStatsQuery(scope))
-    void queryClient.prefetchQuery(engineInventoryQuery(scope))
-    void queryClient.prefetchQuery(dashboardContextQuery(scope))
   }, [isLoading, permissions, queryClient, tenantSlug, user])
 
   return null
