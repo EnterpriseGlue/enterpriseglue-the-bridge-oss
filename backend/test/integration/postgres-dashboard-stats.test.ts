@@ -33,7 +33,7 @@ vi.mock('@enterpriseglue/shared/middleware/requireAction.js', () => ({
 }));
 
 const disposable = process.env.SESSION_RACE_DISPOSABLE_POSTGRES === 'true' && Boolean(process.env.MIGRATION_TEST_POSTGRES_CONTAINER);
-const env = (name: string) => process.env[`MIGRATION_TEST_POSTGRES_${name}`];
+const env = (name: string) => process.env[`MIGRATION_TEST_POSTGRES_${name}`] || process.env[`POSTGRES_${name}`];
 const connection = { type: 'postgres' as const, host: env('HOST'), port: Number(env('PORT')) };
 const credentials = { username: env('USER'), password: env('PASSWORD') };
 const suffix = randomUUID().replaceAll('-', '').slice(0, 12);
