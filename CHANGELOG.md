@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.9...v0.40.10) (2026-11-21)
+
+### Changes
+
+- **frontend:** Loads public sign-in options while the organization finder checks the browser session.
+- **starbase:** Uses the organization’s sign-in policy for project and engine member invitations.
+
+Full upgrade, compatibility and verification details: [v0.40.10 release notes](docs/releases/v0.40.10.md).
+
 ## [0.40.9](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.8...v0.40.9) (2026-11-21)
 
 ### Changes
