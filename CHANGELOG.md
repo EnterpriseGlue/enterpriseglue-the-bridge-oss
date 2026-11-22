@@ -6,19 +6,12 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.10...v0.40.11) (2026-11-22)
 
+### Changes
 
-### Bug Fixes
+- **frontend:** Uses the same dark EnterpriseGlue layout for sign-in, organization selection, and first-login password reset.
+- **frontend:** Starts the dashboard with embedded deployment configuration and reduces project-discovery queries for pooled tenants.
 
-* **dashboard:** remove config fetch and batch pooled project discovery ([d743ce0](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/d743ce02516d079fc74a1c1710c2e218cceb8ccc))
-* **frontend:** align the Login form with password reset ([78e29dc](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/78e29dcdfb1367df36f4251da812fda71301f8c9))
-* **frontend:** match form widths at the Carbon breakpoint ([956a354](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/956a354a5080d0b295f7983e5f2eb46ef44a526e))
-* **frontend:** use the dark layout throughout sign-in ([56ae877](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/56ae8779d3fc7798b605bcd6c1b17543f485d331))
-* **frontend:** use the dark layout throughout sign-in ([6839ade](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/6839aded3287d01fb729af9d0d9250e6f8fdd514))
-
-
-### Performance Improvements
-
-* **dashboard:** remove config fetch and batch pooled project discovery ([7b67254](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/7b672547f8c58e7037a3bbd56906e10ce23b067e))
+Full upgrade, compatibility and verification details: [v0.40.11 release notes](docs/releases/v0.40.11.md).
 
 ## [0.40.10](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.9...v0.40.10) (2026-11-21)
 
