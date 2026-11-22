@@ -1,6 +1,11 @@
+import { matchPath } from 'react-router-dom'
 import { toSafeInternalPath } from '../../utils/safeNavigation'
 
 export const ORGANIZATION_SELECTION_PATH = '/organizations/select'
+
+export function isOrganizationSelectionPath(pathname: string) {
+  return Boolean(matchPath(ORGANIZATION_SELECTION_PATH, pathname))
+}
 
 const pendingDestinationKey = 'eg.organization.destination'
 const pendingDestinationLifetime = 10 * 60_000

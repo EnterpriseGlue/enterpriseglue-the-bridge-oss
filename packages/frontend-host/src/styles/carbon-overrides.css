@@ -1101,14 +1101,22 @@
 
 /* Public account pages share the dark illustrated shell, including those
    using the workspace header. Host extensions can explicitly override it. */
-.eg-login-shell--process {
-  background: #08090d;
+.eg-login-shell--process,
+.eg-workspace-shell--auth {
+  --eg-login-background: #08090d;
+  background: var(--eg-login-background);
   color: var(--cds-text-primary);
+}
+
+.eg-workspace-shell--auth {
+  min-block-size: 100dvh;
+  display: flow-root;
 }
 
 /* Shared black product header before and after login. Preserve Carbon's
    interaction states without changing the global g100 page/sidebar theme. */
 .eg-login-shell--process .eg-login-header.cds--header,
+.eg-workspace-header.cds--header,
 .eg-app-header.cds--header {
   --cds-background: #000;
 }
@@ -1118,12 +1126,18 @@
   letter-spacing: 0;
 }
 
+.eg-login-shell--process {
+  --eg-login-form-inline-size: 22.5rem;
+  --eg-login-panel-inline-padding: 2.5rem;
+  --eg-login-mobile-gutter: var(--spacing-5);
+}
+
 .eg-login-shell--process .eg-login-page {
   position: relative;
   isolation: isolate;
   justify-content: flex-start;
   padding: 1.5rem clamp(1.5rem, 4.5vw, 5rem);
-  background: #08090d;
+  background: var(--eg-login-background);
   overflow: hidden;
 }
 
@@ -1131,11 +1145,11 @@
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
-  inline-size: min(27.5rem, 100%);
+  inline-size: min(calc(var(--eg-login-form-inline-size) + 2 * var(--eg-login-panel-inline-padding)), 100%);
   /* Leave room for all sign-in actions with taller cross-platform text metrics. */
-  padding: 1.5rem 2.5rem;
+  padding: 1.5rem var(--eg-login-panel-inline-padding);
   border: 0;
-  background: #08090d;
+  background: var(--eg-login-background);
 }
 
 .eg-login-shell--process .eg-login-title {
@@ -1165,8 +1179,8 @@
   .eg-login-landscape { opacity: 0.5; }
 }
 
-@media (max-width: 42rem) {
-  .eg-login-shell--process .eg-login-page { padding: 1.5rem; }
+@media (width < 42rem) {
+  .eg-login-shell--process .eg-login-page { padding: var(--eg-login-mobile-gutter); }
   .eg-login-shell--process .eg-login-panel {
     inline-size: 100%;
     max-inline-size: none;
@@ -2604,13 +2618,6 @@
   }
 }
 
-/* The Cloud logo and hit areas remain in place as route content changes. */
-.eg-organization-picker .cds--type-heading-04 {
-  font-size: var(--cds-heading-04-font-size, 1.75rem);
-  font-weight: var(--cds-heading-04-font-weight, 400);
-  line-height: var(--cds-heading-04-line-height, 1.28572);
-}
-
 :is(.eg-account-panel, .eg-organization-picker, .eg-profile-dialog) .cds--type-heading-compact-01 {
   font-size: var(--cds-heading-compact-01-font-size, 0.875rem);
   font-weight: var(--cds-heading-compact-01-font-weight, 600);
@@ -2643,10 +2650,31 @@
   padding-block: calc(2 * var(--cds-grid-gutter)) var(--cds-grid-gutter);
 }
 
+.eg-login-shell--process .eg-login-grid {
+  position: relative;
+  isolation: isolate;
+  min-block-size: calc(100vh - 3rem);
+  min-block-size: calc(100dvh - 3rem);
+}
+
+.eg-login-shell--process .eg-login-grid-panel.cds--tile {
+  position: relative;
+  background: var(--eg-login-background);
+}
+
+.eg-login-shell--process .eg-login-grid-title {
+  font-size: 2rem;
+  line-height: 1.25;
+}
+
 .eg-login-grid-panel.cds--tile {
   min-inline-size: 0;
   padding: var(--cds-grid-gutter);
   overflow-wrap: anywhere;
+}
+
+.eg-login-shell--process .eg-login-grid-panel--standard.cds--tile {
+  max-inline-size: calc(var(--eg-login-form-inline-size) + 2 * var(--cds-grid-gutter));
 }
 
 .eg-login-grid-title {
@@ -2684,6 +2712,11 @@
   .eg-login-grid-panel.cds--tile {
     padding: var(--cds-grid-gutter-start);
   }
+
+  .eg-login-shell--process .eg-login-grid-panel--standard.cds--tile {
+    max-inline-size: none;
+    padding-inline: calc(var(--eg-login-mobile-gutter) - var(--cds-grid-gutter-start));
+  }
 }
 
 .eg-workspace-header-slot {
@@ -2696,21 +2729,15 @@
   margin-block-start: var(--spacing-8, 3rem);
 }
 
-.eg-organization-picker {
-  inline-size: 100%;
-  max-inline-size: 80rem;
-  padding-block: var(--spacing-10) var(--spacing-6);
+.eg-organization-picker-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-5);
 }
 
-@media (max-width: 42rem) {
-  .eg-organization-picker {
-    padding-block-start: var(--spacing-6);
-  }
-}
-
-.eg-organization-form {
-  max-inline-size: 40rem;
-  margin-inline: auto;
+.eg-organization-picker-actions .cds--btn--ghost {
+  padding-inline-start: 0;
 }
 
 .eg-organization-list {

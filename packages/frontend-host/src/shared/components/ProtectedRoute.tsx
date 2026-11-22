@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { InlineLoading, SkeletonText } from '@carbon/react';
 import { useOptionalOrganizationSession } from '../../features/organizations/OrganizationSession';
-import { ORGANIZATION_SELECTION_PATH } from '../../features/organizations/organizationPaths';
+import { isOrganizationSelectionPath, ORGANIZATION_SELECTION_PATH } from '../../features/organizations/organizationPaths';
 import { useAuth } from '../hooks/useAuth';
 import { apiClient } from '../../shared/api/client';
 import { isMultiTenantEnabled } from '../../enterprise/extensionRegistry';
@@ -92,7 +92,8 @@ export function ProtectedRoute({ children, requireAdmin = false, requiredPlatfor
   }, [isLoading, isAuthenticated, platformSettingsAllowed, setupCheckSkipped, isExemptPath, isSetupPath, user?.id, tenantSlug]);
 
   if (organization && (isLoading || checkingOrganization)) {
-    return <main id="main-content" className="eg-workspace-loading" aria-label="Loading your workspace">
+    const authStep = isOrganizationSelectionPath(location.pathname) || effectivePathname === '/reset-password';
+    return <main id={authStep ? 'public-auth-main' : 'main-content'} tabIndex={-1} className="eg-workspace-loading" aria-label="Loading your workspace">
       <SkeletonText paragraph lineCount={4} />
     </main>;
   }

@@ -122,7 +122,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       await route.continue()
     })
 
-    const heading = page.getByRole('heading', { name: 'Find your organization' })
+    const heading = page.getByRole('heading', { name: 'Login' })
     const loadedPlexWeights = () => page.evaluate(() => Array.from(document.fonts)
       .filter((face) => face.family.replace(/["']/g, '') === 'IBM Plex Sans' && face.status === 'loaded')
       .map((face) => face.weight).sort())
@@ -169,7 +169,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       await page.waitForFunction(() => Array.from(document.fonts).filter((face) =>
         face.family.replace(/["']/g, '') === 'IBM Plex Sans' && face.status === 'loaded').length >= 3)
       releaseTenancy()
-      const heading = page.getByRole('heading', { name: 'Find your organization' })
+      const heading = page.getByRole('heading', { name: 'Login' })
       await expect(heading).toBeVisible()
       await page.evaluate(async () => { await document.fonts.ready })
       const readyFaces = await page.evaluate(() => Array.from(document.fonts)
@@ -497,8 +497,11 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       return { x, y, width, height, background: getComputedStyle(element).backgroundColor, brandLeft: brand?.getBoundingClientRect().left }
     })
     const loginStyles = await headerStyles()
+    const darkShell = page.locator('.eg-login-shell--process')
+    await expect(darkShell).toHaveCSS('background-color', 'rgb(8, 9, 13)')
     await page.getByRole('button', { name: 'Continue with Google' }).click()
     await expect(picker(page)).toBeVisible()
+    await expect(darkShell).toHaveCSS('background-color', 'rgb(8, 9, 13)')
     expect(await headerStyles()).toEqual(loginStyles)
     const count = session.documentRequests()
     await header(page).evaluate((element) => { element.setAttribute('data-header-instance', 'persistent') })
@@ -506,6 +509,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
     await expect(dashboard(page)).toBeVisible()
     expect(await headerStyles()).toEqual(loginStyles)
     await expect(header(page)).toHaveAttribute('data-header-instance', 'persistent')
+    await expect(darkShell).toHaveCount(0)
     expect(session.documentRequests()).toBe(count)
   })
 
@@ -514,6 +518,10 @@ test.describe('Cloud organization selection @organization-selection @identity-li
     await installAccount(page, [alpha, bravo])
     await signIn(page)
     await expect(picker(page)).toBeVisible()
+    await page.goto('/organizations/select/')
+    await expect(page.getByRole('option', { name: /Northwind/ })).toBeVisible()
+    await expect(page.getByRole('main')).toHaveCount(1)
+    await expect(page.locator('.eg-login-shell--process')).toHaveCSS('background-color', 'rgb(8, 9, 13)')
 
     for (const { width, height, minimumGap } of [
       { width: 1440, height: 900, minimumGap: 64 },

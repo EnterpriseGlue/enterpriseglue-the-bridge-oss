@@ -212,15 +212,20 @@ export default function PublicAuthShell({
   const gridLayout = layout === 'grid';
   const heading = <h1 id={headingId} className={gridLayout ? 'eg-login-grid-title' : 'eg-login-title'} tabIndex={-1}>{title}</h1>;
   const content = typeof children === 'function' ? children(branding) : children;
+  const illustrated = appearance === 'process';
+  const isWidePanel = panelSize === 'wide';
+  const landscape = illustrated && <div className="eg-login-landscape" aria-hidden="true">
+    <img src={processLandscape} alt="" />
+  </div>;
   // Give the standard login wordmark more presence without replacing custom fonts/sizes.
-  const useLoginBrandDefaults = appearance === 'process' && !branding.titleFontFamily && branding.titleFontSize === 14;
+  const useLoginBrandDefaults = illustrated && !branding.titleFontFamily && branding.titleFontSize === 14;
 
   useEffect(() => {
     document.title = `${title} | ${branding.brandTitle}`;
   }, [branding.brandTitle, title]);
 
   const shell = (
-    <div className={`eg-login-shell${appearance === 'process' ? ' eg-login-shell--process' : ''}`}>
+    <div className={`eg-login-shell${illustrated ? ' eg-login-shell--process' : ''}`}>
       {!workspaceHeader && <Theme theme="g100">
         <Header className="eg-login-header" aria-label={`${branding.brandTitle} application header`}>
           <SkipToContent href="#public-auth-main">Skip to main content</SkipToContent>
@@ -230,8 +235,11 @@ export default function PublicAuthShell({
         </Header>
       </Theme>}
       {gridLayout ? <Grid as="main" {...mainAttributes} className="eg-login-grid">
-        <Column sm={4} md={{ start: 2, span: 6 }} lg={{ start: 5, span: 8 }} xlg={{ start: 6, span: 6 }}>
-          <Tile className="eg-login-grid-panel">
+        {landscape}
+        <Column sm={4} md={{ start: 2, span: 6 }}
+          lg={{ start: illustrated ? 2 : 5, span: illustrated && isWidePanel ? 6 : 8 }}
+          xlg={{ start: illustrated ? 2 : 6, span: 6 }}>
+          <Tile className={isWidePanel ? 'eg-login-grid-panel' : 'eg-login-grid-panel eg-login-grid-panel--standard'}>
             <Stack gap={7}>
               {heading}
               {description && <p className="eg-login-grid-copy">{description}</p>}
@@ -240,10 +248,8 @@ export default function PublicAuthShell({
           </Tile>
         </Column>
       </Grid> : <main {...mainAttributes} className="eg-login-page">
-        {appearance === 'process' && <div className="eg-login-landscape" aria-hidden="true">
-          <img src={processLandscape} alt="" />
-        </div>}
-        <section className={`eg-login-panel${panelSize === 'wide' ? ' eg-login-panel--wide' : ''}`}>
+        {landscape}
+        <section className={`eg-login-panel${isWidePanel ? ' eg-login-panel--wide' : ''}`}>
           {heading}
           {description && <p className="eg-public-auth-description">{description}</p>}
           {content}
@@ -251,5 +257,5 @@ export default function PublicAuthShell({
       </main>}
     </div>
   );
-  return appearance === 'process' ? <Theme theme="g100">{shell}</Theme> : shell;
+  return illustrated ? <Theme theme="g100">{shell}</Theme> : shell;
 }

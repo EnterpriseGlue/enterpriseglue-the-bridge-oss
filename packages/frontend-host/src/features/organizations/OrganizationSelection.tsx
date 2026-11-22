@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Column, Grid, InlineNotification, Link, SkeletonText, Stack } from '@carbon/react'
+import { Button, InlineNotification, Link, SkeletonText, Stack } from '@carbon/react'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/hooks/useAuth'
+import PublicAuthShell from '../../shared/components/PublicAuthShell'
 import { OrganizationList } from './OrganizationList'
 import { useOrganizationSession, type OrganizationMembership } from './OrganizationSession'
 import { safeOrganizationDestination, tenantSlugForPath } from './organizationPaths'
@@ -64,19 +65,12 @@ export function OrganizationSelection({ onboardingPath }: { onboardingPath?: str
     )
   }
 
-  if (memberships.isPending || (!error && !noAccess && (choosingKnown || Boolean(emptyDestination && memberships.data?.length === 0)))) {
-    return <Grid as="section" aria-label="Organization selection" className="eg-organization-picker">
-      <Column sm={4} md={{ start: 2, span: 6 }} lg={{ start: 5, span: 8 }}>
-        <div role="status" aria-label="Finding your organization"><SkeletonText paragraph lineCount={4} /></div>
-      </Column>
-    </Grid>
-  }
+  const loading = memberships.isPending || (!error && !noAccess && (choosingKnown || Boolean(emptyDestination && memberships.data?.length === 0)))
 
   return (
-    <Grid as="section" aria-labelledby="eg-organization-picker-title" className="eg-organization-picker">
-      <Column sm={4} md={{ start: 2, span: 6 }} lg={{ start: 5, span: 8 }}>
-        <Stack gap={5} className="eg-organization-form">
-          <h1 id="eg-organization-picker-title" className="cds--type-heading-04">Choose an organization</h1>
+    <PublicAuthShell title="Choose an organization" layout="grid" panelSize="wide">
+      {loading ? <div role="status" aria-label="Finding your organization"><SkeletonText paragraph lineCount={4} /></div>
+        : <Stack gap={5} className="eg-organization-picker">
           {user && <p className="cds--type-body-01">{user.email}</p>}
           {organizationChangedInAnotherTab && <InlineNotification kind="info" lowContrast hideCloseButton title="Your organization changed in another tab. Choose an organization to continue." />}
           {noAccess && <InlineNotification kind="error" lowContrast hideCloseButton title="You don’t have access to that organization" />}
@@ -89,14 +83,13 @@ export function OrganizationSelection({ onboardingPath }: { onboardingPath?: str
           {!memberships.isError && <OrganizationList
             memberships={memberships.data ?? []} lastOrganization={lastOrganization} onChoose={choose} busy={transitioning}
           />}
-          <Stack orientation="horizontal" gap={5}>
+          <div className="eg-organization-picker-actions">
             {canCreate && onboardingPath && <Link as={RouterLink} to={onboardingPath}>Create a new organization</Link>}
-            <Link as="button" type="button" onClick={() => {
+            <Button kind="ghost" size="sm" type="button" onClick={() => {
               void logout().then(() => navigate('/login', { replace: true })).catch(() => setError('Could not sign out. Try again.'))
-            }}>Sign out</Link>
-          </Stack>
-        </Stack>
-      </Column>
-    </Grid>
+            }}>Sign out</Button>
+          </div>
+        </Stack>}
+    </PublicAuthShell>
   )
 }

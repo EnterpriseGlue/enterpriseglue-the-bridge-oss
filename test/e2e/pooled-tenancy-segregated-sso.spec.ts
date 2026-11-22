@@ -316,7 +316,7 @@ async function oidcLoginFromOrganizationFinder(browser: Browser, tenantSlug: str
   const context = await newAppContext(browser);
   const page = await context.newPage();
   await page.goto('/login');
-  await expect(page.getByRole('heading', { name: 'Find your organization' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Email address' })).toBeFocused();
   await captureManualScreenshot(page, '01-neutral-organization-finder.jpg');
   await page.getByRole('textbox', { name: 'Email address' }).fill(email);
@@ -351,7 +351,7 @@ async function assertOrganizationFinderResponsive(browser: Browser): Promise<voi
     const page = await context.newPage();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'Find your organization' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Login' })).toBeVisible();
     await assertNoHorizontalOverflow(page);
     await captureResponsiveScreenshot(page, '01-neutral-organization-finder-narrow.jpg');
   } finally {
