@@ -233,6 +233,12 @@ is still awaiting qualification and publication. For an already released
 version, dispatch the Oracle workflow separately with its exact `source_ref`
 and `release_tag` after publication approval.
 
+The Oracle qualification workflow uses the pinned browser helper from the
+released source when available. A frozen release that declares the earlier
+Chromium installation step is qualified with Chromium from its own Playwright
+lockfile. Both paths run the release's Oracle SSO rehearsal and encryption
+negotiation checks on the retained image.
+
 `oracle-image-release.yml` publishes the optional Oracle backend only from an
 existing stable release source. Its pinned Cosign OCI 1.1 signing mode requires
 `COSIGN_EXPERIMENTAL=1` in the publisher environment. The pinned `attest` command

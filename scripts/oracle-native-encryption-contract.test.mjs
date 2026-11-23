@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -91,7 +91,7 @@ test('Oracle publication requires a released SHA and retained security-qualified
   assert.match(publish, /run-id: \$\{\{ needs.validate.outputs.qualification_run_id \|\| github.run_id \}\}/);
   assert.match(publish, /needs.qualify.result == 'skipped' && needs.validate.outputs.qualification_run_id != ''/);
   const qualification = readFileSync('.github/workflows/oracle-native-encryption-reusable.yml', 'utf8');
-  assert.match(qualification, /run: bash scripts\/run-ci-playwright\.sh pnpm run test:oracle:nne:sso/);
+  assert.match(qualification, /bash scripts\/run-ci-playwright\.sh pnpm run test:oracle:nne:sso/);
   const harness = readFileSync('scripts/run-ci-identity-protocol-rehearsals.sh', 'utf8');
   assert.ok(harness.indexOf('scripts/scan-oracle-image.sh') < harness.indexOf('run_compose up --no-build'));
   const scan = readFileSync('scripts/scan-oracle-image.sh', 'utf8');
@@ -99,6 +99,40 @@ test('Oracle publication requires a released SHA and retained security-qualified
   assert.doesNotMatch(scan, /--ignore-unfixed/);
   assert.match(scan, /--format cyclonedx "\$image" > "\$output_dir\/sbom.cdx.json"/);
   assert.doesNotMatch(scan, /"\$output_dir:\/evidence"|--output \/evidence/);
+});
+
+test('Oracle qualification runs the declared browser setup for the exact source', (t) => {
+  const qualification = readFileSync('.github/workflows/oracle-native-encryption-reusable.yml', 'utf8');
+  const step = qualification.split('      - name: Qualify compiled Oracle image and SSO\n')[1].split('\n      - name:')[0];
+  const script = step.split('        run: |\n')[1].split('\n').map(line => line.slice(10)).join('\n');
+  const directory = mkdtempSync(path.join(tmpdir(), 'eg-qualification-browser-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  mkdirSync(path.join(directory, 'scripts'));
+  writeFileSync(path.join(directory, 'git'), [
+    '#!/usr/bin/env bash',
+    'case "$*" in',
+    '  "rev-parse HEAD") printf "%s\\n" "$FIXTURE_HEAD" ;;',
+    '  "show HEAD:.github/workflows/oracle-native-encryption-reusable.yml") printf "%s\\n" "$FIXTURE_RECIPE" ;;',
+    '  *) exit 1 ;;',
+    'esac',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  writeFileSync(path.join(directory, 'pnpm'), '#!/usr/bin/env bash\nprintf "%s\\n" "$*"\n', { mode: 0o755 });
+  const source = 'a'.repeat(40);
+  const legacyRecipe = '      - run: pnpm exec playwright install --with-deps chromium';
+  const run = (sourceRef = source, recipe = legacyRecipe) => execFileSync('bash', ['-c', script], {
+    cwd: directory,
+    env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, FROZEN_SOURCE_REF: sourceRef,
+      FIXTURE_HEAD: source, FIXTURE_RECIPE: recipe },
+    stdio: 'pipe',
+    encoding: 'utf8',
+  });
+  assert.equal(run(), 'exec playwright install --with-deps chromium\nrun test:oracle:nne:sso\n');
+  for (const args of [[''], ['b'.repeat(40)], [source, '']]) {
+    assert.throws(() => run(...args), /does not declare a supported Chromium setup/);
+  }
+  writeFileSync(path.join(directory, 'scripts/run-ci-playwright.sh'), 'printf "pinned browser: %s\\n" "$*"\n');
+  assert.equal(run(''), 'pinned browser: pnpm run test:oracle:nne:sso\n');
 });
 
 const workflow = readFileSync('.github/workflows/oracle-image-release.yml', 'utf8');
