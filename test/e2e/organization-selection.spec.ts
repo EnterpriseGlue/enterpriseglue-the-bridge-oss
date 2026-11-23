@@ -299,6 +299,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       releasePermissions.resolve()
       const statsReads = () => dashboardReads.filter(path => path.endsWith('/api/dashboard/stats'))
       await expect.poll(statsReads).toHaveLength(1)
+      expect(dashboardReads).toEqual(statsReads())
       releaseCapabilities.resolve()
       await Promise.all([pluginRequest.promise, engineRequest.promise])
       await expect(dashboard(page)).toBeVisible()

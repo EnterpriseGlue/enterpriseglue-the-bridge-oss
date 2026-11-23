@@ -7,6 +7,7 @@ import { useAuth } from '@src/shared/hooks/useAuth';
 import { ApiError } from '@src/shared/api/client';
 import { USER_KEY } from '@src/constants/storageKeys';
 import { getBrowserSessionRevision } from '@src/utils/browserSession';
+import { startInitialDashboardSession } from '@src/services/initialSession';
 
 vi.mock('@src/services/auth', () => ({
   authService: {
@@ -276,6 +277,49 @@ describe('authentication response ownership', () => {
     if (user) localStorage.setItem(USER_KEY, JSON.stringify(user)); else localStorage.removeItem(USER_KEY);
     window.dispatchEvent(new StorageEvent('storage', { key: USER_KEY, newValue: user ? JSON.stringify(user) : null }));
   };
+
+  it('reuses both requests started before the workspace renders', async () => {
+    const { authService } = await import('@src/services/auth');
+    window.history.replaceState({}, '', '/t/alpha');
+    localStorage.setItem(USER_KEY, JSON.stringify(a));
+    const prepared = startInitialDashboardSession();
+    expect(authService.getMe).toHaveBeenCalledTimes(1);
+    expect(authService.getMyPermissions).toHaveBeenCalledTimes(1);
+    const initialDashboardSession = Promise.resolve(prepared);
+    const { result } = renderHook(() => useAuth(), { wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider initialDashboardSession={initialDashboardSession}>{children}</AuthProvider>
+      </QueryClientProvider>
+    ) });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.user?.id).toBe(a.id);
+    expect(result.current.permissions?.tenantId).toBe(a.session.tenant.id);
+    expect(authService.getMe).toHaveBeenCalledTimes(1);
+    expect(authService.getMyPermissions).toHaveBeenCalledTimes(1);
+  });
+
+  it('discards early responses when the workspace has changed before the provider mounts', async () => {
+    const { authService } = await import('@src/services/auth');
+    window.history.replaceState({}, '', '/t/alpha');
+    localStorage.setItem(USER_KEY, JSON.stringify(a));
+    const initialDashboardSession = Promise.resolve(startInitialDashboardSession());
+    window.history.replaceState({}, '', '/t/beta');
+    localStorage.setItem(USER_KEY, JSON.stringify(b));
+    vi.mocked(authService.getMe).mockResolvedValue(b);
+    vi.mocked(authService.getMyPermissions).mockResolvedValue(permissions(b));
+    const { result } = renderHook(() => useAuth(), { wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider initialDashboardSession={initialDashboardSession}>{children}</AuthProvider>
+      </QueryClientProvider>
+    ) });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.user?.id).toBe(b.id);
+    expect(result.current.permissions?.tenantId).toBe(b.session.tenant.id);
+    expect(authService.getMe).toHaveBeenCalledTimes(2);
+    expect(authService.getMyPermissions).toHaveBeenCalledTimes(2);
+  });
 
   it.each(['success', 'unauthorized', 'unverified'] as const)('ignores stale getMe %s after a storage switch', async outcome => {
     const { authService } = await import('@src/services/auth');

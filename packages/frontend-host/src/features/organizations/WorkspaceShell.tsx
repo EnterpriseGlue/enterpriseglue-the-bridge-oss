@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Button, Header, HeaderGlobalAction, HeaderGlobalBar, HeaderName, HeaderPanel,
@@ -7,11 +7,12 @@ import {
 import { UserAvatar } from '@carbon/icons-react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { PublicAuthHeaderBrand, usePublicAuthBranding } from '../../shared/components/PublicAuthShell'
-import { ProfileDialog } from '../shared/components/ProfileDialog'
 import { OrganizationList } from './OrganizationList'
 import { OrganizationSessionProvider, useOrganizationSession, type OrganizationMembership } from './OrganizationSession'
 import { isOrganizationSelectionPath, ORGANIZATION_SELECTION_PATH, tenantSlugForPath } from './organizationPaths'
 import { WorkspaceHeaderContext } from './workspaceHeaderContext'
+
+const ProfileDialog = lazy(() => import('../shared/components/ProfileDialog').then(({ ProfileDialog }) => ({ default: ProfileDialog })))
 
 function WorkspaceHeader() {
   const branding = usePublicAuthBranding()
@@ -127,8 +128,9 @@ function WorkspaceHeader() {
               </section>}
             </HeaderPanel>}
           </Header>
-          <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)}
-            isMultiTenant tenantSlug={tenantPath ?? null} />
+          {profileOpen && <Suspense fallback={null}>
+            <ProfileDialog open onClose={() => setProfileOpen(false)} isMultiTenant tenantSlug={tenantPath ?? null} />
+          </Suspense>}
         </Theme>
         {noAccess && <div className="eg-organization-access-notice">
           <InlineNotification kind="error" lowContrast hideCloseButton title="You don’t have access to that organization" />

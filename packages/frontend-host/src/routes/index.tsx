@@ -1,4 +1,5 @@
 import React from 'react'
+import { SkeletonText } from '@carbon/react'
 import { Navigate, RouteObject, useLocation } from 'react-router-dom'
 import { OrganizationSelection } from '../features/organizations/OrganizationSelection'
 import { WorkspaceShell } from '../features/organizations/WorkspaceShell'
@@ -11,6 +12,7 @@ import { getExtensionRouteAuthz, prepareExtensionRoutes } from '../enterprise/ex
 // Shared components
 import LayoutWithProSidebar from '../features/shared/components/LayoutWithProSidebar'
 import { PageLoadingState } from '../features/shared/components/LoadingState'
+import PublicAuthShell from '../shared/components/PublicAuthShell'
 
 // Starbase pages
 const ProjectOverview = React.lazy(() => import('../features/starbase/pages/ProjectOverview'))
@@ -47,17 +49,17 @@ import { RequireEmailVerification } from '../shared/components/RequireEmailVerif
 import { RequirePasswordReset } from '../shared/components/RequirePasswordReset'
 
 // Auth pages
-import Login from '../pages/Login'
-import ForgotPassword from '../pages/ForgotPassword'
-import PasswordResetWithToken from '../pages/PasswordResetWithToken'
-import ResetPassword from '../pages/ResetPassword'
-import ResendVerification from '../pages/ResendVerification'
-import VerifyEmail from '../pages/VerifyEmail'
-import Signup from '../pages/Signup'
-import DocumentationAccess from '../pages/DocumentationAccess'
-import CloudEmailAuth from '../pages/CloudEmailAuth'
-import CloudMicrosoftEmail from '../pages/CloudMicrosoftEmail'
-import AcceptInvite from '../pages/AcceptInvite'
+const Login = React.lazy(() => import('../pages/Login'))
+const ForgotPassword = React.lazy(() => import('../pages/ForgotPassword'))
+const PasswordResetWithToken = React.lazy(() => import('../pages/PasswordResetWithToken'))
+const ResetPassword = React.lazy(() => import('../pages/ResetPassword'))
+const ResendVerification = React.lazy(() => import('../pages/ResendVerification'))
+const VerifyEmail = React.lazy(() => import('../pages/VerifyEmail'))
+const Signup = React.lazy(() => import('../pages/Signup'))
+const DocumentationAccess = React.lazy(() => import('../pages/DocumentationAccess'))
+const CloudEmailAuth = React.lazy(() => import('../pages/CloudEmailAuth'))
+const CloudMicrosoftEmail = React.lazy(() => import('../pages/CloudMicrosoftEmail'))
+const AcceptInvite = React.lazy(() => import('../pages/AcceptInvite'))
 
 // Admin pages
 const AuditLogViewer = React.lazy(() => import('../pages/AuditLogViewer'))
@@ -678,27 +680,32 @@ export function createProtectedChildRoutes(isRootLevel: boolean, cloudOrganizati
  * Public routes that don't require authentication
  */
 export function getPublicRoutes(): RouteObject[] {
+  const deferred = (Page: React.ComponentType) => (
+    <React.Suspense fallback={<PublicAuthShell title="Loading"><SkeletonText paragraph lineCount={3} /></PublicAuthShell>}>
+      <Page />
+    </React.Suspense>
+  )
   return [
-    { path: '/login', element: <Login /> },
-    { path: '/t/:tenantSlug/login', element: <Login /> },
-    { path: '/admin-recovery', element: <Login /> },
-    { path: '/t/:tenantSlug/admin-recovery', element: <Login /> },
-    { path: '/t/:tenantSlug/invite/:token', element: <AcceptInvite /> },
-    { path: '/forgot-password', element: <ForgotPassword /> },
-    { path: '/t/:tenantSlug/forgot-password', element: <ForgotPassword /> },
-    { path: '/password-reset', element: <PasswordResetWithToken /> },
-    { path: '/t/:tenantSlug/password-reset', element: <PasswordResetWithToken /> },
-    { path: '/verify-email', element: <VerifyEmail /> },
-    { path: '/t/:tenantSlug/verify-email', element: <VerifyEmail /> },
-    { path: '/resend-verification', element: <ResendVerification /> },
-    { path: '/t/:tenantSlug/resend-verification', element: <ResendVerification /> },
-    { path: '/documentation/access', element: <DocumentationAccess /> },
-    { path: '/signup', element: <Signup /> },
-    { path: '/signup/email', element: <CloudEmailAuth /> },
-    { path: '/signup/email/continue', element: <CloudEmailAuth /> },
-    { path: '/signup/email/passkey', element: <CloudEmailAuth /> },
-    { path: '/signup/email/signin', element: <CloudEmailAuth /> },
-    { path: '/signup/microsoft/email', element: <CloudMicrosoftEmail /> },
+    { path: '/login', element: deferred(Login) },
+    { path: '/t/:tenantSlug/login', element: deferred(Login) },
+    { path: '/admin-recovery', element: deferred(Login) },
+    { path: '/t/:tenantSlug/admin-recovery', element: deferred(Login) },
+    { path: '/t/:tenantSlug/invite/:token', element: deferred(AcceptInvite) },
+    { path: '/forgot-password', element: deferred(ForgotPassword) },
+    { path: '/t/:tenantSlug/forgot-password', element: deferred(ForgotPassword) },
+    { path: '/password-reset', element: deferred(PasswordResetWithToken) },
+    { path: '/t/:tenantSlug/password-reset', element: deferred(PasswordResetWithToken) },
+    { path: '/verify-email', element: deferred(VerifyEmail) },
+    { path: '/t/:tenantSlug/verify-email', element: deferred(VerifyEmail) },
+    { path: '/resend-verification', element: deferred(ResendVerification) },
+    { path: '/t/:tenantSlug/resend-verification', element: deferred(ResendVerification) },
+    { path: '/documentation/access', element: deferred(DocumentationAccess) },
+    { path: '/signup', element: deferred(Signup) },
+    { path: '/signup/email', element: deferred(CloudEmailAuth) },
+    { path: '/signup/email/continue', element: deferred(CloudEmailAuth) },
+    { path: '/signup/email/passkey', element: deferred(CloudEmailAuth) },
+    { path: '/signup/email/signin', element: deferred(CloudEmailAuth) },
+    { path: '/signup/microsoft/email', element: deferred(CloudMicrosoftEmail) },
     { 
       path: '/git/oauth/callback', 
       element: (
@@ -713,7 +720,7 @@ export function getPublicRoutes(): RouteObject[] {
       path: '/reset-password', 
       element: (
         <ProtectedRoute>
-          <ResetPassword />
+          {deferred(ResetPassword)}
         </ProtectedRoute>
       )
     },
@@ -721,7 +728,7 @@ export function getPublicRoutes(): RouteObject[] {
       path: '/t/:tenantSlug/reset-password', 
       element: (
         <ProtectedRoute>
-          <ResetPassword />
+          {deferred(ResetPassword)}
         </ProtectedRoute>
       )
     },

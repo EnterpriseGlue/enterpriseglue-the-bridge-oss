@@ -1,0 +1,29 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "dashboard-cold-start",
+  "type": "performance",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": ["users"],
+  "summary": "Starts workspace session checks while the dashboard downloads and loads secondary screens on demand.",
+  "userImpact": ["The dashboard can fetch project data as soon as the browser verifies the session. Engine and process information continue to load independently."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["Early reads use the existing session transport and are accepted only for the current browser session."],
+  "documentation": ["Release notes describe the earlier session checks and on-demand screens."],
+  "knownLimitations": [],
+  "rollback": ["Redeploy the preceding compatible frontend image."],
+  "validation": ["Browser comparisons cover cold and warm dashboard loads as an owner and a member, including independently delayed engine data."],
+  "packages": [
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.21.15", "newVersion": "0.21.16", "impact": "patch" }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The existing dashboard and sign-in controls are unchanged."
+  }
+}

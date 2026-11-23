@@ -40,6 +40,7 @@ import {
 import { HostContextualFlowProviderV1 } from './plugins/contextualFlowRuntime'
 import { getConfiguredSystemFrontendModules, initRuntimeConfig } from './runtimeConfig'
 import { getTenancyCapabilities, initializeTenancyCapabilities } from './services/tenancy'
+import type { InitialDashboardSession } from './services/initialSession'
 
 /**
  * Render a minimal, dependency-free error into #root when runtime configuration
@@ -85,7 +86,10 @@ function renderRuntimeConfigError(error: unknown): void {
   root.replaceChildren(container)
 }
 
-export async function startApp(runtimeConfigReady?: Promise<void>) {
+export async function startApp(
+  runtimeConfigReady?: Promise<void>,
+  initialDashboardSession?: Promise<InitialDashboardSession | undefined>,
+) {
   const selectInitialTypography = prepareInitialTypography()
   // Resolve runtime configuration before anything (plugins, API clients) reads
   // it. Must run ahead of the plugin loads below, which may issue API requests.
@@ -179,7 +183,7 @@ export async function startApp(runtimeConfigReady?: Promise<void>) {
     // scope. An explicit tenant can restore its session during bootstrap.
     if (!hasExplicitTenant) React.use(tenancyReady)
     return (
-      <AuthProvider>
+      <AuthProvider initialDashboardSession={initialDashboard ? initialDashboardSession : undefined}>
         {initialDashboard && <DashboardPrefetch tenantSlug={initialDashboard} />}
         <FeatureFlagsProvider>
           <ToastProvider>
