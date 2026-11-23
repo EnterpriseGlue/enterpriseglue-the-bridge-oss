@@ -1,0 +1,29 @@
+{
+  "$schema": "./schema.json",
+  "schemaVersion": 1,
+  "id": "dashboard-engine-prefetch",
+  "type": "performance",
+  "scope": "frontend",
+  "breaking": false,
+  "audiences": ["users"],
+  "summary": "Starts engine totals alongside project statistics when opening a verified workspace dashboard.",
+  "userImpact": ["Engine totals can appear sooner on reload. Project totals still display as soon as their own request finishes."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["Both requests use the verified workspace session and its permission snapshot."],
+  "documentation": ["Release notes describe the independent dashboard loading behavior."],
+  "knownLimitations": [],
+  "rollback": ["Redeploy the preceding compatible frontend image."],
+  "validation": ["Browser checks verify concurrent request start, independent project rendering, and reuse of the in-flight engine request."],
+  "packages": [
+    { "name": "@enterpriseglue/frontend-host", "previousVersion": "0.21.16", "newVersion": "0.21.17", "impact": "patch" }
+  ],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "documentation-maintainers",
+    "pages": [],
+    "reason": "The update changes when the existing dashboard values arrive."
+  }
+}

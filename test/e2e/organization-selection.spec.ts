@@ -203,11 +203,13 @@ test.describe('Cloud organization selection @organization-selection @identity-li
     const releasePermissions = Promise.withResolvers<void>()
     const releaseCapabilities = Promise.withResolvers<void>()
     const releasePlugins = Promise.withResolvers<void>()
+    const releaseStats = Promise.withResolvers<void>()
     const releaseEngines = Promise.withResolvers<void>()
     const releaseInstances = Promise.withResolvers<void>()
     const permissionRequest = Promise.withResolvers<void>()
     const capabilitiesRequest = Promise.withResolvers<void>()
     const pluginRequest = Promise.withResolvers<void>()
+    const statsRequest = Promise.withResolvers<void>()
     const engineRequest = Promise.withResolvers<void>()
     const instanceRequest = Promise.withResolvers<void>()
     const pluginId = 'io.example.reporting'
@@ -281,9 +283,11 @@ test.describe('Cloud organization selection @organization-selection @identity-li
     await page.route('**/api/dashboard/context', route => json(route, {
       canViewActiveUsers: false, canViewProcessData: true, canViewMetrics: true, runtimeScopedEngineIds: [],
     }))
-    await page.route('**/api/dashboard/stats', route => json(route, {
-      totalProjects: 3, totalFiles: 4, fileTypes: { bpmn: 4, dmn: 0, form: 0 },
-    }))
+    await page.route('**/api/dashboard/stats', async route => {
+      statsRequest.resolve()
+      await releaseStats.promise
+      await json(route, { totalProjects: 3, totalFiles: 4, fileTypes: { bpmn: 4, dmn: 0, form: 0 } })
+    })
     await page.route(url => url.pathname.endsWith('/mission-control-api/process-instances'), async route => {
       instanceRequest.resolve()
       await releaseInstances.promise
@@ -297,12 +301,16 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       await Promise.all([permissionRequest.promise, capabilitiesRequest.promise])
       expect(dashboardReads).toEqual([])
       releasePermissions.resolve()
-      const statsReads = () => dashboardReads.filter(path => path.endsWith('/api/dashboard/stats'))
-      await expect.poll(statsReads).toHaveLength(1)
-      expect(dashboardReads).toEqual(statsReads())
+      // Both requests can start while the router and both responses are pending.
+      await Promise.all([statsRequest.promise, engineRequest.promise])
+      expect(dashboardReads).toHaveLength(2)
       releaseCapabilities.resolve()
-      await Promise.all([pluginRequest.promise, engineRequest.promise])
+      await pluginRequest.promise
       await expect(dashboard(page)).toBeVisible()
+      await expect(card('Projects')).toHaveAttribute('aria-busy', 'true')
+      await expect(card('Engines')).toHaveAttribute('aria-busy', 'true')
+
+      releaseStats.resolve()
       await expect(card('Projects').getByText('3', { exact: true })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'File Structure' })).toBeVisible()
       await expect(card('Engines')).toHaveAttribute('aria-busy', 'true')
@@ -316,7 +324,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       releaseInstances.resolve()
       await expect(card('Instances').getByText('1', { exact: true })).toBeVisible()
       await expect(page.getByRole('heading', { name: 'Process States' })).toBeVisible()
-      expect(statsReads()).toHaveLength(1)
+      expect(dashboardReads.filter(path => path.endsWith('/api/dashboard/stats'))).toHaveLength(1)
       expect(dashboardReads.filter(path => path.endsWith('/engines-api/engines'))).toHaveLength(1)
       expect(dashboardReads.every(path => path.startsWith('/t/northwind/'))).toBe(true)
       const voyager = header(page).getByRole('link', { name: 'Voyager', exact: true })
@@ -329,6 +337,7 @@ test.describe('Cloud organization selection @organization-selection @identity-li
       releasePermissions.resolve()
       releaseCapabilities.resolve()
       releasePlugins.resolve()
+      releaseStats.resolve()
       releaseEngines.resolve()
       releaseInstances.resolve()
     }
