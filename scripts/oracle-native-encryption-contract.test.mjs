@@ -73,6 +73,7 @@ test('default and Oracle production image flavors share the compiled application
 test('Oracle publication requires a released SHA and retained security-qualified bytes', () => {
   const publish = readFileSync('.github/workflows/oracle-image-release.yml', 'utf8');
   assert.match(publish, /workflow_dispatch:/);
+  assert.match(publish, /run-name: 'Oracle image \/ \$\{\{ inputs.release_tag \}\} \/ \$\{\{ inputs.source_ref \}\}'/);
   assert.doesNotMatch(publish.slice(publish.indexOf('  validate:'), publish.indexOf('  qualify:')), /actions\/checkout@/);
   assert.match(publish, /ref: \$\{\{ needs.validate.outputs.source_ref \}\}/);
   assert.doesNotMatch(publish, /ref: \$\{\{ inputs.source_ref \}\}/);
@@ -115,6 +116,7 @@ function releaseFixture() {
     release: { draft: false, prerelease: false, tag_name: 'v0.31.0' },
     commit: { sha: source }, comparison: { status: 'ahead' },
     run: { path: '.github/workflows/oracle-image-release.yml', event: 'workflow_dispatch',
+      display_title: 'Publish Qualified Oracle Backend Image',
       head_branch: 'main', head_sha: source, status: 'completed', conclusion: 'failure',
       repository: { full_name: 'EnterpriseGlue/enterpriseglue-the-bridge-oss' },
       head_repository: { full_name: 'EnterpriseGlue/enterpriseglue-the-bridge-oss' } },
@@ -178,6 +180,19 @@ test('Oracle recovery reuses completed native qualification from the exact first
   const result = await verifyRelease(fixture);
   assert.deepEqual(result.outputs, { source_ref: fixture.commit.sha, release_tag: fixture.release.tag_name, qualification_run_id: '123' });
   assert.equal(result.calls.find(call => call.method === 'jobs').argument.filter, 'latest');
+});
+
+test('Oracle recovery reuses an exact release qualified from a later protected workflow revision', async () => {
+  const fixture = releaseFixture();
+  fixture.environment.QUALIFICATION_RUN_ID = '123';
+  fixture.run.head_sha = 'b'.repeat(40);
+  fixture.run.display_title = `Oracle image / ${fixture.release.tag_name} / ${fixture.commit.sha}`;
+  assert.equal((await verifyRelease(fixture)).outputs.qualification_run_id, '123');
+  for (const title of [`Oracle image / v0.32.0 / ${fixture.commit.sha}`,
+    `Oracle image / ${fixture.release.tag_name} / ${fixture.run.head_sha}`]) {
+    fixture.run.display_title = title;
+    await assert.rejects(verifyRelease(fixture), /Oracle recovery requires/);
+  }
 });
 
 for (const [name, change] of [

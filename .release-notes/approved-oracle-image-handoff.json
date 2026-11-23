@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "approved-oracle-image-handoff",
+  "type": "fix",
+  "scope": "oracle-images",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Queue Oracle Thick-mode image publication from an approved release.",
+  "userImpact": ["Release maintainers can include the Oracle image in the release dispatch and track its qualification and publication from the release run."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": ["Set publish_oracle_image=true on an approved Release Please publication dispatch when the release requires Oracle Thick mode."],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["Oracle qualification, scans, signatures, and receipt verification remain required for the exact released source."],
+  "documentation": ["docs/runbooks/release-artifact-promotion.md", "docs/reference/oracle-network-security.md"],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "release-maintainers",
+    "pages": [],
+    "reason": "This changes the maintainer's release workflow and preserves the image and runtime contracts."
+  },
+  "knownLimitations": ["Oracle image availability follows the Oracle publisher and its signed receipt."],
+  "rollback": ["Use the standalone Oracle publisher for an approved historical release."],
+  "validation": ["Exercise the opt-in boundary, exact release dispatch, duplicate suppression, and retained qualification recovery."],
+  "packages": []
+}

@@ -83,13 +83,14 @@ so its build reset remains effective. The native flag does not automatically
 select or download an image.
 
 The optional repository is
-`ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend-oracle`. Publication
-uses the explicitly dispatched `oracle-image-release.yml` workflow for an
-existing stable released source. Dispatch uses the current protected `main`
-workflow. It resolves the stable release tag through GitHub's API, verifies its
-exact source SHA and protected-main history before checkout, and passes that
-verified source to qualification. It qualifies both architectures, retains the
-qualified image bytes, scans them under the committed application security
+`ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend-oracle`. Select
+the image in the approved release dispatch or explicitly dispatch
+`oracle-image-release.yml` for an existing stable release. The publisher uses
+the current protected `main` workflow. It resolves the stable release tag
+through GitHub's API, verifies its exact source SHA and protected-main history
+before checkout, and passes that verified source to qualification. It
+qualifies both architectures, retains the qualified image bytes, scans them
+under the committed application security
 policy, and signs the assembled manifest. Each architecture receives a CycloneDX SBOM
 attestation; the manifest receives build provenance. The ordinary SaaS release image set
 and standard image selection remain independent of this optional artifact.
