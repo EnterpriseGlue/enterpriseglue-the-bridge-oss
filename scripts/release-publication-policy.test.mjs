@@ -104,6 +104,18 @@ test('an explicit dispatch binds one release identity and a multi-PR batch', () 
   assert.equal(result.sourceRef, sha)
 })
 
+test('Oracle publication requires an explicit release opt-in', () => {
+  assert.equal(resolveReleasePublication(publicationContext).publishOracleImage, false)
+  const inputs = { ...approvedInputs, publish_oracle_image: 'true' }
+  assert.equal(resolveReleasePublication({ ...publicationContext, inputs }).publishOracleImage, true)
+  assert.throws(() => resolveReleasePublication({ ...publicationContext, inputs: { publish_oracle_image: true } }),
+    /Oracle image publication requires publish_release=true/)
+  assert.throws(() => resolveReleasePublication({ ...publicationContext, inputs: { ...inputs, publish_oracle_image: 'yes' } }),
+    /publish_oracle_image must be a boolean/)
+  assert.throws(() => resolveReleasePublication({ ...publicationContext, inputs, eventName: 'push' }),
+    /Automatic events cannot authorize/)
+})
+
 test('unsigned identity recovery requires an explicit publication and a closed original run number',()=>{
   assert.equal(resolveReleasePublication({...publicationContext,inputs:{...approvedInputs,identity_signature_recovery_run:'123'}}).shouldPublish,true)
   for(const value of ['-1','0','123/zip','1\n2','x'.repeat(100)])
@@ -226,4 +238,66 @@ test('actual publication verification accepts only the approved tag source', asy
   )
   await execute(sha)
   await assert.rejects(execute('b'.repeat(40)), /does not identify approved source/)
+})
+
+test('Oracle handoff is gated by approved selection and successful release notes publication', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/release-please.yml', import.meta.url), 'utf8')
+  assert.match(workflow, /publish_oracle_image:[\s\S]*?type: boolean\n        default: false/)
+  assert.match(workflow, /oracle_image_ready: .*steps\.publication\.outputs\.publish_oracle_image == 'true' && steps\.publish_notes\.outcome == 'success'/)
+  assert.match(workflow, /oracle-image:[\s\S]*?needs: release-please\n    if: .*github\.event_name == 'workflow_dispatch'.*needs\.release-please\.outputs\.oracle_image_ready == 'true'/)
+  assert.match(workflow, /oracle-image:[\s\S]*?permissions:\n      actions: write/)
+  assert.doesNotMatch(workflow.slice(0, workflow.indexOf('\n  oracle-image:')), /actions: write/)
+  const verified = workflow.indexOf('      - name: Verify release exists for merged release commit')
+  assert.ok(verified > 0 && verified < workflow.indexOf('        id: publish_notes'))
+})
+
+async function runOracleHandoff({ runs = [], sourceRef = sha, response = { workflow_run_id: 456 } } = {}) {
+  const requests = [], summaries = []
+  const listWorkflowRuns = () => {}
+  const summary = { addHeading() { return this }, addRaw(value) { summaries.push(value); return this }, async write() {} }
+  const script = githubScript('release-please.yml', 'Queue Oracle publisher for the verified release')
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+  await new AsyncFunction('context', 'core', 'process', 'github', script)(
+    { repo: { owner: 'EnterpriseGlue', repo: 'enterpriseglue-the-bridge-oss' } },
+    { summary, setFailed(message) { throw new Error(message) } },
+    { env: { SOURCE_REF: sourceRef, RELEASE_TAG: 'v0.30.0', GITHUB_SERVER_URL: 'https://github.com' } },
+    { rest: { actions: { listWorkflowRuns } },
+      async paginate(method, options) {
+        assert.equal(method, listWorkflowRuns)
+        assert.equal(options.workflow_id, 'oracle-image-release.yml')
+        assert.equal(options.branch, 'main')
+        assert.equal(options.event, 'workflow_dispatch')
+        return runs
+      },
+      async request(route, options) { requests.push({ route, options }); return { data: response } } },
+  )
+  return { requests, summaries }
+}
+
+test('Oracle handoff dispatches the exact tagged source and reports the queued run', async () => {
+  const { requests, summaries } = await runOracleHandoff({ runs: [
+    { id: 1, display_title: `Oracle image / v0.30.0 / ${'b'.repeat(40)}`, head_repository: { full_name: repository } },
+    { id: 2, display_title: `Oracle image / v0.30.0 / ${sha}`, head_repository: { full_name: 'other/repository' } },
+  ] })
+  assert.deepEqual(requests, [{
+    route: 'POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches',
+    options: { owner: 'EnterpriseGlue', repo: 'enterpriseglue-the-bridge-oss', workflow_id: 'oracle-image-release.yml',
+      ref: 'main', inputs: { source_ref: sha, release_tag: 'v0.30.0' }, headers: { 'X-GitHub-Api-Version': '2026-03-10' } },
+  }])
+  assert.match(summaries[0], /\/actions\/runs\/456\) · queued/)
+})
+
+test('Oracle handoff retries link to the existing run and surface failures without re-dispatching', async () => {
+  const existing = { id: 123, display_title: `Oracle image / v0.30.0 / ${sha}`,
+    head_repository: { full_name: repository }, status: 'in_progress', conclusion: null }
+  const { requests, summaries } = await runOracleHandoff({ runs: [existing] })
+  assert.deepEqual(requests, [])
+  assert.match(summaries[0], /\/actions\/runs\/123\) · in_progress/)
+  await assert.rejects(runOracleHandoff({ runs: [{ ...existing, status: 'completed', conclusion: 'failure' }] }),
+    /Oracle publisher completed with failure/)
+})
+
+test('Oracle handoff rejects mutable releases and dispatch responses without a run ID', async () => {
+  await assert.rejects(runOracleHandoff({ sourceRef: 'main' }), /verified release tag and source SHA/)
+  await assert.rejects(runOracleHandoff({ response: {} }), /did not return an Oracle publisher run ID/)
 })

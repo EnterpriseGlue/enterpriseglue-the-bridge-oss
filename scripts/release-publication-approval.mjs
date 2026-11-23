@@ -147,7 +147,7 @@ export function verifyPublication({ root = process.cwd(), env = process.env, rel
     assert.equal(readFileSync(join(releaseRoot, generated), 'utf8'), document, 'Release document must be generated from every changed fragment in the complete batch.')
     const record = { schemaVersion: 1, sourceRef: approval.sourceRef, releaseTag: approval.releaseTag,
       releasePR: approval.releasePR, requiredPRs: approval.requiredPRs, previousTag: comparisonTag,
-      controlRef: approval.controlRef, recoveryPRs: approval.recoveryPRs,
+      controlRef: approval.controlRef, recoveryPRs: approval.recoveryPRs, publishOracleImage: approval.publishOracleImage,
       documentation: { path: `docs/releases/${approval.releaseTag}.md`, sha256: createHash('sha256').update(document).digest('hex'),
         changelogSha256: createHash('sha256').update(readFileSync(join(releaseRoot, 'CHANGELOG.md'))).digest('hex') },
       requestedBy: env.GITHUB_ACTOR, workflowRun: env.GITHUB_RUN_ID, publicationPerformed: false }
@@ -155,7 +155,7 @@ export function verifyPublication({ root = process.cwd(), env = process.env, rel
     mkdirSync(directory, { recursive: true })
     writeFileSync(join(directory, 'authorization.json'), `${JSON.stringify(record, null, 2)}\n`)
   }
-  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `is_release=${approval.shouldPublish}\nshould_prepare=${approval.shouldPrepare}\nrelease_tag=${approval.releaseTag}\nsource_ref=${approval.sourceRef ?? ''}\nmode=${approval.mode}\nreplacement_version=${approval.prepareReplacement ? approval.releaseTag.slice(1) : ''}\n`)
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `is_release=${approval.shouldPublish}\nshould_prepare=${approval.shouldPrepare}\nrelease_tag=${approval.releaseTag}\nsource_ref=${approval.sourceRef ?? ''}\npublish_oracle_image=${approval.publishOracleImage === true}\nmode=${approval.mode}\nreplacement_version=${approval.prepareReplacement ? approval.releaseTag.slice(1) : ''}\n`)
   console.log(`[release-publication] mode=${approval.mode}; automatic events never publish.`)
   return approval
 }

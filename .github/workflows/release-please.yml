@@ -16,6 +16,10 @@ on:
         description: Publish the explicitly approved /release batch after its release PR has merged.
         type: boolean
         default: false
+      publish_oracle_image:
+        description: Include the qualified Oracle Thick-mode backend in this approved release.
+        type: boolean
+        default: false
       source_ref:
         description: Exact approved 40-character release merge commit on protected main.
         type: string
@@ -57,6 +61,10 @@ jobs:
   release-please:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      source_ref: ${{ steps.publication.outputs.source_ref }}
+      release_tag: ${{ steps.publication.outputs.release_tag }}
+      oracle_image_ready: ${{ steps.publication.outputs.publish_oracle_image == 'true' && steps.publish_notes.outcome == 'success' }}
     steps:
       - name: Checkout full release history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -351,6 +359,7 @@ jobs:
             );
 
       - name: Publish detailed GitHub release notes
+        id: publish_notes
         if: steps.publication.outputs.is_release == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN != '' && secrets.RELEASE_PLEASE_TOKEN || github.token }}
@@ -405,3 +414,49 @@ jobs:
             .artifacts/release-publication/observation-evidence
           if-no-files-found: error
           retention-days: 90
+
+  oracle-image:
+    name: Hand off approved Oracle image publication
+    needs: release-please
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && needs.release-please.outputs.oracle_image_ready == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Queue Oracle publisher for the verified release
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SOURCE_REF: ${{ needs.release-please.outputs.source_ref }}
+          RELEASE_TAG: ${{ needs.release-please.outputs.release_tag }}
+        with:
+          script: |
+            const sourceRef = process.env.SOURCE_REF;
+            const releaseTag = process.env.RELEASE_TAG;
+            if (!/^[0-9a-f]{40}$/.test(sourceRef) || !/^v\d+\.\d+\.\d+$/.test(releaseTag)) {
+              throw new Error('Oracle handoff requires the verified release tag and source SHA.');
+            }
+            const workflow = { ...context.repo, workflow_id: 'oracle-image-release.yml' };
+            const title = `Oracle image / ${releaseTag} / ${sourceRef}`;
+            const repository = `${context.repo.owner}/${context.repo.repo}`;
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              ...workflow, branch: 'main', event: 'workflow_dispatch', per_page: 100,
+            });
+            const existing = runs.find(run => run.display_title === title && run.head_repository?.full_name === repository);
+            let runId = existing?.id;
+            if (!existing) {
+              const { data } = await github.request('POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches', {
+                ...workflow, ref: 'main', inputs: { source_ref: sourceRef, release_tag: releaseTag },
+                headers: { 'X-GitHub-Api-Version': '2026-03-10' },
+              });
+              runId = data?.workflow_run_id;
+            }
+            if (!Number.isSafeInteger(runId) || runId < 1) {
+              throw new Error('GitHub did not return an Oracle publisher run ID.');
+            }
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${repository}/actions/runs/${runId}`;
+            const status = existing ? (existing.conclusion || existing.status) : 'queued';
+            await core.summary.addHeading('Oracle Thick-mode image')
+              .addRaw(`[${releaseTag} Oracle publisher](${runUrl}) · ${status}\n`).write();
+            if (existing?.status === 'completed' && existing.conclusion !== 'success') {
+              core.setFailed(`The Oracle publisher completed with ${existing.conclusion}. Review ${runUrl} for recovery.`);
+            }

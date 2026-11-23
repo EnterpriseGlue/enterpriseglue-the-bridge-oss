@@ -218,7 +218,20 @@ Create a new patch release only when shipped content must change. Authentication
 failures, registry timeouts, runner loss, signature retries, and incomplete
 alias promotion are recovery events for the existing release.
 
-## Optional Oracle image recovery
+## Optional Oracle image publication and recovery
+
+For a Release Please batch that requires the Oracle Thick-mode image, include
+`publish_oracle_image=true` in the approved publication dispatch. The release
+workflow queues the Oracle publisher for the approved tag and commit after
+verifying the GitHub release and publishing its detailed notes. Its job
+summary links to the Oracle run. A handoff retry links an existing run for the
+same release and surfaces its failure for operator recovery. The option
+defaults to false.
+
+The Oracle workflow's signed GHCR receipt confirms availability. A queued run
+is still awaiting qualification and publication. For an already released
+version, dispatch the Oracle workflow separately with its exact `source_ref`
+and `release_tag` after publication approval.
 
 `oracle-image-release.yml` publishes the optional Oracle backend only from an
 existing stable release source. Its pinned Cosign OCI 1.1 signing mode requires
@@ -230,9 +243,11 @@ only on its scratch backend digest before a control repair can merge.
 
 When publication fails before the stable Oracle image tag exists, supply
 `qualification_run_id` to reuse the original run's retained AMD64 and ARM64
-images. The run must be a completed first-party manual publication on `main`
-at the exact released source, with both native qualification jobs passing and
-both artifacts unexpired. Recovery skips rebuilding and requalifying images,
+images. The run must be a completed first-party publication dispatch on
+`main` for the exact released tag and source, with both native qualification
+jobs passing and both artifacts unexpired. The publisher run title records
+the release source even when the original protected workflow ran on a later
+commit. Recovery skips rebuilding and requalifying images,
 checks the retained image IDs, architecture, host version and nonzero AES256
 session evidence, then refreshes security scans before signing and publishing.
 An existing stable image tag or an unknown registry response stops writes.
