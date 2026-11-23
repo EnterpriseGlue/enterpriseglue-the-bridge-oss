@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "frozen-oracle-browser-qualification",
+  "type": "fix",
+  "scope": "oracle-images",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Qualify previously released Oracle image sources with their declared browser setup.",
+  "userImpact": ["The Oracle publisher can qualify a stable release whose SSO rehearsal predates the pinned browser-server helper."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": [],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["Qualification requires a verified frozen checkout and the released browser setup before running its Oracle SSO rehearsal. Encryption negotiation and image security checks remain required."],
+  "documentation": ["docs/runbooks/release-artifact-promotion.md"],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "release-maintainers",
+    "pages": [],
+    "reason": "The change covers release runner browser setup and preserves the customer runtime contract."
+  },
+  "knownLimitations": ["The legacy browser setup is available to releases that declared the Chromium installation step in their own workflow."],
+  "rollback": ["Revert the qualification workflow change if the matched legacy browser setup needs repair."],
+  "validation": ["Exercise the current and historical browser setup paths and reject unverified or unsupported historical checkouts."],
+  "packages": []
+}

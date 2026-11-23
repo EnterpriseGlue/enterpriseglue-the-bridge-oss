@@ -38,8 +38,21 @@ jobs:
         run: node scripts/run-engine-tenancy-database-matrix.mjs --database=oracle
       - name: Qualify compiled Oracle image and SSO
         env:
+          FROZEN_SOURCE_REF: ${{ inputs.source_ref }}
           IDENTITY_PROTOCOL_REHEARSAL_SAVE_BACKEND_IMAGE: ${{ inputs.retain_image }}
-        run: bash scripts/run-ci-playwright.sh pnpm run test:oracle:nne:sso
+        run: |
+          set -euo pipefail
+          if [[ -f scripts/run-ci-playwright.sh ]]; then
+            bash scripts/run-ci-playwright.sh pnpm run test:oracle:nne:sso
+          elif [[ -n "$FROZEN_SOURCE_REF" && "$(git rev-parse HEAD)" == "$FROZEN_SOURCE_REF" ]] &&
+               git show HEAD:.github/workflows/oracle-native-encryption-reusable.yml |
+                 grep -Fx '      - run: pnpm exec playwright install --with-deps chromium' >/dev/null; then
+            pnpm exec playwright install --with-deps chromium
+            pnpm run test:oracle:nne:sso
+          else
+            echo 'The source does not declare a supported Chromium setup for Oracle SSO qualification.' >&2
+            exit 1
+          fi
       - name: Qualify encryption negotiation and both pool paths
         run: |
           image=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('.artifacts/oracle-nne-sso/qualified-image.json'));process.stdout.write(j.Id)")
