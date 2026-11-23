@@ -6,11 +6,11 @@ This project follows [Semantic Versioning](https://semver.org/) and uses [Releas
 
 ## [0.40.13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.12...v0.40.13) (2026-11-23)
 
+### Changes
 
-### Performance Improvements
+- **frontend:** Starts engine totals alongside project statistics when opening a verified workspace dashboard.
 
-* **dashboard:** prefetch engine totals with project statistics ([bd1e0ae](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/bd1e0ae245c0a4b5e5bcd92dcc267215807008d6))
-* **dashboard:** prefetch engine totals with project statistics ([3df2b83](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3df2b8389c63e5f0d601d56a4fe9b3c8e819d820))
+Full upgrade, compatibility and verification details: [v0.40.13 release notes](docs/releases/v0.40.13.md).
 
 ## [0.40.12](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.11...v0.40.12) (2026-11-23)
 
