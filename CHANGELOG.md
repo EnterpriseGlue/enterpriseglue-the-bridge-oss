@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.12](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.11...v0.40.12) (2026-11-23)
+
+
+### Bug Fixes
+
+* **frontend:** keep non-dashboard session bootstrap on its original path ([3aea3ee](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/3aea3ee79aa6a0ed6c66d2f4497469c583c30241))
+
+
+### Performance Improvements
+
+* **frontend:** start workspace session checks before the dashboard ([b42b055](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/b42b055d373bbc15fabcdb906e45d801e134f3cb))
+* **frontend:** start workspace session checks before the dashboard ([f60c58f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/f60c58f239ae832eb7abe75e35de83e3a833ddfb))
+
 ## [0.40.11](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.10...v0.40.11) (2026-11-22)
 
 ### Changes
