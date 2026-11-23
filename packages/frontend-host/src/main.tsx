@@ -183,7 +183,7 @@ export async function startApp(
     // scope. An explicit tenant can restore its session during bootstrap.
     if (!hasExplicitTenant) React.use(tenancyReady)
     return (
-      <AuthProvider initialDashboardSession={initialDashboardSession}>
+      <AuthProvider initialDashboardSession={initialDashboard ? initialDashboardSession : undefined}>
         {initialDashboard && <DashboardPrefetch tenantSlug={initialDashboard} />}
         <FeatureFlagsProvider>
           <ToastProvider>
