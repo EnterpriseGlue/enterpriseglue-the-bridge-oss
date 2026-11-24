@@ -82,10 +82,11 @@ repository and a reviewed release tag or digest. Apply the images overlay last
 so its build reset remains effective. The native flag does not automatically
 select or download an image.
 
-The optional repository is
-`ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend-oracle`. Select
-the image in the approved release dispatch or explicitly dispatch
-`oracle-image-release.yml` for an existing stable release. The publisher uses
+The Oracle Thick-mode repository is
+`ghcr.io/enterpriseglue/enterpriseglue-the-bridge-oss-backend-oracle`.
+Approved Release Please publication dispatches include this image by default.
+For an existing stable release, explicitly dispatch
+`oracle-image-release.yml`. The publisher uses
 the current protected `main` workflow. It resolves the stable release tag
 through GitHub's API, verifies its exact source SHA and protected-main history
 before checkout, and passes that verified source to qualification. It

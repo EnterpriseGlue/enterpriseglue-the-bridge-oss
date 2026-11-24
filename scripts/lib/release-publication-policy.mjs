@@ -27,8 +27,6 @@ export function resolveReleasePublication({ eventName, ref, sha, sourceSha = sha
   const publish = requested === true || requested === 'true'
   const oracleRequested = inputs.publish_oracle_image
   requireValue([undefined, '', false, true, 'false', 'true'].includes(oracleRequested), 'publish_oracle_image must be a boolean.')
-  const publishOracleImage = oracleRequested === true || oracleRequested === 'true'
-  requireValue(!publishOracleImage || publish, 'Oracle image publication requires publish_release=true.')
   if (inputs.identity_signature_recovery_run) {
     requireValue(publish && /^[1-9][0-9]{0,19}$/.test(inputs.identity_signature_recovery_run),
       'Identity signature recovery requires an explicit publication and original run number.')
@@ -77,7 +75,8 @@ export function resolveReleasePublication({ eventName, ref, sha, sourceSha = sha
   requireValue(sourceSha === sha ? recoveryPRs.length === 0 : recoveryPRs.length > 0,
     'A different workflow revision requires an explicit recovery_prs list; unchanged sources cannot accept repair PRs.')
   return { mode: 'publish', shouldPrepare: false, shouldPublish: true, sourceRef: sourceSha, controlRef: sha,
-    releaseTag: inputs.release_tag, releasePR, requiredPRs, recoveryPRs, publishOracleImage }
+    releaseTag: inputs.release_tag, releasePR, requiredPRs, recoveryPRs,
+    publishOracleImage: oracleRequested !== false && oracleRequested !== 'false' }
 }
 
 // Deliberately excludes application sources, manifests, lockfiles, Dockerfiles,
