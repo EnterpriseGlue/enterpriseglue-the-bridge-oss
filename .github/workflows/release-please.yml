@@ -19,7 +19,7 @@ on:
       publish_oracle_image:
         description: Include the qualified Oracle Thick-mode backend in this approved release.
         type: boolean
-        default: false
+        default: true
       source_ref:
         description: Exact approved 40-character release merge commit on protected main.
         type: string

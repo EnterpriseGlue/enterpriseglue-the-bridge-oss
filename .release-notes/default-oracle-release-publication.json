@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "default-oracle-release-publication",
+  "type": "fix",
+  "scope": "oracle-images",
+  "breaking": false,
+  "audiences": ["operators", "developers", "security"],
+  "summary": "Include the Oracle Thick-mode image by default for approved releases.",
+  "userImpact": ["The standard Release Please publication dispatch queues the exact Oracle image without a separate selection or dispatch."],
+  "upgrade": { "required": false, "instructions": [] },
+  "configuration": ["Set publish_oracle_image=false only for a release that has an approved exception."],
+  "api": { "compatibility": "none", "changes": [] },
+  "database": { "migrations": [], "rollbackSupported": true, "notes": [] },
+  "security": ["The exact-source release approval, Oracle qualification, scans, signatures, and receipt verification still apply."],
+  "documentation": ["docs/runbooks/release-artifact-promotion.md", "docs/reference/oracle-network-security.md"],
+  "customerDocumentation": {
+    "impact": "none",
+    "owner": "release-maintainers",
+    "pages": [],
+    "reason": "The change sets a release workflow default and preserves the image reference and runtime configuration contracts."
+  },
+  "knownLimitations": ["The signed Oracle publication receipt confirms registry availability after the separate qualification run."],
+  "rollback": ["Use the release dispatch's explicit Oracle opt-out for an approved exception."],
+  "validation": ["Verify default-on selection for an approved publication and confirm that an opt-out or preparation dispatch does not authorize Oracle publication."],
+  "packages": []
+}

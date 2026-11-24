@@ -218,15 +218,14 @@ Create a new patch release only when shipped content must change. Authentication
 failures, registry timeouts, runner loss, signature retries, and incomplete
 alias promotion are recovery events for the existing release.
 
-## Optional Oracle image publication and recovery
+## Oracle image publication and recovery
 
-For a Release Please batch that requires the Oracle Thick-mode image, include
-`publish_oracle_image=true` in the approved publication dispatch. The release
-workflow queues the Oracle publisher for the approved tag and commit after
-verifying the GitHub release and publishing its detailed notes. Its job
-summary links to the Oracle run. A handoff retry links an existing run for the
-same release and surfaces its failure for operator recovery. The option
-defaults to false.
+Approved Release Please publication dispatches include the Oracle Thick-mode
+image by default. Set `publish_oracle_image=false` for an approved exception.
+The release workflow queues the Oracle publisher for the approved tag and
+commit after verifying the GitHub release and publishing its detailed notes.
+Its job summary links to the Oracle run. A handoff retry links an existing run
+for the same release and surfaces its failure for operator recovery.
 
 The Oracle workflow's signed GHCR receipt confirms availability. A queued run
 is still awaiting qualification and publication. For an already released

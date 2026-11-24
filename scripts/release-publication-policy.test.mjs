@@ -104,15 +104,32 @@ test('an explicit dispatch binds one release identity and a multi-PR batch', () 
   assert.equal(result.sourceRef, sha)
 })
 
-test('Oracle publication requires an explicit release opt-in', () => {
-  assert.equal(resolveReleasePublication(publicationContext).publishOracleImage, false)
-  const inputs = { ...approvedInputs, publish_oracle_image: 'true' }
-  assert.equal(resolveReleasePublication({ ...publicationContext, inputs }).publishOracleImage, true)
-  assert.throws(() => resolveReleasePublication({ ...publicationContext, inputs: { publish_oracle_image: true } }),
-    /Oracle image publication requires publish_release=true/)
-  assert.throws(() => resolveReleasePublication({ ...publicationContext, inputs: { ...inputs, publish_oracle_image: 'yes' } }),
+test('an approved publication includes Oracle by default and accepts an explicit opt-out', () => {
+  assert.equal(resolveReleasePublication(publicationContext).publishOracleImage, true)
+  for (const [publish_oracle_image, expected] of [[true, true], ['true', true], ['', true], [false, false], ['false', false]]) {
+    const inputs = { ...approvedInputs, publish_oracle_image }
+    assert.equal(resolveReleasePublication({ ...publicationContext, inputs }).publishOracleImage, expected)
+  }
+  assert.throws(() => resolveReleasePublication({ ...publicationContext, inputs: { ...approvedInputs, publish_oracle_image: 'yes' } }),
     /publish_oracle_image must be a boolean/)
-  assert.throws(() => resolveReleasePublication({ ...publicationContext, inputs, eventName: 'push' }),
+})
+
+test('the Oracle GitHub dispatch default grants no publication authority on its own', () => {
+  const inputs = { publish_release: 'false', publish_oracle_image: 'true' }
+  const preparation = resolveReleasePublication({ ...publicationContext, inputs, manifestVersion: '0.29.3', commitMessage: 'fix: prepare release' })
+  assert.equal(preparation.shouldPrepare, true)
+  assert.equal(preparation.shouldPublish, false)
+  assert.notEqual(preparation.publishOracleImage, true)
+
+  const replacement = resolveReleasePublication({ ...publicationContext, inputs: {
+    ...inputs, prepare_replacement: 'true', source_ref: sha, release_tag: 'v0.30.0', release_pr: '900',
+  } })
+  assert.equal(replacement.prepareReplacement, true)
+  assert.equal(replacement.shouldPublish, false)
+  assert.notEqual(replacement.publishOracleImage, true)
+
+  assert.throws(() => resolveReleasePublication({ ...publicationContext, eventName: 'push',
+    inputs: { ...approvedInputs, publish_oracle_image: 'true' } }),
     /Automatic events cannot authorize/)
 })
 
@@ -242,7 +259,8 @@ test('actual publication verification accepts only the approved tag source', asy
 
 test('Oracle handoff is gated by approved selection and successful release notes publication', () => {
   const workflow = readFileSync(new URL('../.github/workflows/release-please.yml', import.meta.url), 'utf8')
-  assert.match(workflow, /publish_oracle_image:[\s\S]*?type: boolean\n        default: false/)
+  assert.match(workflow, /publish_release:\n[^\n]+\n        type: boolean\n        default: false/)
+  assert.match(workflow, /publish_oracle_image:\n[^\n]+\n        type: boolean\n        default: true/)
   assert.match(workflow, /oracle_image_ready: .*steps\.publication\.outputs\.publish_oracle_image == 'true' && steps\.publish_notes\.outcome == 'success'/)
   assert.match(workflow, /oracle-image:[\s\S]*?needs: release-please\n    if: .*github\.event_name == 'workflow_dispatch'.*needs\.release-please\.outputs\.oracle_image_ready == 'true'/)
   assert.match(workflow, /oracle-image:[\s\S]*?permissions:\n      actions: write/)
