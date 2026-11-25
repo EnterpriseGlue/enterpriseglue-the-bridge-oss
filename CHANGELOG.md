@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.14](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.13...v0.40.14) (2026-11-25)
+
+### Changes
+
+- **oracle-images:** Queue Oracle Thick-mode image publication from an approved release.
+- **oracle-images:** Include the Oracle Thick-mode image by default for approved releases.
+- **oracle-images:** Qualify previously released Oracle image sources with their declared browser setup.
+
+Full upgrade, compatibility and verification details: [v0.40.14 release notes](docs/releases/v0.40.14.md).
+
 ## [0.40.13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.12...v0.40.13) (2026-11-23)
 
 ### Changes
