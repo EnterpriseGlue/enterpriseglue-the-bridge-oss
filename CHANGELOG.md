@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 This project follows [Semantic Versioning](https://semver.org/) and uses [Release Please](https://github.com/googleapis/release-please) to manage release notes.
 
+## [0.40.14](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.13...v0.40.14) (2026-11-25)
+
+
+### Bug Fixes
+
+* **release:** hand off approved Oracle image publication ([2364562](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/236456209fcd08141ba93c26d2574bf4a09ed405))
+* **release:** hand off approved Oracle image publication ([fee1f70](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/fee1f70e04701c66e47685d83642c5618d0522d0))
+* **release:** include Oracle image by default ([aafaa6b](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/aafaa6b36473a22dcd543327111837c5cde3e758))
+* **release:** include Oracle image by default ([11955d4](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/11955d462c7b2257304bb8f6f0de90b97a0db45f))
+* **release:** qualify frozen Oracle browser rehearsals ([15fff1f](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/15fff1fb218dfdf29b4e1d741c077b0428b158e5))
+* **release:** qualify frozen Oracle browser rehearsals ([97ce1c7](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/commit/97ce1c7371a59fd40dce2b8f7d53eed4a463f502))
+
 ## [0.40.13](https://github.com/EnterpriseGlue/enterpriseglue-the-bridge-oss/compare/v0.40.12...v0.40.13) (2026-11-23)
 
 ### Changes
